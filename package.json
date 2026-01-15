@@ -2,6 +2,7 @@
   "name": "cloudraver-frontend",
   "private": true,
   "version": "0.1.0",
+  "description": "✨ CloudRaver Frontend: A modern, sleek web interface for your private cloud storage. Built with React, MUI & Zustand. 🚀",
   "type": "module",
   "scripts": {
     "dev": "vite",

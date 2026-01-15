@@ -48,17 +48,7 @@ import {
   Home as HomeIcon,
   GridView as GridViewIcon,
   ViewList as ListViewIcon,
-  Image as ImageIcon,
-  Description as DocIcon,
-  VideoFile as VideoIcon,
-  AudioFile as AudioIcon,
   Cloud as CloudIcon,
-  Code as CodeIcon,
-  PictureAsPdf as PdfIcon,
-  TableChart as TableIcon,
-  Slideshow as SlideIcon,
-  Archive as ArchiveIcon,
-  TextSnippet as TextIcon,
   Share as ShareIcon,
   ContentCopy as CopyIcon,
   InfoOutlined as InfoIcon,
@@ -69,6 +59,7 @@ import { useStorageStore } from '../stores/storage';
 import { useShareStore } from '../stores/share';
 import { useNotify } from '../contexts/NotificationContext';
 import { useAuthStore } from '../stores/auth';
+import { getFileIcon } from '../utils/fileIcons';
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '—';
@@ -88,30 +79,9 @@ function buildCrPath(path: { name: string }[], name: string) {
 }
 
 // Helper to get file icon
-function getFileIcon(mimeType: string | null) {
-  if (!mimeType) return <FileIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
-  
-  if (mimeType.startsWith('image/')) return <ImageIcon sx={{ fontSize: 40, color: '#a855f7' }} />;
-  if (mimeType.startsWith('video/')) return <VideoIcon sx={{ fontSize: 40, color: '#ef4444' }} />;
-  if (mimeType.startsWith('audio/')) return <AudioIcon sx={{ fontSize: 40, color: '#f97316' }} />;
-  
-  // Documents
-  if (mimeType.includes('pdf')) return <PdfIcon sx={{ fontSize: 40, color: '#ef4444' }} />;
-  if (mimeType.includes('word') || mimeType.includes('document')) return <DocIcon sx={{ fontSize: 40, color: '#3b82f6' }} />;
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || mimeType.includes('csv')) return <TableIcon sx={{ fontSize: 40, color: '#10b981' }} />;
-  if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return <SlideIcon sx={{ fontSize: 40, color: '#f59e0b' }} />;
-  
-  // Code/Text
-  if (mimeType.includes('json') || mimeType.includes('xml') || mimeType.includes('html') || mimeType.includes('javascript') || mimeType.includes('css')) 
-    return <CodeIcon sx={{ fontSize: 40, color: '#6366f1' }} />;
-  if (mimeType.startsWith('text/')) return <TextIcon sx={{ fontSize: 40, color: '#64748b' }} />;
-  
-  // Archives
-  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('tar')) 
-    return <ArchiveIcon sx={{ fontSize: 40, color: '#8b5cf6' }} />;
-
-  return <FileIcon sx={{ fontSize: 40, color: 'text.secondary' }} />;
-}
+// function getFileIcon(mimeType: string | null) {
+//   // ... removed ...
+// }
 
 export default function Files() {
   const theme = useTheme();
@@ -280,7 +250,7 @@ export default function Files() {
                   {file.is_dir ? (
                     <FolderIcon sx={{ fontSize: 24, color: theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368' }} />
                   ) : (
-                    React.cloneElement(getFileIcon(file.mime_type) as React.ReactElement, { sx: { fontSize: 24, color: getFileIcon(file.mime_type)?.props?.sx?.color || (theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368') } })
+                    React.cloneElement(getFileIcon(file.name, file.mime_type) as React.ReactElement, { sx: { fontSize: 24, color: getFileIcon(file.name, file.mime_type)?.props?.sx?.color || (theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368') } })
                   )}
                 </Box>
                 
@@ -304,16 +274,27 @@ export default function Files() {
 
               <Typography 
                 variant="body2" 
-                noWrap 
                 title={file.name}
                 sx={{ 
                   fontWeight: 500,
                   fontSize: '0.875rem',
                   flex: 1,
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  // Ensure suffix is visible (break-all) and clamp to 1 line
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  // Optional: use multi-line clamp if needed, but for file list single line is standard
+                  // display: '-webkit-box',
+                  // WebkitLineClamp: 1,
+                  // WebkitBoxOrient: 'vertical',
+                  // wordBreak: 'break-all'
                 }}
               >
-                {file.name}
+                {/* Middle truncation for better suffix visibility */}
+                {file.name.length > 30 
+                  ? `${file.name.slice(0, 18)}...${file.name.slice(-8)}`
+                  : file.name}
               </Typography>
             </ButtonBase>
           </Grid>
@@ -770,7 +751,7 @@ export default function Files() {
               {detailsFile?.is_dir ? (
                 <FolderIcon sx={{ fontSize: 64, color: theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368' }} />
               ) : (
-                React.cloneElement(getFileIcon(detailsFile?.mime_type || null) as React.ReactElement, { sx: { fontSize: 64, color: getFileIcon(detailsFile?.mime_type || null)?.props?.sx?.color || (theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368') } })
+                React.cloneElement(getFileIcon(detailsFile?.name || '', detailsFile?.mime_type || null) as React.ReactElement, { sx: { fontSize: 64, color: getFileIcon(detailsFile?.name || '', detailsFile?.mime_type || null)?.props?.sx?.color || (theme.palette.mode === 'dark' ? '#9aa0a6' : '#5f6368') } })
               )}
             </Box>
             <Typography variant="h6" fontWeight={500} textAlign="center" sx={{ wordBreak: 'break-all' }}>
@@ -783,6 +764,12 @@ export default function Files() {
           </Typography>
 
           <Stack spacing={2.5}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>{t('common.type')}</Typography>
+              <Typography variant="body2" sx={{ textAlign: 'right', wordBreak: 'break-all' }}>
+                {detailsFile?.is_dir ? t('files.folders') : (detailsFile?.mime_type || 'Unknown')}
+              </Typography>
+            </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>{t('common.storage')}</Typography>
               <Typography variant="body2" sx={{ textAlign: 'right', wordBreak: 'break-word' }}>
@@ -799,6 +786,12 @@ export default function Files() {
               <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>{t('common.size')}</Typography>
               <Typography variant="body2" sx={{ textAlign: 'right' }}>
                 {detailsFile?.is_dir ? '—' : formatFileSize(detailsFile?.size || 0)}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>{t('common.created')}</Typography>
+              <Typography variant="body2" sx={{ textAlign: 'right' }}>
+                {detailsFile?.created_at ? formatDate(detailsFile.created_at) : '-'}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2 }}>
