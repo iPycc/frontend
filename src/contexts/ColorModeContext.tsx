@@ -1,24 +1,42 @@
-import { createContext, useState, useMemo, useContext, type ReactNode } from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createContext, useState, useMemo, useContext, useEffect, type ReactNode } from 'react';
+import { ThemeProvider, createTheme, useMediaQuery } from '@mui/material';
 import { getTheme } from '../theme';
+
+type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ColorModeContextType {
   toggleColorMode: () => void;
-  mode: 'light' | 'dark';
+  setColorMode: (mode: ThemeMode) => void;
+  mode: ThemeMode;
+  resolvedMode: 'light' | 'dark';
 }
 
 const ColorModeContext = createContext<ColorModeContextType>({
   toggleColorMode: () => {},
-  mode: 'dark',
+  setColorMode: () => {},
+  mode: 'system',
+  resolvedMode: 'dark',
 });
 
 export const useColorMode = () => useContext(ColorModeContext);
 
 export function ColorModeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<'light' | 'dark'>(() => {
+  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+
+  const [mode, setMode] = useState<ThemeMode>(() => {
     const savedMode = localStorage.getItem('colorMode');
-    return (savedMode as 'light' | 'dark') || 'dark';
+    if (savedMode === 'light' || savedMode === 'dark' || savedMode === 'system') {
+      return savedMode;
+    }
+    return 'system';
   });
+
+  const resolvedMode = useMemo(() => {
+    if (mode === 'system') {
+      return prefersDarkMode ? 'dark' : 'light';
+    }
+    return mode;
+  }, [mode, prefersDarkMode]);
 
   const colorMode = useMemo(
     () => ({
@@ -29,12 +47,17 @@ export function ColorModeProvider({ children }: { children: ReactNode }) {
           return newMode;
         });
       },
+      setColorMode: (newMode: ThemeMode) => {
+        localStorage.setItem('colorMode', newMode);
+        setMode(newMode);
+      },
       mode,
+      resolvedMode,
     }),
-    [mode]
+    [mode, resolvedMode]
   );
 
-  const theme = useMemo(() => createTheme(getTheme(mode)), [mode]);
+  const theme = useMemo(() => createTheme(getTheme(resolvedMode)), [resolvedMode]);
 
   return (
     <ColorModeContext.Provider value={colorMode}>
@@ -44,4 +67,3 @@ export function ColorModeProvider({ children }: { children: ReactNode }) {
     </ColorModeContext.Provider>
   );
 }
-

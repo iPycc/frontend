@@ -38,6 +38,7 @@ import {
   LightMode as LightModeIcon,
   Language as LanguageIcon,
   Share as ShareIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../stores/auth';
 import { useStorageStore } from '../stores/storage';
@@ -127,6 +128,7 @@ export default function Layout() {
     { text: t('common.files'), icon: <FolderIcon />, path: '/files' },
     { text: t('common.storage'), icon: <StorageIcon />, path: '/storage' },
     { text: t('common.shares'), icon: <ShareIcon />, path: '/shares' },
+    { text: t('trash.title'), icon: <DeleteIcon />, path: '/trash' },
     { text: t('common.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
 
@@ -308,8 +310,8 @@ export default function Layout() {
             <Avatar
               src={user?.avatar_url || undefined}
               sx={{
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
                 fontSize: '0.875rem',
               }}
@@ -323,14 +325,63 @@ export default function Layout() {
             onClose={handleMenuClose}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            PaperProps={{
+              sx: {
+                minWidth: 280,
+                mt: 1,
+                borderRadius: 2,
+                boxShadow: theme.shadows[8],
+              },
+            }}
           >
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle2" noWrap>
-                {user?.name || user?.email}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {user?.email}
-              </Typography>
+            <Box sx={{ px: 2.5, py: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
+                <Avatar
+                  src={user?.avatar_url || undefined}
+                  sx={{
+                    width: 48,
+                    height: 48,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                    fontSize: '1.25rem',
+                  }}
+                >
+                  {user?.name ? user.name[0].toUpperCase() : <PersonIcon />}
+                </Avatar>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle1" fontWeight={600} noWrap>
+                    {user?.name || user?.email?.split('@')[0]}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {user?.email}
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                p: 1,
+                bgcolor: alpha(theme.palette.text.primary, 0.04),
+                borderRadius: 1,
+              }}>
+                <Typography variant="caption" color="text.secondary">
+                  UID:
+                </Typography>
+                <Typography variant="caption" fontFamily="monospace" sx={{ flex: 1 }}>
+                  {user?.id?.slice(0, 12)}...
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    navigator.clipboard.writeText(user?.id || '');
+                  }}
+                  sx={{ p: 0.5 }}
+                >
+                  <Typography variant="caption" color="primary">
+                    {t('common.copy_link').split(' ')[0]}
+                  </Typography>
+                </IconButton>
+              </Box>
             </Box>
             <Divider />
             <MenuItem
@@ -338,17 +389,18 @@ export default function Layout() {
                 handleMenuClose();
                 navigate('/settings');
               }}
+              sx={{ py: 1.5, px: 2.5 }}
             >
               <ListItemIcon>
                 <SettingsIcon fontSize="small" />
               </ListItemIcon>
-              {t('common.settings')}
+              <ListItemText primary={t('common.settings')} />
             </MenuItem>
-            <MenuItem onClick={handleLogout}>
+            <MenuItem onClick={handleLogout} sx={{ py: 1.5, px: 2.5 }}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />
               </ListItemIcon>
-              {t('common.logout')}
+              <ListItemText primary={t('common.logout')} />
             </MenuItem>
           </Menu>
         </Toolbar>

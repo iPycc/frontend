@@ -9,7 +9,6 @@ import {
   Button,
   Typography,
   Link,
-  Alert,
   InputAdornment,
   IconButton,
   useTheme,
@@ -23,16 +22,17 @@ import {
   GitHub as GitHubIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../stores/auth';
+import { useNotify } from '../contexts/NotificationContext';
 
 export default function Login() {
   const theme = useTheme();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuthStore();
+  const notify = useNotify();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -43,14 +43,13 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
 
     try {
       await login(email, password);
       navigate('/files', { replace: true });
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed');
+      notify.error(err.response?.data?.message || t('auth.login_failed'));
     } finally {
       setLoading(false);
     }
@@ -106,12 +105,6 @@ export default function Login() {
               {t('auth.sign_in_subtitle')}
             </Typography>
           </Box>
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
 
           <form onSubmit={handleSubmit}>
             <TextField

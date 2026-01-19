@@ -7,6 +7,7 @@ import Files from './pages/Files';
 import Storage from './pages/Storage';
 import Settings from './pages/Settings';
 import Shares from './pages/Shares';
+import Trash from './pages/Trash';
 import AdminUsers from './pages/admin/Users';
 import SharePreview from './pages/SharePreview';
 import { ColorModeProvider } from './contexts/ColorModeContext';
@@ -71,6 +72,7 @@ function App() {
             <Route path="files/*" element={<Files />} />
             <Route path="storage" element={<Storage />} />
             <Route path="shares" element={<Shares />} />
+            <Route path="trash" element={<Trash />} />
             <Route path="settings" element={<Settings />} />
             <Route
               path="admin/users"
