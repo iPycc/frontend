@@ -19,9 +19,9 @@ const rawApi = axios.create({
   ...baseConfig,
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token from memory
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
+  const token = useAuthStore.getState().getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

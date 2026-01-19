@@ -10,7 +10,10 @@ const authChannel =
     ? new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
     : null;
 
-interface User {
+// 内存中存储 access token（不持久化到 localStorage，防止 XSS 攻击窃取）
+let memoryToken: string | null = null;
+
+export interface User {
   id: string;
   email: string;
   name: string;
@@ -24,22 +27,26 @@ interface User {
 }
 
 interface AuthState {
-  token: string | null;
   user: User | null;
   isAuthenticated: boolean;
+  isInitialized: boolean; // 标记是否已完成初始化（包括 token 刷新）
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => void;
   logoutServer: () => Promise<void>;
   setAuth: (token: string, user: User) => void;
   clearAuth: () => void;
+  getToken: () => string | null;
+  refreshToken: () => Promise<boolean>;
+  setInitialized: (initialized: boolean) => void;
 }
 
 type AuthBroadcastMessage =
-  | { type: 'login'; token: string; user: User }
-  | { type: 'logout' };
+  | { type: 'login'; user: User }
+  | { type: 'logout' }
+  | { type: 'token_refreshed' };
 
-function readPersistedAuth(): { token: string | null; user: User | null; isAuthenticated: boolean } | null {
+function readPersistedAuth(): { user: User | null; isAuthenticated: boolean } | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
@@ -50,10 +57,6 @@ function readPersistedAuth(): { token: string | null; user: User | null; isAuthe
   }
 }
 
-function setAuthLocal(token: string, user: User) {
-  useAuthStore.getState().setAuth(token, user);
-}
-
 function clearAuthLocal() {
   useAuthStore.getState().clearAuth();
 }
@@ -61,15 +64,18 @@ function clearAuthLocal() {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      token: null,
       user: null,
       isAuthenticated: false,
+      isInitialized: false,
 
       login: async (email: string, password: string) => {
         const response = await api.post('/auth/login', { email, password });
         const { access_token, user } = response.data.data;
-        set({ token: access_token, user, isAuthenticated: true });
-        authChannel?.postMessage({ type: 'login', token: access_token, user } satisfies AuthBroadcastMessage);
+        // token 存储在内存中
+        memoryToken = access_token;
+        set({ user, isAuthenticated: true, isInitialized: true });
+        // 广播时不传递 token
+        authChannel?.postMessage({ type: 'login', user } satisfies AuthBroadcastMessage);
       },
 
       register: async (email: string, name: string, password: string) => {
@@ -79,7 +85,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({ token: null, user: null, isAuthenticated: false });
+        memoryToken = null;
+        set({ user: null, isAuthenticated: false });
         authChannel?.postMessage({ type: 'logout' } satisfies AuthBroadcastMessage);
       },
 
@@ -93,17 +100,40 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setAuth: (token: string, user: User) => {
-        set({ token, user, isAuthenticated: true });
+        memoryToken = token;
+        set({ user, isAuthenticated: true, isInitialized: true });
       },
 
       clearAuth: () => {
-        set({ token: null, user: null, isAuthenticated: false });
+        memoryToken = null;
+        set({ user: null, isAuthenticated: false });
+      },
+
+      getToken: () => memoryToken,
+
+      refreshToken: async () => {
+        try {
+          const response = await api.post('/auth/refresh');
+          const { access_token, user } = response.data.data;
+          memoryToken = access_token;
+          set({ user, isAuthenticated: true, isInitialized: true });
+          // 通知其他标签页 token 已刷新
+          authChannel?.postMessage({ type: 'token_refreshed' } satisfies AuthBroadcastMessage);
+          return true;
+        } catch {
+          get().clearAuth();
+          return false;
+        }
+      },
+
+      setInitialized: (initialized: boolean) => {
+        set({ isInitialized: initialized });
       },
     }),
     {
-      name: 'auth-storage',
+      name: AUTH_STORAGE_KEY,
+      // 只持久化 user 信息，不持久化 token
       partialize: (state) => ({
-        token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
@@ -119,29 +149,45 @@ export function initAuthSync() {
     const msg = event.data as AuthBroadcastMessage;
     if (!msg?.type) return;
     if (msg.type === 'login') {
-      setAuthLocal(msg.token, msg.user);
+      // 其他标签页登录了，需要刷新 token 获取自己的 access token
+      useAuthStore.getState().refreshToken();
     } else if (msg.type === 'logout') {
       clearAuthLocal();
+    } else if (msg.type === 'token_refreshed') {
+      // 其他标签页刷新了 token，本标签页也需要刷新
+      useAuthStore.getState().refreshToken();
     }
   });
 
   window.addEventListener('storage', (event) => {
     if (event.key !== AUTH_STORAGE_KEY) return;
     const state = readPersistedAuth();
-    if (!state || !state.token || !state.user) {
+    if (!state || !state.user) {
       clearAuthLocal();
       return;
     }
-    setAuthLocal(state.token, state.user);
+    // 用户信息变化，需要刷新 token
+    if (state.isAuthenticated && !memoryToken) {
+      useAuthStore.getState().refreshToken();
+    }
   });
 
+  // 初始化时：如果有持久化的用户信息，尝试刷新 token
   const state = readPersistedAuth();
-  if (!state || !state.token) {
-    api.post('/auth/refresh')
-      .then((resp) => {
-        const { access_token, user } = resp.data.data;
-        setAuthLocal(access_token, user);
-      })
-      .catch(() => {});
+  if (state?.isAuthenticated && state?.user) {
+    // 有用户信息但没有 token，需要刷新
+    useAuthStore.getState().refreshToken().then((success) => {
+      if (!success) {
+        // 刷新失败，清除认证状态
+        clearAuthLocal();
+      }
+    });
+  } else {
+    // 没有用户信息，尝试用 refresh token cookie 刷新
+    useAuthStore.getState().refreshToken().then(() => {
+      useAuthStore.getState().setInitialized(true);
+    }).catch(() => {
+      useAuthStore.getState().setInitialized(true);
+    });
   }
 }
