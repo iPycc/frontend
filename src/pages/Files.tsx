@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -87,7 +87,11 @@ export default function Files() {
   const theme = useTheme();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { folderId } = useParams();
+  const location = useLocation();
+
+  // 从 URL 路径中提取文件夹路径，如 /files/Documents/Projects -> Documents/Projects
+  const folderPath = location.pathname.replace(/^\/files\/?/, '').replace(/\/$/, '');
+
   const { files, path, loading, fetchFiles, createDirectory, uploadFile, renameFile, deleteFile, downloadFile } = useFilesStore();
   const { policies, selectedPolicyId } = useStorageStore();
   const { createShare } = useShareStore();
@@ -112,20 +116,20 @@ export default function Files() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    fetchFiles(folderId || null, selectedPolicyId);
-  }, [folderId, selectedPolicyId, fetchFiles]);
+    fetchFiles(folderPath || undefined, selectedPolicyId);
+  }, [folderPath, selectedPolicyId, fetchFiles]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
       for (const file of acceptedFiles) {
         try {
         // Use selected policy or default policy
         const policyToUse = selectedPolicyId || policies.find((p) => p.is_default)?.id || null;
-        await uploadFile(file, folderId || null, policyToUse);
+        await uploadFile(file, policyToUse);
       } catch (error) {
         console.error('Upload failed:', error);
       }
     }
-  }, [folderId, policies, selectedPolicyId, uploadFile]);
+  }, [policies, selectedPolicyId, uploadFile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -134,7 +138,9 @@ export default function Files() {
 
   const handleFileClick = (file: FileItem) => {
     if (file.is_dir) {
-      navigate(`/files/${file.id}`);
+      // 构建新路径：当前路径 + 文件夹名称
+      const newPath = folderPath ? `${folderPath}/${file.name}` : file.name;
+      navigate(`/files/${newPath}`);
     }
   };
 
@@ -149,7 +155,7 @@ export default function Files() {
 
   const handleCreateFolder = async () => {
     if (newFolderName.trim()) {
-      await createDirectory(newFolderName, folderId || null, selectedPolicyId);
+      await createDirectory(newFolderName, selectedPolicyId);
       setNewFolderDialog(false);
       setNewFolderName('');
     }
@@ -484,17 +490,21 @@ export default function Files() {
           <HomeIcon fontSize="small" />
           {t('files.my_files')}
         </Link>
-        {path.map((item, index) => (
-          <Link
-            key={item.id}
-            component="button"
-            underline="hover"
-            color={index === path.length - 1 ? 'text.primary' : 'inherit'}
-            onClick={() => navigate(`/files/${item.id}`)}
-          >
-            {item.name}
-          </Link>
-        ))}
+        {path.map((item, index) => {
+          // 构建到该层级的路径
+          const pathToHere = path.slice(0, index + 1).map(p => p.name).join('/');
+          return (
+            <Link
+              key={item.id}
+              component="button"
+              underline="hover"
+              color={index === path.length - 1 ? 'text.primary' : 'inherit'}
+              onClick={() => navigate(`/files/${pathToHere}`)}
+            >
+              {item.name}
+            </Link>
+          );
+        })}
       </Breadcrumbs>
 
       {/* Drop zone overlay */}
@@ -617,7 +627,7 @@ export default function Files() {
       >
         <MenuItem
           onClick={() => {
-            fetchFiles(folderId || null, selectedPolicyId);
+            fetchFiles(folderPath || undefined, selectedPolicyId);
             setBlankMenu(null);
           }}
         >

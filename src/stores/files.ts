@@ -44,50 +44,59 @@ export interface UploadItem {
 interface FilesState {
   files: FileItem[];
   path: PathItem[];
-  currentFolderId: string | null;
+  currentPath: string; // 当前路径字符串，如 "Documents/Projects"
   currentPolicyId: string | null;
   loading: boolean;
   error: string | null;
   uploads: UploadItem[];
 
-  fetchFiles: (parentId?: string | null, policyId?: string | null) => Promise<void>;
-  createDirectory: (name: string, parentId?: string | null, policyId?: string | null) => Promise<void>;
+  fetchFiles: (path?: string, policyId?: string | null) => Promise<void>;
+  createDirectory: (name: string, policyId?: string | null) => Promise<void>;
   uploadFile: (
     file: File,
-    parentId?: string | null,
     policyId?: string | null
   ) => Promise<void>;
   uploadFileMultipart: (
     uploadId: string,
     file: File,
-    parentId?: string | null,
     policyId?: string | null
   ) => Promise<void>;
 
   removeUpload: (id: string) => Promise<void>;
   clearCompletedUploads: () => void;
-  
+
   renameFile: (id: string, name: string) => Promise<void>;
   deleteFile: (id: string) => Promise<void>;
   downloadFile: (id: string, name: string) => Promise<void>;
+
+  // 辅助方法：获取当前文件夹 ID（从 path 数组最后一项获取）
+  getCurrentFolderId: () => string | null;
 }
 
 export const useFilesStore = create<FilesState>((set, get) => ({
   files: [],
   path: [],
-  currentFolderId: null,
+  currentPath: '',
   currentPolicyId: null,
   loading: false,
   error: null,
   uploads: [],
 
-  fetchFiles: async (parentId?: string | null, policyId?: string | null) => {
-    set({ loading: true, error: null, currentFolderId: parentId || null, currentPolicyId: policyId || null });
+  // 获取当前文件夹 ID
+  getCurrentFolderId: () => {
+    const { path } = get();
+    if (path.length === 0) return null;
+    return path[path.length - 1].id;
+  },
+
+  fetchFiles: async (path?: string, policyId?: string | null) => {
+    const normalizedPath = path || '';
+    set({ loading: true, error: null, currentPath: normalizedPath, currentPolicyId: policyId || null });
     try {
       const params: Record<string, string> = {};
-      if (parentId) params.parent_id = parentId;
+      if (normalizedPath) params.path = normalizedPath;
       if (policyId) params.policy_id = policyId;
-      
+
       const response = await api.get('/files', { params });
       set({
         files: response.data.data.files,
@@ -99,10 +108,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
   },
 
-  createDirectory: async (name: string, parentId?: string | null, policyId?: string | null) => {
+  createDirectory: async (name: string, policyId?: string | null) => {
+    const currentFolderId = get().getCurrentFolderId();
     const response = await api.post('/files', {
       name,
-      parent_id: parentId || undefined,
+      parent_id: currentFolderId || undefined,
       policy_id: policyId || undefined,
     });
     const newDir = response.data.data;
@@ -111,9 +121,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   uploadFile: async (
     file: File,
-    parentId?: string | null,
     policyId?: string | null
   ) => {
+    const currentFolderId = get().getCurrentFolderId();
     const uploadId = Math.random().toString(36).substring(7);
     const newItem: UploadItem = {
         id: uploadId,
@@ -128,11 +138,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
         lastLoaded: 0,
         lastTime: Date.now()
     };
-    
+
     set({ uploads: [...get().uploads, newItem] });
 
     if (file.size > 500 * 1024 * 1024) {
-         await get().uploadFileMultipart(uploadId, file, parentId, policyId);
+         await get().uploadFileMultipart(uploadId, file, policyId);
          return;
     }
 
@@ -143,18 +153,18 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
       const formData = new FormData();
       formData.append('file', file);
-      if (parentId) formData.append('parent_id', parentId);
+      if (currentFolderId) formData.append('parent_id', currentFolderId);
       if (policyId) formData.append('policy_id', policyId);
 
       const response = await api.post('/files/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
             if (!progressEvent.total) return;
-            
+
             const now = Date.now();
             const loaded = progressEvent.loaded;
             const total = progressEvent.total;
-            
+
             set(state => {
                 const upload = state.uploads.find(u => u.id === uploadId);
                 if (!upload) return {};
@@ -169,7 +179,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
                     speed = bytesDiff / timeDiff;
                     const remaining = total - loaded;
                     eta = speed > 0 ? remaining / speed : 0;
-                    
+
                     return {
                         uploads: state.uploads.map(u => u.id === uploadId ? {
                             ...u,
@@ -195,14 +205,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       });
 
       const newFile = response.data.data;
-      
+
       set(state => ({
           uploads: state.uploads.map(u => u.id === uploadId ? { ...u, status: 'completed', progress: 100 } : u)
       }));
 
       // Only add to file list if we are currently viewing the folder where it was uploaded
-      const currentFolderId = get().currentFolderId;
-      if (currentFolderId === parentId || (currentFolderId === null && !parentId)) {
+      const uploadedToFolderId = currentFolderId;
+      const currentViewFolderId = get().getCurrentFolderId();
+      if (currentViewFolderId === uploadedToFolderId) {
            // Check if exists
            const existing = get().files.find((f) => f.id === newFile.id);
            if (existing) {
@@ -216,16 +227,17 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     } catch (error: any) {
         console.error("Upload error", error);
         set(state => ({
-            uploads: state.uploads.map(u => u.id === uploadId ? { 
-                ...u, 
-                status: 'error', 
-                error: error.message || 'Upload failed' 
+            uploads: state.uploads.map(u => u.id === uploadId ? {
+                ...u,
+                status: 'error',
+                error: error.message || 'Upload failed'
             } : u)
         }));
     }
   },
 
-  uploadFileMultipart: async (uploadId, file, parentId, policyId) => {
+  uploadFileMultipart: async (uploadId, file, policyId) => {
+      const currentFolderId = get().getCurrentFolderId();
       const parseCosError = (text: string) => {
           const code = text.match(/<Code>([^<]+)<\/Code>/)?.[1]?.trim();
           const message = text.match(/<Message>([^<]+)<\/Message>/)?.[1]?.trim();
@@ -239,76 +251,76 @@ export const useFilesStore = create<FilesState>((set, get) => ({
           }));
 
           const pathStr = get().path.map(p => p.name).join('/');
-          
+
           const initRes = await api.post('/files/multipart/init', {
               path: pathStr,
               filename: file.name,
               size: file.size,
-              parent_id: parentId,
+              parent_id: currentFolderId,
               policy_id: policyId,
               mime_type: file.type
           });
-          
+
           const { upload_id: cosUploadId, key, chunk_size, policy_id: usedPolicyId } = initRes.data.data;
           const chunkSize = chunk_size || 524288000;
           const totalParts = Math.ceil(file.size / chunkSize);
           const parts: { part_number: number, etag: string }[] = [];
-          
+
           set(state => ({
-            uploads: state.uploads.map(u => u.id === uploadId ? { 
-                ...u, 
+            uploads: state.uploads.map(u => u.id === uploadId ? {
+                ...u,
                 multipart: { key, uploadId: cosUploadId, policyId: usedPolicyId },
             } : u)
           }));
-          
+
           let uploadedBytes = 0;
-          
+
           for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
               const start = (partNumber - 1) * chunkSize;
               const end = Math.min(start + chunkSize, file.size);
               const chunk = file.slice(start, end);
-              
+
               set(state => ({
-                uploads: state.uploads.map(u => u.id === uploadId ? { 
-                    ...u, 
-                    message: i18n.t('files.upload.uploading_part', { part: partNumber, total: totalParts }) 
+                uploads: state.uploads.map(u => u.id === uploadId ? {
+                    ...u,
+                    message: i18n.t('files.upload.uploading_part', { part: partNumber, total: totalParts })
                 } : u)
               }));
-              
+
               const signRes = await api.post('/files/multipart/sign', {
                   key,
                   upload_id: cosUploadId,
                   part_number: partNumber,
                   policy_id: usedPolicyId
               });
-              
+
               const { url, authorization } = signRes.data.data;
-              
+
               await new Promise<void>((resolve, reject) => {
                   const xhr = new XMLHttpRequest();
                   xhr.open('PUT', url);
                   xhr.setRequestHeader('Authorization', authorization);
-                  
+
                   xhr.upload.onprogress = (e) => {
                       if (e.lengthComputable) {
                           const chunkLoaded = e.loaded;
                           const totalLoaded = uploadedBytes + chunkLoaded;
-                          
+
                           const now = Date.now();
                           set(state => {
                               const upload = state.uploads.find(u => u.id === uploadId);
                               if (!upload) return {};
-                              
+
                               const timeDiff = (now - upload.lastTime) / 1000;
                               let speed = upload.speed;
                               let eta = upload.eta;
-                              
+
                               if (timeDiff > 0.5) {
                                   const bytesDiff = totalLoaded - upload.lastLoaded;
                                   speed = bytesDiff / timeDiff;
                                   const remaining = file.size - totalLoaded;
                                   eta = speed > 0 ? remaining / speed : 0;
-                                  
+
                                   return {
                                       uploads: state.uploads.map(u => u.id === uploadId ? {
                                           ...u,
@@ -331,7 +343,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
                           });
                       }
                   };
-                  
+
                   xhr.onload = () => {
                       if (xhr.status >= 200 && xhr.status < 300) {
                           const etag = xhr.getResponseHeader('ETag');
@@ -348,28 +360,29 @@ export const useFilesStore = create<FilesState>((set, get) => ({
                           reject(new Error(i18n.t('files.upload.upload_failed', { status: xhr.status, statusText: xhr.statusText, extra })));
                       }
                   };
-                  
+
                   xhr.onerror = () => reject(new Error('Network error'));
                   xhr.send(chunk);
               });
           }
-          
+
           set(state => ({
             uploads: state.uploads.map(u => u.id === uploadId ? { ...u, message: i18n.t('files.upload.completing') } : u)
           }));
-          
+
           await api.post('/files/multipart/complete', {
               key,
               upload_id: cosUploadId,
               parts,
-              parent_id: parentId,
+              parent_id: currentFolderId,
               filename: file.name,
               size: file.size,
               mime_type: file.type,
               policy_id: usedPolicyId
           });
-          
-           get().fetchFiles(get().currentFolderId, get().currentPolicyId);
+
+          // 刷新当前文件夹
+          get().fetchFiles(get().currentPath, get().currentPolicyId);
 
           set(state => ({
               uploads: state.uploads.map(u => u.id === uploadId ? { ...u, status: 'completed', progress: 100, message: i18n.t('common.completed') } : u)
@@ -389,15 +402,15 @@ export const useFilesStore = create<FilesState>((set, get) => ({
               }
           }
            set(state => ({
-            uploads: state.uploads.map(u => u.id === uploadId ? { 
-                ...u, 
-                status: 'error', 
-                error: error.message || 'Upload failed' 
+            uploads: state.uploads.map(u => u.id === uploadId ? {
+                ...u,
+                status: 'error',
+                error: error.message || 'Upload failed'
             } : u)
         }));
       }
   },
-  
+
   removeUpload: async (id: string) => {
       const upload = get().uploads.find(u => u.id === id);
       if (upload?.multipart) {
@@ -434,7 +447,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const response = await api.get(`/files/${id}/download`, {
       responseType: 'blob',
     });
-    
+
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;

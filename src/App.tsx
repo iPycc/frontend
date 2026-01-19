@@ -68,7 +68,7 @@ function App() {
           >
             <Route index element={<Navigate to="/files" replace />} />
             <Route path="files" element={<Files />} />
-            <Route path="files/:folderId" element={<Files />} />
+            <Route path="files/*" element={<Files />} />
             <Route path="storage" element={<Storage />} />
             <Route path="shares" element={<Shares />} />
             <Route path="settings" element={<Settings />} />
