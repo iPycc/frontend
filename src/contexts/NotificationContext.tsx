@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
-import { Box, Typography, IconButton, Slide, alpha, useTheme } from '@mui/material';
+import { Box, Typography, IconButton, Slide, alpha } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
   Warning as WarningIcon,
@@ -68,7 +68,6 @@ interface NotificationToastProps {
 }
 
 function NotificationToast({ notification, onClose }: NotificationToastProps) {
-  const theme = useTheme();
   const [show, setShow] = useState(false);
   const config = variantConfig[notification.variant];
   const Icon = config.icon;

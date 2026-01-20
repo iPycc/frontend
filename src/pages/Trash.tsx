@@ -166,8 +166,6 @@ export default function Trash() {
     setConfirmDialog({ open: false, type: 'restore' });
   };
 
-  const selectedItems = items.filter((item) => selectedIds.has(item.id));
-
   return (
     <Box>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

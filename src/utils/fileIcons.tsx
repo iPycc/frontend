@@ -30,12 +30,9 @@ import {
   Settings as ConfigIcon,
   Book as BookIcon,
   Brush as DesignIcon,
-  Movie as MovieIcon,
-  MusicNote as MusicIcon,
   Gamepad as GameIcon,
   Memory as BinaryIcon,
   Folder as FolderIcon,
-  FolderZip as ZipFolderIcon,
 } from '@mui/icons-material';
 
 // Helper to extract extension

@@ -1,4 +1,4 @@
-import { createContext, useState, useMemo, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useState, useMemo, useContext, type ReactNode } from 'react';
 import { ThemeProvider, createTheme, useMediaQuery } from '@mui/material';
 import { getTheme } from '../theme';
 

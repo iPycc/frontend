@@ -30,7 +30,6 @@ import {
   Folder as FolderIcon,
   Storage as StorageIcon,
   Settings as SettingsIcon,
-  People as PeopleIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
   Cloud as CloudIcon,
@@ -132,9 +131,7 @@ export default function Layout() {
     { text: t('common.settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
 
-  if (user?.role === 'admin') {
-    menuItems.push({ text: t('common.users'), icon: <PeopleIcon />, path: '/admin/users' });
-  }
+  // User management is now in Settings for admins
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -155,9 +152,14 @@ export default function Layout() {
           >
             {policies.map((policy) => (
               <MenuItem key={policy.id} value={policy.id}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                   <StorageIcon fontSize="small" color={policy.policy_type === 'local' ? 'action' : 'primary'} />
-                  <Typography variant="body2" noWrap>{policy.name}</Typography>
+                  <Typography variant="body2" noWrap sx={{ flex: 1 }}>{policy.name}</Typography>
+                  {policy.is_default && (
+                    <Typography variant="caption" color="primary" sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), px: 0.5, borderRadius: 0.5 }}>
+                      {t('storage.default')}
+                    </Typography>
+                  )}
                 </Box>
               </MenuItem>
             ))}

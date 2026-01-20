@@ -66,7 +66,7 @@ export default function AdminUsers() {
         u.id === user.id ? { ...u, is_active: !u.is_active } : u
       ));
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to update user status');
+      alert(error.response?.data?.message || t('settings.user_status_update_failed'));
     }
   };
 

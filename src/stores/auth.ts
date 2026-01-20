@@ -5,6 +5,7 @@ import { api } from '../api/client';
 const AUTH_STORAGE_KEY = 'auth-storage';
 const AUTH_BROADCAST_CHANNEL = 'cr-auth';
 let authSyncInitialized = false;
+let sessionMonitorInitialized = false;
 const authChannel =
   typeof window !== 'undefined' && 'BroadcastChannel' in window
     ? new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
@@ -37,7 +38,7 @@ interface AuthState {
   setAuth: (token: string, user: User) => void;
   clearAuth: () => void;
   getToken: () => string | null;
-  refreshToken: () => Promise<boolean>;
+  refreshToken: (opts?: { broadcast?: boolean }) => Promise<boolean>;
   setInitialized: (initialized: boolean) => void;
 }
 
@@ -60,6 +61,8 @@ function readPersistedAuth(): { user: User | null; isAuthenticated: boolean } | 
 function clearAuthLocal() {
   useAuthStore.getState().clearAuth();
 }
+
+let refreshPromise: Promise<boolean> | null = null;
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -111,19 +114,30 @@ export const useAuthStore = create<AuthState>()(
 
       getToken: () => memoryToken,
 
-      refreshToken: async () => {
-        try {
-          const response = await api.post('/auth/refresh');
-          const { access_token, user } = response.data.data;
-          memoryToken = access_token;
-          set({ user, isAuthenticated: true, isInitialized: true });
-          // 通知其他标签页 token 已刷新
-          authChannel?.postMessage({ type: 'token_refreshed' } satisfies AuthBroadcastMessage);
-          return true;
-        } catch {
-          get().clearAuth();
-          return false;
-        }
+      refreshToken: async (opts) => {
+        if (refreshPromise) return refreshPromise;
+
+        const broadcast = opts?.broadcast ?? true;
+
+        refreshPromise = (async () => {
+          try {
+            const response = await api.post('/auth/refresh');
+            const { access_token, user } = response.data.data;
+            memoryToken = access_token;
+            set({ user, isAuthenticated: true, isInitialized: true });
+            if (broadcast) {
+              authChannel?.postMessage({ type: 'token_refreshed' } satisfies AuthBroadcastMessage);
+            }
+            return true;
+          } catch {
+            get().clearAuth();
+            return false;
+          } finally {
+            refreshPromise = null;
+          }
+        })();
+
+        return refreshPromise;
       },
 
       setInitialized: (initialized: boolean) => {
@@ -150,12 +164,12 @@ export function initAuthSync() {
     if (!msg?.type) return;
     if (msg.type === 'login') {
       // 其他标签页登录了，需要刷新 token 获取自己的 access token
-      useAuthStore.getState().refreshToken();
+      if (!memoryToken) useAuthStore.getState().refreshToken({ broadcast: false });
     } else if (msg.type === 'logout') {
       clearAuthLocal();
     } else if (msg.type === 'token_refreshed') {
       // 其他标签页刷新了 token，本标签页也需要刷新
-      useAuthStore.getState().refreshToken();
+      if (!memoryToken) useAuthStore.getState().refreshToken({ broadcast: false });
     }
   });
 
@@ -168,7 +182,7 @@ export function initAuthSync() {
     }
     // 用户信息变化，需要刷新 token
     if (state.isAuthenticated && !memoryToken) {
-      useAuthStore.getState().refreshToken();
+      useAuthStore.getState().refreshToken({ broadcast: false });
     }
   });
 
@@ -176,18 +190,30 @@ export function initAuthSync() {
   const state = readPersistedAuth();
   if (state?.isAuthenticated && state?.user) {
     // 有用户信息但没有 token，需要刷新
-    useAuthStore.getState().refreshToken().then((success) => {
+    useAuthStore.getState().refreshToken({ broadcast: false }).then((success) => {
       if (!success) {
         // 刷新失败，清除认证状态
         clearAuthLocal();
       }
+      useAuthStore.getState().setInitialized(true);
     });
   } else {
     // 没有用户信息，尝试用 refresh token cookie 刷新
-    useAuthStore.getState().refreshToken().then(() => {
-      useAuthStore.getState().setInitialized(true);
-    }).catch(() => {
+    useAuthStore.getState().refreshToken({ broadcast: false }).finally(() => {
       useAuthStore.getState().setInitialized(true);
     });
+
+  if (!sessionMonitorInitialized) {
+    sessionMonitorInitialized = true;
+    window.setInterval(async () => {
+      const state = useAuthStore.getState();
+      if (!state.isAuthenticated) return;
+      if (window.location.pathname === '/login') return;
+      try {
+        await api.get('/user/sessions', { headers: { 'Cache-Control': 'no-cache' } });
+      } catch {
+      }
+    }, 15000);
+  }
   }
 }

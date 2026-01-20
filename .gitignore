@@ -13,6 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
+.git_disabled/
 .vscode/*
 !.vscode/extensions.json
 .idea

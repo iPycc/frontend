@@ -21,7 +21,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Collapse,
   Divider,
   InputAdornment,
 } from '@mui/material';
@@ -37,8 +36,6 @@ import {
   Computer as LocalIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  CheckCircle as CheckIcon,
-  Help as HelpIcon,
 } from '@mui/icons-material';
 import { useStorageStore, StoragePolicy } from '../stores/storage';
 import { useNotify } from '../contexts/NotificationContext';
