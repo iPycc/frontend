@@ -23,6 +23,7 @@ import {
 } from '@mui/icons-material';
 import { useAuthStore } from '../stores/auth';
 import { useNotify } from '../contexts/NotificationContext';
+import { beginPasskeyLogin, finishPasskeyLogin } from '../api/passkey';
 
 export default function Login() {
   const theme = useTheme();
@@ -34,6 +35,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -52,6 +54,38 @@ export default function Login() {
       notify.error(err.response?.data?.message || t('auth.login_failed'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    if (typeof window === 'undefined' || !('PublicKeyCredential' in window) || !window.isSecureContext) {
+      notify.error(t('auth.passkey_not_supported'));
+      return;
+    }
+
+    setPasskeyLoading(true);
+    try {
+      const begin = await beginPasskeyLogin(email.trim() || undefined);
+      const resp = await finishPasskeyLogin(begin.challenge_id, begin.options);
+      useAuthStore.getState().setAuth(resp.access_token, resp.user);
+      navigate('/files', { replace: true });
+    } catch (err: any) {
+      if (err?.name === 'RP_ID_MISMATCH' && typeof err?.message === 'string') {
+        const parts = err.message.split(':');
+        const host = parts[1] || '';
+        const rpId = parts[2] || '';
+        notify.error(t('auth.passkey_rpid_mismatch', { host, rpId }));
+      } else if (err?.name === 'NotAllowedError') {
+        notify.error(t('auth.passkey_error_not_allowed'));
+      } else if (err?.name === 'SecurityError') {
+        notify.error(t('auth.passkey_error_security'));
+      } else if (err?.name === 'InvalidStateError') {
+        notify.error(t('auth.passkey_error_invalid_state'));
+      } else {
+        notify.error(err.response?.data?.message || err?.message || t('auth.passkey_login_failed'));
+      }
+    } finally {
+      setPasskeyLoading(false);
     }
   };
 
@@ -167,6 +201,8 @@ export default function Login() {
               startIcon={<FingerprintIcon />}
               color="inherit"
               sx={{ borderColor: theme.palette.divider }}
+              onClick={handlePasskeyLogin}
+              disabled={passkeyLoading}
             >
               {t('auth.passkey_login')}
             </Button>

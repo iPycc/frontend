@@ -59,7 +59,8 @@ api.interceptors.response.use(
       url.includes('/auth/login') ||
       url.includes('/auth/refresh') ||
       url.includes('/auth/register') ||
-      url.includes('/auth/logout');
+      url.includes('/auth/logout') ||
+      url.includes('/auth/webauthn/');
 
     if (isAuthEndpoint) {
       useAuthStore.getState().clearAuth();

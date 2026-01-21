@@ -78,6 +78,22 @@ function buildCrPath(path: { name: string }[], name: string) {
   return '/' + parts.join('/');
 }
 
+function encodePathSegments(p: string) {
+  return p
+    .split('/')
+    .filter(Boolean)
+    .map((s) => encodeURIComponent(s))
+    .join('/');
+}
+
+function decodePathSegments(p: string) {
+  return p
+    .split('/')
+    .filter(Boolean)
+    .map((s) => decodeURIComponent(s))
+    .join('/');
+}
+
 // Helper to get file icon
 // function getFileIcon(mimeType: string | null) {
 //   // ... removed ...
@@ -90,7 +106,9 @@ export default function Files() {
   const location = useLocation();
 
   // 从 URL 路径中提取文件夹路径，如 /files/Documents/Projects -> Documents/Projects
-  const folderPath = location.pathname.replace(/^\/files\/?/, '').replace(/\/$/, '');
+  const folderPath = decodePathSegments(
+    location.pathname.replace(/^\/files\/?/, '').replace(/\/$/, '')
+  );
 
   const { files, path, loading, fetchFiles, createDirectory, uploadFile, renameFile, deleteFile, downloadFile } = useFilesStore();
   const { policies, selectedPolicyId } = useStorageStore();
@@ -140,7 +158,7 @@ export default function Files() {
     if (file.is_dir) {
       // 构建新路径：当前路径 + 文件夹名称
       const newPath = folderPath ? `${folderPath}/${file.name}` : file.name;
-      navigate(`/files/${newPath}`);
+      navigate(`/files/${encodePathSegments(newPath)}`);
     }
   };
 
@@ -499,7 +517,7 @@ export default function Files() {
               component="button"
               underline="hover"
               color={index === path.length - 1 ? 'text.primary' : 'inherit'}
-              onClick={() => navigate(`/files/${pathToHere}`)}
+              onClick={() => navigate(`/files/${encodePathSegments(pathToHere)}`)}
             >
               {item.name}
             </Link>

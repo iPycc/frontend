@@ -280,6 +280,22 @@ export default function Layout() {
             </Box>
             <Typography variant="h6" fontWeight={700} noWrap component="div">
               CloudRaver
+              <Typography
+                component="span"
+                variant="caption"
+                sx={{
+                  ml: 1,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 999,
+                  bgcolor: alpha(theme.palette.primary.main, 0.15),
+                  color: theme.palette.primary.main,
+                  fontWeight: 700,
+                  verticalAlign: 'middle',
+                }}
+              >
+                beta 1.1
+              </Typography>
             </Typography>
           </Box>
 

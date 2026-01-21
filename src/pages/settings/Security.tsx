@@ -5,6 +5,7 @@ import {
   Typography,
   Button,
   useTheme,
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -25,13 +26,15 @@ import {
   Fingerprint as FingerprintIcon,
   Computer as ComputerIcon,
   Smartphone as SmartphoneIcon,
-  Add as AddIcon,
+  Close as CloseIcon,
+  PersonAddAlt1 as PersonAddAlt1Icon,
   InfoOutlined as InfoIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { useNotify } from '../../contexts/NotificationContext';
+import { deletePasskey, listPasskeys, registerPasskey } from '../../api/passkey';
 
 interface SessionInfo {
   id: string;
@@ -40,6 +43,14 @@ interface SessionInfo {
   location: string | null;
   is_current: boolean;
   created_at: string;
+}
+
+interface PasskeyInfo {
+  id: string;
+  nickname?: string | null;
+  device_info?: string | null;
+  created_at: string;
+  last_used_at?: string | null;
 }
 
 export default function Security() {
@@ -60,6 +71,10 @@ export default function Security() {
   // Sessions State
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+
+  // Passkeys State
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   const isLanIp = (ip: string) => {
     const value = ip.trim().toLowerCase();
@@ -90,6 +105,24 @@ export default function Security() {
     return { browser: raw, os: '' };
   };
 
+  const formatAgo = (dateStr: string) => {
+    const ts = Date.parse(dateStr);
+    if (Number.isNaN(ts)) return dateStr;
+    const diffMs = Date.now() - ts;
+    const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+    const lang = (typeof navigator !== 'undefined' ? navigator.language : 'en').toLowerCase();
+    const isZh = lang.startsWith('zh') || (t('common.login') === '登录');
+
+    const minutes = Math.floor(diffSec / 60);
+    const hours = Math.floor(diffSec / 3600);
+    const days = Math.floor(diffSec / 86400);
+
+    if (diffSec < 30) return isZh ? '刚刚' : 'just now';
+    if (minutes < 60) return isZh ? `${minutes} 分钟前` : `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    if (hours < 24) return isZh ? `${hours} 小时前` : `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    return isZh ? `${days} 天前` : `${days} day${days === 1 ? '' : 's'} ago`;
+  };
+
   const fetchSessions = async () => {
     setLoadingSessions(true);
     try {
@@ -102,8 +135,17 @@ export default function Security() {
     }
   };
 
+  const fetchPasskeys = async () => {
+    try {
+      const data = await listPasskeys();
+      setPasskeys(data);
+    } catch {
+    }
+  };
+
   useEffect(() => {
     fetchSessions();
+    fetchPasskeys();
   }, []);
 
   const handleTerminateSession = async (sessionId: string) => {
@@ -236,39 +278,142 @@ export default function Security() {
       {/* Passkeys Section */}
       <Box>
         <BlockTitle>{t('settings.security.passkeys')}</BlockTitle>
-        <Paper
+        {passkeys.length > 0 ? (
+          <Stack spacing={1.5} sx={{ mb: 2 }}>
+            {passkeys.map((pk) => {
+              const device = parseDeviceInfo(pk.device_info || '');
+              const title = device.os
+                ? t('settings.security.passkey_label', { os: device.os, browser: device.browser })
+                : (pk.nickname || device.browser);
+              const created = t('settings.security.passkey_created_ago', { time: formatAgo(pk.created_at) });
+              const used = pk.last_used_at
+                ? t('settings.security.passkey_last_used_ago', { time: formatAgo(pk.last_used_at) })
+                : t('settings.security.passkey_last_used_never');
+              return (
+                <Paper
+                  key={pk.id}
+                  variant="outlined"
+                  sx={{
+                    borderRadius: 2.5,
+                    borderColor: theme.palette.divider,
+                    px: 2,
+                    py: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    bgcolor: 'transparent',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 999,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: alpha(theme.palette.text.primary, 0.06),
+                    }}
+                  >
+                    <FingerprintIcon sx={{ fontSize: 22 }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontWeight={700} sx={{ lineHeight: 1.2 }} noWrap>
+                      {title}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 0.25, whiteSpace: 'pre-wrap' }}
+                    >
+                      {`${created}  ${used}`}
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    aria-label={t('common.delete')}
+                    onClick={async () => {
+                      try {
+                        await deletePasskey(pk.id);
+                        notify.success(t('settings.security.passkeys_deleted'));
+                        await fetchPasskeys();
+                      } catch (error: any) {
+                        notify.error(error.response?.data?.message || t('settings.security.passkeys_delete_failed'));
+                      }
+                    }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Paper>
+              );
+            })}
+          </Stack>
+        ) : (
+          <Paper
+            variant="outlined"
+            sx={{
+              borderRadius: 3,
+              borderColor: theme.palette.divider,
+              minHeight: 150,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: 1.5,
+              px: 3,
+              mb: 2,
+              bgcolor: 'transparent',
+            }}
+          >
+            <FingerprintIcon sx={{ fontSize: 44, color: alpha(theme.palette.text.primary, 0.55) }} />
+            <Typography color="text.secondary" align="center" sx={{ maxWidth: 520 }}>
+              {t('settings.security.passkeys_empty_hint')}
+            </Typography>
+          </Paper>
+        )}
+
+        <Button
           variant="outlined"
+          startIcon={<PersonAddAlt1Icon />}
           sx={{
-            p: { xs: 3, md: 4 },
-            borderRadius: 3,
-            bgcolor: 'transparent',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 2,
-            minHeight: 160,
-            mb: 2,
-            borderColor: theme.palette.divider,
-          }}
-        >
-          <FingerprintIcon sx={{ fontSize: 48, color: theme.palette.text.secondary }} />
-          <Typography color="text.secondary" align="center">
-            {t('settings.security.passkeys_desc')}
-          </Typography>
-        </Paper>
-        <Button 
-          variant="outlined" 
-          startIcon={<AddIcon />}
-          sx={{ 
             borderRadius: 2,
             textTransform: 'none',
             color: theme.palette.text.primary,
             borderColor: theme.palette.divider,
+            px: 2,
           }}
-          disabled
+          disabled={passkeyLoading}
+          onClick={async () => {
+            if (typeof window === 'undefined' || !('PublicKeyCredential' in window) || !window.isSecureContext) {
+              notify.error(t('auth.passkey_not_supported'));
+              return;
+            }
+            setPasskeyLoading(true);
+            try {
+              await registerPasskey();
+              notify.success(t('settings.security.passkeys_added'));
+              await fetchPasskeys();
+            } catch (error: any) {
+              if (error?.name === 'RP_ID_MISMATCH' && typeof error?.message === 'string') {
+                const parts = error.message.split(':');
+                const host = parts[1] || '';
+                const rpId = parts[2] || '';
+                notify.error(t('settings.security.passkey_rpid_mismatch', { host, rpId }));
+              } else if (error?.name === 'NotAllowedError') {
+                notify.error(t('auth.passkey_error_not_allowed'));
+              } else if (error?.name === 'SecurityError') {
+                notify.error(t('auth.passkey_error_security'));
+              } else if (error?.name === 'InvalidStateError') {
+                notify.error(t('auth.passkey_error_invalid_state'));
+              } else {
+                notify.error(error.response?.data?.message || error?.message || t('settings.security.passkeys_add_failed'));
+              }
+            } finally {
+              setPasskeyLoading(false);
+            }
+          }}
         >
-          {t('settings.security.setup')}
+          {t('settings.security.passkeys_add_new')}
         </Button>
       </Box>
 
