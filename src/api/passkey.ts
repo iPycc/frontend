@@ -68,6 +68,32 @@ export async function finishPasskeyLogin(challengeId: string, options: PublicKey
   return finish.data.data;
 }
 
+export async function beginPasskeyReauth() {
+  const begin = await api.post<ApiResponse<{ challenge_id: string; options: PublicKeyCredentialRequestOptionsJSON }>>(
+    '/user/reauth/passkey/begin',
+    {}
+  );
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const options = unwrapPublicKey<PublicKeyCredentialRequestOptionsJSON>(begin.data.data.options as any);
+  const rpId = options?.rpId || '';
+  if (hostname && rpId && hostname !== rpId && !hostname.endsWith(`.${rpId}`)) {
+    const err = new Error(`RP_ID_MISMATCH:${hostname}:${rpId}`);
+    err.name = 'RP_ID_MISMATCH';
+    throw err;
+  }
+  return { challenge_id: begin.data.data.challenge_id, options };
+}
+
+export async function finishPasskeyReauth(challengeId: string, options: PublicKeyCredentialRequestOptionsJSON) {
+  const unwrapped = unwrapPublicKey<PublicKeyCredentialRequestOptionsJSON>(options as any);
+  const credential: AuthenticationResponseJSON = await startAuthentication({ optionsJSON: unwrapped });
+  const finish = await api.post<ApiResponse<{ reauth_token: string }>>('/user/reauth/passkey/finish', {
+    challenge_id: challengeId,
+    credential,
+  });
+  return finish.data.data;
+}
+
 export async function listPasskeys() {
   const resp = await api.get<ApiResponse<Array<{ id: string; nickname?: string | null; device_info?: string | null; created_at: string; last_used_at?: string | null }>>>(
     '/user/passkeys'

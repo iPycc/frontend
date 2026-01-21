@@ -20,10 +20,13 @@ import {
   Cloud as CloudIcon,
   Fingerprint as FingerprintIcon,
   GitHub as GitHubIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../stores/auth';
 import { useNotify } from '../contexts/NotificationContext';
 import { beginPasskeyLogin, finishPasskeyLogin } from '../api/passkey';
+import { api } from '../api/client';
+import { OtpInput } from '../components/OtpInput';
 
 export default function Login() {
   const theme = useTheme();
@@ -36,6 +39,10 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [mfaStep, setMfaStep] = useState<'password' | '2fa'>('password');
+  const [mfaToken, setMfaToken] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -48,12 +55,35 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const res = await login(email, password);
+      if (res.mfa_required) {
+        setMfaToken(res.mfa_token || '');
+        setMfaCode('');
+        setMfaStep('2fa');
+        return;
+      }
       navigate('/files', { replace: true });
     } catch (err: any) {
       notify.error(err.response?.data?.message || t('auth.login_failed'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerify2fa = async () => {
+    const code = (mfaCode || '').replace(/\D/g, '').slice(0, 6);
+    if (code.length !== 6) return;
+    setMfaLoading(true);
+    try {
+      const resp = await api.post('/auth/login/2fa', { mfa_token: mfaToken, code });
+      const { access_token, user } = resp.data.data as any;
+      if (!access_token || !user) throw new Error('Invalid login response');
+      useAuthStore.getState().setAuth(access_token, user);
+      navigate('/files', { replace: true });
+    } catch (err: any) {
+      notify.error(err.response?.data?.message || t('auth.two_factor_failed'));
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -140,82 +170,124 @@ export default function Login() {
             </Typography>
           </Box>
 
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label={t('auth.email_label')}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              margin="dense"
-              required
-              autoFocus
-              variant="outlined"
-              size="small"
-            />
-            <TextField
-              fullWidth
-              label={t('auth.password_label')}
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              margin="dense"
-              required
-              variant="outlined"
-              size="small"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowPassword(!showPassword)}
-                      edge="end"
-                      size="small"
-                    >
-                      {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              disabled={loading}
-              sx={{ mt: 3, mb: 2 }}
-            >
-              {loading ? t('auth.signing_in') : t('auth.sign_in_button')}
-            </Button>
-          </form>
+          {mfaStep === 'password' ? (
+            <>
+              <form onSubmit={handleSubmit}>
+                <TextField
+                  fullWidth
+                  label={t('auth.email_label')}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  margin="dense"
+                  required
+                  autoFocus
+                  variant="outlined"
+                  size="small"
+                />
+                <TextField
+                  fullWidth
+                  label={t('auth.password_label')}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  margin="dense"
+                  required
+                  variant="outlined"
+                  size="small"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowPassword(!showPassword)}
+                          edge="end"
+                          size="small"
+                        >
+                          {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button
+                  type="submit"
+                  fullWidth
+                  variant="contained"
+                  disabled={loading}
+                  sx={{ mt: 3, mb: 2 }}
+                >
+                  {loading ? t('auth.signing_in') : t('auth.sign_in_button')}
+                </Button>
+              </form>
 
-          <Divider sx={{ my: 3 }}>
-            <Typography variant="caption" color="text.secondary">
-              OR
-            </Typography>
-          </Divider>
+              <Divider sx={{ my: 3 }}>
+                <Typography variant="caption" color="text.secondary">
+                  OR
+                </Typography>
+              </Divider>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<FingerprintIcon />}
-              color="inherit"
-              sx={{ borderColor: theme.palette.divider }}
-              onClick={handlePasskeyLogin}
-              disabled={passkeyLoading}
-            >
-              {t('auth.passkey_login')}
-            </Button>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<GitHubIcon />}
-              color="inherit"
-              sx={{ borderColor: theme.palette.divider }}
-            >
-              {t('auth.github_login')}
-            </Button>
-          </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<FingerprintIcon />}
+                  color="inherit"
+                  sx={{ borderColor: theme.palette.divider }}
+                  onClick={handlePasskeyLogin}
+                  disabled={passkeyLoading}
+                >
+                  {t('auth.passkey_login')}
+                </Button>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<GitHubIcon />}
+                  color="inherit"
+                  sx={{ borderColor: theme.palette.divider }}
+                >
+                  {t('auth.github_login')}
+                </Button>
+              </Box>
+            </>
+          ) : (
+            <>
+              <Button
+                size="small"
+                color="inherit"
+                startIcon={<ArrowBackIcon />}
+                sx={{ mb: 2, textTransform: 'none' }}
+                onClick={() => {
+                  setMfaStep('password');
+                  setMfaToken('');
+                  setMfaCode('');
+                }}
+              >
+                {t('common.back')}
+              </Button>
+              <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
+                {t('auth.two_factor_title')}
+              </Typography>
+              <Typography color="text.secondary" variant="body2" sx={{ mb: 2, whiteSpace: 'pre-wrap' }}>
+                {t('auth.two_factor_login_prompt')}
+              </Typography>
+              <OtpInput
+                value={mfaCode}
+                onChange={(v) => setMfaCode(v)}
+                onComplete={() => handleVerify2fa()}
+                autoFocus
+                disabled={mfaLoading}
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                sx={{ mt: 3 }}
+                disabled={mfaLoading || (mfaCode || '').replace(/\D/g, '').length !== 6}
+                onClick={handleVerify2fa}
+              >
+                {mfaLoading ? t('auth.verifying') : t('auth.verify')}
+              </Button>
+            </>
+          )}
 
           <Typography align="center" color="text.secondary" sx={{ mt: 4 }} variant="body2">
             {t('auth.no_account')}{' '}

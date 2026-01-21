@@ -23,6 +23,7 @@ export interface User {
   storage_used: number;
   storage_limit: number;
   is_active: boolean;
+  totp_enabled: boolean;
   avatar_url?: string | null;
   created_at: string;
 }
@@ -31,7 +32,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isInitialized: boolean; // 标记是否已完成初始化（包括 token 刷新）
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ mfa_required: boolean; mfa_token?: string }>;
   register: (email: string, name: string, password: string) => Promise<void>;
   logout: () => void;
   logoutServer: () => Promise<void>;
@@ -73,12 +74,16 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const response = await api.post('/auth/login', { email, password });
-        const { access_token, user } = response.data.data;
-        // token 存储在内存中
+        const data = response.data.data as any;
+        if (data?.mfa_required) {
+          return { mfa_required: true, mfa_token: data.mfa_token };
+        }
+        const { access_token, user } = data;
+        if (!access_token || !user) throw new Error('Invalid login response');
         memoryToken = access_token;
         set({ user, isAuthenticated: true, isInitialized: true });
-        // 广播时不传递 token
         authChannel?.postMessage({ type: 'login', user } satisfies AuthBroadcastMessage);
+        return { mfa_required: false };
       },
 
       register: async (email: string, name: string, password: string) => {
@@ -122,7 +127,8 @@ export const useAuthStore = create<AuthState>()(
         refreshPromise = (async () => {
           try {
             const response = await api.post('/auth/refresh');
-            const { access_token, user } = response.data.data;
+            const { access_token, user } = response.data.data as any;
+            if (!access_token || !user) throw new Error('Invalid refresh response');
             memoryToken = access_token;
             set({ user, isAuthenticated: true, isInitialized: true });
             if (broadcast) {

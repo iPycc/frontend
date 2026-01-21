@@ -20,6 +20,10 @@ import {
   alpha,
   Paper,
   Stack,
+  CircularProgress,
+  Collapse,
+  InputAdornment,
+  OutlinedInput,
 } from '@mui/material';
 import {
   Lock as LockIcon,
@@ -30,11 +34,17 @@ import {
   PersonAddAlt1 as PersonAddAlt1Icon,
   InfoOutlined as InfoIcon,
   OpenInNew as OpenInNewIcon,
+  ContentCopy as ContentCopyIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import { useNotify } from '../../contexts/NotificationContext';
-import { deletePasskey, listPasskeys, registerPasskey } from '../../api/passkey';
+import { beginPasskeyReauth, deletePasskey, finishPasskeyReauth, listPasskeys, registerPasskey } from '../../api/passkey';
+import QRCode from 'qrcode';
+import { OtpInput } from '../../components/OtpInput';
 
 interface SessionInfo {
   id: string;
@@ -61,12 +71,14 @@ export default function Security() {
 
   // Password State
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const [step, setStep] = useState(1);
-  const [oldPassword, setOldPassword] = useState('');
+  const [passwordStage, setPasswordStage] = useState<'verify' | 'password' | 'set'>('verify');
+  const [reauthToken, setReauthToken] = useState('');
+  const [reauthPassword, setReauthPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passkeyReauthTried, setPasskeyReauthTried] = useState(false);
 
   // Sessions State
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -75,6 +87,28 @@ export default function Security() {
   // Passkeys State
   const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
+
+  // 2FA (TOTP) State
+  const totpEnabled = !!user?.totp_enabled;
+  const [totpSetupOpen, setTotpSetupOpen] = useState(false);
+  const [totpDisableOpen, setTotpDisableOpen] = useState(false);
+  const [totpChallengeId, setTotpChallengeId] = useState('');
+  const [totpOtp, setTotpOtp] = useState('');
+  const [totpDisableCode, setTotpDisableCode] = useState('');
+  const [totpQrDataUrl, setTotpQrDataUrl] = useState<string | null>(null);
+  const [totpLoading, setTotpLoading] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [totpRawUrl, setTotpRawUrl] = useState('');
+  const [setupStep, setSetupStep] = useState<1 | 2>(1);
+
+  const getSecretFromUrl = (url: string) => {
+    try {
+      const match = url.match(/[?&]secret=([^&]+)/);
+      return match ? match[1] : '';
+    } catch {
+      return '';
+    }
+  };
 
   const isLanIp = (ip: string) => {
     const value = ip.trim().toLowerCase();
@@ -143,10 +177,88 @@ export default function Security() {
     }
   };
 
+  const beginTotpSetup = async () => {
+    setTotpLoading(true);
+    try {
+      const resp = await api.post('/user/2fa/totp/begin', {});
+      const { challenge_id, otpauth_url } = resp.data.data as any;
+      setTotpChallengeId(challenge_id);
+      setTotpOtp('');
+      setTotpRawUrl(otpauth_url);
+      const url = await QRCode.toDataURL(otpauth_url, { margin: 0, width: 200 });
+      setTotpQrDataUrl(url);
+      setTotpSetupOpen(true);
+      setShowManualEntry(false);
+      setSetupStep(1);
+    } catch (error: any) {
+      notify.error(error.response?.data?.message || t('settings.security.two_factor_setup_failed'));
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const enableTotp = async () => {
+    const code = (totpOtp || '').replace(/\D/g, '').slice(0, 6);
+    if (code.length !== 6 || !totpChallengeId) return;
+    setTotpLoading(true);
+    try {
+      await api.post('/user/2fa/totp/enable', { challenge_id: totpChallengeId, code });
+      notify.success(t('settings.security.two_factor_enabled'));
+      setTotpSetupOpen(false);
+      setTotpChallengeId('');
+      setTotpOtp('');
+      setTotpQrDataUrl(null);
+      if (useAuthStore.getState().user) {
+        useAuthStore.setState({ user: { ...useAuthStore.getState().user!, totp_enabled: true } });
+      }
+    } catch (error: any) {
+      notify.error(error.response?.data?.message || t('settings.security.two_factor_enable_failed'));
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const disableTotp = async () => {
+    const code = (totpDisableCode || '').replace(/\D/g, '').slice(0, 6);
+    if (code.length !== 6) return;
+    setTotpLoading(true);
+    try {
+      await api.post('/user/2fa/totp/disable', { code });
+      notify.success(t('settings.security.two_factor_disabled'));
+      setTotpDisableOpen(false);
+      setTotpDisableCode('');
+      if (useAuthStore.getState().user) {
+        useAuthStore.setState({ user: { ...useAuthStore.getState().user!, totp_enabled: false } });
+      }
+    } catch (error: any) {
+      notify.error(error.response?.data?.message || t('settings.security.two_factor_disable_failed'));
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchSessions();
     fetchPasskeys();
   }, []);
+
+  useEffect(() => {
+    if (!changePasswordOpen) return;
+    setPasswordStage('verify');
+    setReauthToken('');
+    setReauthPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setPasswordLoading(false);
+    setPasskeyReauthTried(false);
+  }, [changePasswordOpen]);
+
+  useEffect(() => {
+    if (!changePasswordOpen) return;
+    if (passwordStage !== 'verify') return;
+    void tryPasskeyReauth();
+  }, [changePasswordOpen, passwordStage, passkeys.length]);
 
   const handleTerminateSession = async (sessionId: string) => {
     try {
@@ -175,20 +287,75 @@ export default function Security() {
 
   const handleClosePasswordDialog = () => {
     setChangePasswordOpen(false);
-    setStep(1);
-    setOldPassword('');
+    setPasswordStage('verify');
+    setReauthToken('');
+    setReauthPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setPasswordError('');
+    setPasswordLoading(false);
+    setPasskeyReauthTried(false);
   };
 
-  const handleVerifyOldPassword = async () => {
-    if (!oldPassword) return;
-    setStep(2);
+  const tryPasskeyReauth = async () => {
+    if (passkeyReauthTried) return;
+    setPasskeyReauthTried(true);
+
+    if (typeof window === 'undefined' || !('PublicKeyCredential' in window) || !window.isSecureContext) {
+      return;
+    }
+    if (passkeys.length === 0) return;
+
+    setPasswordLoading(true);
+    setPasswordError('');
+    try {
+      const begin = await beginPasskeyReauth();
+      const finish = await finishPasskeyReauth(begin.challenge_id, begin.options);
+      setReauthToken(finish.reauth_token);
+      setPasswordStage('set');
+    } catch (error: any) {
+      if (error?.name === 'NotAllowedError') {
+        setPasswordError(t('settings.security.passkey_reauth_cancelled'));
+      } else if (error?.name === 'SecurityError') {
+        setPasswordError(t('auth.passkey_error_security'));
+      } else if (error?.name === 'InvalidStateError') {
+        setPasswordError(t('auth.passkey_error_invalid_state'));
+      } else if (error?.name === 'RP_ID_MISMATCH' && typeof error?.message === 'string') {
+        const parts = error.message.split(':');
+        const host = parts[1] || '';
+        const rpId = parts[2] || '';
+        setPasswordError(t('settings.security.passkey_rpid_mismatch', { host, rpId }));
+      } else {
+        setPasswordError(error.response?.data?.message || error?.message || t('settings.security.passkey_reauth_failed'));
+      }
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const verifyWithPassword = async () => {
+    if (!reauthPassword) return;
+    setPasswordLoading(true);
+    setPasswordError('');
+    try {
+      const resp = await api.post('/user/reauth/password', { password: reauthPassword });
+      const { reauth_token } = resp.data.data as any;
+      if (!reauth_token) throw new Error('Invalid reauth response');
+      setReauthToken(reauth_token);
+      setPasswordStage('set');
+    } catch (error: any) {
+      setPasswordError(error.response?.data?.message || t('settings.security.password_reauth_failed'));
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const handleSubmitPasswordChange = async () => {
     setPasswordError('');
+    if (!reauthToken) {
+      setPasswordError(t('settings.security.reauth_required'));
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setPasswordError(t('settings.passwords_not_match'));
       return;
@@ -201,7 +368,7 @@ export default function Security() {
     setPasswordLoading(true);
     try {
       await api.put('/user/password', {
-        old_password: oldPassword,
+        reauth_token: reauthToken,
         new_password: newPassword,
       });
       notify.success(t('settings.password_changed'));
@@ -256,23 +423,263 @@ export default function Security() {
       {/* 2FA Section */}
       <Box>
         <BlockTitle>{t('settings.security.two_factor')}</BlockTitle>
-        <Box>
-          <Button 
-            variant="outlined" 
-            startIcon={<OpenInNewIcon />}
-            sx={{ 
-              borderRadius: 2, 
-              textTransform: 'none',
-              color: theme.palette.text.primary,
-              borderColor: theme.palette.divider,
-              py: 1,
-              px: 2
-            }}
-            disabled
-          >
-            {t('settings.security.setup')} ({t('storage.coming_soon')})
-          </Button>
-        </Box>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            borderColor: theme.palette.divider,
+            bgcolor: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 220 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {totpEnabled ? t('settings.security.two_factor_enabled_label') : t('settings.security.two_factor_disabled_label')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+              {totpEnabled ? t('settings.security.two_factor_enabled_desc') : t('settings.security.two_factor_desc')}
+            </Typography>
+          </Box>
+          {totpEnabled ? (
+            <Button
+              variant="outlined"
+              color="error"
+              sx={{ borderRadius: 2, textTransform: 'none', px: 2 }}
+              onClick={() => setTotpDisableOpen(true)}
+            >
+              {t('common.disable')}
+            </Button>
+          ) : (
+            <Button
+              variant="outlined"
+              startIcon={totpLoading ? <CircularProgress size={16} /> : <OpenInNewIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                color: theme.palette.text.primary,
+                borderColor: theme.palette.divider,
+                py: 1,
+                px: 2,
+              }}
+              onClick={beginTotpSetup}
+              disabled={totpLoading}
+            >
+              {t('settings.security.setup')}
+            </Button>
+          )}
+        </Paper>
+
+        <Dialog
+          open={totpSetupOpen}
+          onClose={() => {
+            if (totpLoading) return;
+            setTotpSetupOpen(false);
+            setTotpChallengeId('');
+            setTotpOtp('');
+            setTotpQrDataUrl(null);
+            setTotpRawUrl('');
+            setSetupStep(1);
+            setShowManualEntry(false);
+          }}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: { borderRadius: 3 }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 800, textAlign: 'center', pb: 0 }}>
+            {t('settings.security.two_factor_setup_title')}
+          </DialogTitle>
+          <DialogContent>
+            {setupStep === 1 ? (
+              <Box sx={{ pt: 2, pb: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+                  {t('settings.security.two_factor_scan_title')}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center', maxWidth: 400 }}>
+                  {t('settings.security.two_factor_scan_desc')}
+                </Typography>
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: 'common.white',
+                    borderRadius: 3,
+                    border: `1px solid ${theme.palette.divider}`,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    mb: 3,
+                    width: 'fit-content',
+                  }}
+                >
+                  {totpQrDataUrl ? (
+                    <Box component="img" src={totpQrDataUrl} alt="qr" sx={{ width: 180, height: 180 }} />
+                  ) : (
+                    <CircularProgress size={32} />
+                  )}
+                </Box>
+                <Button
+                  size="small"
+                  onClick={() => setShowManualEntry(!showManualEntry)}
+                  endIcon={showManualEntry ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                  sx={{ textTransform: 'none', color: 'text.secondary', mb: 2 }}
+                >
+                  {t('settings.security.two_factor_cant_scan')}
+                </Button>
+                <Collapse in={showManualEntry}>
+                  <Box sx={{ width: '100%', maxWidth: 360 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', textAlign: 'center' }}>
+                      {t('settings.security.two_factor_manual_entry_desc')}
+                    </Typography>
+                    <OutlinedInput
+                      fullWidth
+                      readOnly
+                      value={getSecretFromUrl(totpRawUrl)}
+                      endAdornment={
+                        <InputAdornment position="end">
+                          <IconButton
+                            edge="end"
+                            onClick={() => {
+                              navigator.clipboard.writeText(getSecretFromUrl(totpRawUrl));
+                              notify.success(t('common.copied'));
+                            }}
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      }
+                      sx={{
+                        borderRadius: 2,
+                        typography: 'monospace',
+                        fontSize: '0.875rem',
+                        bgcolor: alpha(theme.palette.action.hover, 0.05),
+                        height: 40,
+                      }}
+                    />
+                  </Box>
+                </Collapse>
+              </Box>
+            ) : (
+              <Box sx={{ pt: 2, pb: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+                  {t('settings.security.two_factor_enter_code_title')}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 4, textAlign: 'center' }}>
+                  {t('settings.security.two_factor_enter_code_desc')}
+                </Typography>
+                <Box sx={{ maxWidth: 360, width: '100%', mx: 'auto' }}>
+                  <OtpInput
+                    value={totpOtp}
+                    onChange={(v) => setTotpOtp(v)}
+                    onComplete={() => enableTotp()}
+                    disabled={totpLoading}
+                    autoFocus
+                  />
+                </Box>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 0, justifyContent: setupStep === 1 ? 'center' : 'space-between', gap: 2 }}>
+            {setupStep === 1 ? (
+              <>
+                <Button
+                  onClick={() => {
+                    if (totpLoading) return;
+                    setTotpSetupOpen(false);
+                    setTotpChallengeId('');
+                    setTotpOtp('');
+                    setTotpQrDataUrl(null);
+                    setTotpRawUrl('');
+                    setSetupStep(1);
+                    setShowManualEntry(false);
+                  }}
+                  disabled={totpLoading}
+                  variant="outlined"
+                  sx={{ borderRadius: 2, px: 3, width: 120 }}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => setSetupStep(2)}
+                  sx={{ borderRadius: 2, px: 3, width: 120 }}
+                >
+                  {t('common.next')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => setSetupStep(1)}
+                  disabled={totpLoading}
+                  startIcon={<ArrowBackIcon />}
+                  sx={{ borderRadius: 2, px: 2, minWidth: 0, color: 'text.secondary' }}
+                >
+                  {t('common.back')}
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={enableTotp}
+                  disabled={totpLoading || (totpOtp || '').replace(/\D/g, '').length !== 6}
+                  sx={{ borderRadius: 2, px: 3, whiteSpace: 'nowrap' }}
+                >
+                  {totpLoading ? t('auth.verifying') : t('settings.security.two_factor_enable_cta')}
+                </Button>
+              </>
+            )}
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={totpDisableOpen}
+          onClose={() => {
+            if (totpLoading) return;
+            setTotpDisableOpen(false);
+            setTotpDisableCode('');
+          }}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 800 }}>
+            {t('settings.security.two_factor_disable_title')}
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
+              {t('settings.security.two_factor_disable_desc')}
+            </Typography>
+            <OtpInput
+              value={totpDisableCode}
+              onChange={(v) => setTotpDisableCode(v)}
+              onComplete={() => disableTotp()}
+              disabled={totpLoading}
+              autoFocus
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                if (totpLoading) return;
+                setTotpDisableOpen(false);
+                setTotpDisableCode('');
+              }}
+              disabled={totpLoading}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={disableTotp}
+              disabled={totpLoading || (totpDisableCode || '').replace(/\D/g, '').length !== 6}
+            >
+              {totpLoading ? t('auth.verifying') : t('common.disable')}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
 
       {/* Passkeys Section */}
@@ -560,34 +967,110 @@ export default function Security() {
       >
         <DialogTitle sx={{ p: 3, pb: 1 }}>
           <Typography variant="h6" fontWeight={700}>
-            {t('settings.change_password_for_email', { email: user?.email })}
+            {t('settings.security.change_password_title', { email: user?.email })}
           </Typography>
         </DialogTitle>
         <DialogContent sx={{ p: 3 }}>
           {passwordError && <Alert severity="error" sx={{ mb: 2 }}>{passwordError}</Alert>}
-          
-          {step === 1 && (
+
+          {passwordStage === 'verify' && (
             <Box>
-              <Typography sx={{ mb: 3, color: 'text.secondary' }}>{t('settings.enter_old_password_first')}</Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  py: 2,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 999,
+                    display: 'grid',
+                    placeItems: 'center',
+                    position: 'relative',
+                    mb: 2,
+                    '@keyframes pulse': {
+                      '0%': { transform: 'scale(0.9)', opacity: 0.5 },
+                      '70%': { transform: 'scale(1.15)', opacity: 0.15 },
+                      '100%': { transform: 'scale(1.15)', opacity: 0 },
+                    },
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 999,
+                      background: alpha(theme.palette.primary.main, 0.35),
+                      animation: 'pulse 1.4s ease-out infinite',
+                    },
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: 10,
+                      borderRadius: 999,
+                      background: alpha(theme.palette.primary.main, 0.18),
+                    },
+                  }}
+                >
+                  <FingerprintIcon sx={{ fontSize: 30, color: theme.palette.primary.main, position: 'relative', zIndex: 1 }} />
+                </Box>
+                <Typography fontWeight={800} sx={{ mb: 1 }}>
+                  {t('settings.security.reauth_title')}
+                </Typography>
+                <Typography color="text.secondary" variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {t('settings.security.reauth_desc')}
+                </Typography>
+              </Box>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
+                {passkeys.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    onClick={tryPasskeyReauth}
+                    disabled={passwordLoading}
+                    startIcon={passwordLoading ? <CircularProgress size={16} /> : <FingerprintIcon />}
+                    sx={{ borderRadius: 2, textTransform: 'none', flex: 1 }}
+                  >
+                    {t('settings.security.reauth_use_passkey')}
+                  </Button>
+                )}
+                <Button
+                  variant="outlined"
+                  onClick={() => setPasswordStage('password')}
+                  disabled={passwordLoading}
+                  sx={{ borderRadius: 2, textTransform: 'none', flex: 1 }}
+                >
+                  {t('settings.security.reauth_use_password')}
+                </Button>
+              </Stack>
+            </Box>
+          )}
+
+          {passwordStage === 'password' && (
+            <Box>
+              <Typography sx={{ mb: 2, color: 'text.secondary', whiteSpace: 'pre-wrap' }}>
+                {t('settings.security.reauth_password_desc')}
+              </Typography>
               <TextField
-                label={t('settings.current_password')}
+                label={t('settings.security.current_password')}
                 type="password"
                 fullWidth
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
+                value={reauthPassword}
+                onChange={(e) => setReauthPassword(e.target.value)}
                 autoFocus
                 variant="outlined"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
               />
             </Box>
           )}
 
-          {step === 2 && (
-            <Stack spacing={3} sx={{ mt: 1 }}>
+          {passwordStage === 'set' && (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <Typography color="text.secondary" variant="body2">
+                {t('settings.security.password_set_desc')}
+              </Typography>
               <TextField
                 label={t('settings.new_password')}
                 type="password"
@@ -612,19 +1095,20 @@ export default function Security() {
         </DialogContent>
         <DialogActions sx={{ p: 3, pt: 0 }}>
           <Button onClick={handleClosePasswordDialog} sx={{ color: 'text.secondary' }}>{t('common.cancel')}</Button>
-          {step === 1 ? (
-            <Button 
-              variant="contained" 
-              onClick={handleVerifyOldPassword}
-              disabled={!oldPassword}
+          {passwordStage === 'password' && (
+            <Button
+              variant="contained"
+              onClick={verifyWithPassword}
+              disabled={passwordLoading || !reauthPassword}
               sx={{ borderRadius: 2, px: 3 }}
             >
-              {t('common.next')}
+              {passwordLoading ? t('auth.verifying') : t('auth.verify')}
             </Button>
-          ) : (
-            <Button 
-              variant="contained" 
-              onClick={handleSubmitPasswordChange} 
+          )}
+          {passwordStage === 'set' && (
+            <Button
+              variant="contained"
+              onClick={handleSubmitPasswordChange}
               disabled={passwordLoading || !newPassword}
               sx={{ borderRadius: 2, px: 3 }}
             >
