@@ -1,23 +1,30 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { MainLayout } from "./components/MainLayout";
-import { AppFiles } from "./pages/AppFiles";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+
+import { MainLayout } from "./components/MainLayout"
+import { AppFiles } from "./pages/AppFiles"
 import {
   Buckets,
-  Shares,
-  Recycle,
-  Tasks,
-  Profile,
-  Users,
+  Discussions,
   Guests,
-  System,
-  SharedWithMe,
   Mounts,
   Offline,
+  Recycle,
+  Shares,
+  SharedWithMe,
   Store,
-  Discussions
-} from "./pages/Placeholders";
-import { Login } from "./pages/Login";
-import { Setup } from "./pages/Setup";
+  System,
+  Tasks,
+  Users,
+} from "./pages/Placeholders"
+import { Login } from "./pages/Login"
+import { Setup } from "./pages/Setup"
+import { SettingsLayout } from "./pages/SettingsLayout"
+import {
+  Profile,
+  SettingsBuckets,
+  SettingsPersonalization,
+  SettingsSecurity,
+} from "./pages/Profile"
 
 export default function App() {
   return (
@@ -36,8 +43,17 @@ export default function App() {
           <Route path="/app/offline" element={<Offline />} />
           <Route path="/app/store" element={<Store />} />
           <Route path="/app/discussions" element={<Discussions />} />
+          <Route path="/app/*" element={<AppFiles />} />
 
-          <Route path="/settings/profile" element={<Profile />} />
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="profile" replace />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="security" element={<SettingsSecurity />} />
+            <Route path="personalization" element={<SettingsPersonalization />} />
+            <Route path="buckets" element={<SettingsBuckets />} />
+          </Route>
+
+          <Route path="/images" element={<AppFiles />} />
 
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/guests" element={<Guests />} />
@@ -48,5 +64,5 @@ export default function App() {
         <Route path="/setup" element={<Setup />} />
       </Routes>
     </BrowserRouter>
-  );
+  )
 }

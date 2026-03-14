@@ -1,20 +1,21 @@
-import { Outlet } from "react-router-dom";
-import { Navbar } from "./Navbar";
-import { AppSidebar } from "./Sidebar";
-import { SidebarProvider } from "./ui/sidebar";
+import { Outlet } from "react-router-dom"
+
+import { Navbar } from "./Navbar"
+import { AppSidebar } from "./Sidebar"
+import { SidebarProvider } from "./ui/sidebar"
 
 export function MainLayout() {
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      <div className="app-shell flex h-screen w-full overflow-hidden text-foreground">
         <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-zinc-950">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Navbar />
-          <main className="flex-1 flex flex-col min-w-0 p-4 gap-4 overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
             <Outlet />
           </main>
         </div>
       </div>
     </SidebarProvider>
-  );
+  )
 }
