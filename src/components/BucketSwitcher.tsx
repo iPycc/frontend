@@ -21,7 +21,7 @@ export function BucketSwitcher({ className }: { className?: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "flex h-14 w-full items-center justify-between rounded-[18px] border border-[#d6d6d6] bg-white px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-white/95 dark:border-white/10 dark:bg-[#171717] dark:shadow-none dark:hover:bg-[#1d1d1d]",
+          "flex h-14 w-full items-center justify-between rounded-[15px] border border-[#d6d6d6] bg-white px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-white/95 dark:border-white/10 dark:bg-[#171717] dark:shadow-none dark:hover:bg-[#1d1d1d]",
           className
         )}
       >
@@ -60,7 +60,7 @@ export function BucketSwitcher({ className }: { className?: string }) {
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2 text-primary" onClick={() => navigate("/settings/buckets")}>
+          <DropdownMenuItem className="gap-2 text-primary" onClick={() => navigate("/settings/storage")}>
             <IconPlus size={16} />
             新建存储桶
           </DropdownMenuItem>

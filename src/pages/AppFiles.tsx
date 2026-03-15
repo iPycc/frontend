@@ -294,7 +294,7 @@ export function AppFiles() {
           <div className="space-y-2">
             <Label>目标目录</Label>
             <select
-              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex h-9 w-full rounded-[15px] border border-input bg-background px-3 text-sm outline-none focus:border-[color:var(--focus-border)] focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-[color:var(--focus-border)] focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
               value={moveTargetId}
               onChange={(event) => setMoveTargetId(event.target.value)}
             >
@@ -324,7 +324,7 @@ export function AppFiles() {
             <DialogDescription>查看当前对象的 mock 元信息。</DialogDescription>
           </DialogHeader>
           {propertyNode ? (
-            <div className="grid gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="grid gap-3 rounded-[10px] border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
               <div>名称：{propertyNode.name}</div>
               <div>
                 类型：
@@ -358,7 +358,7 @@ export function AppFiles() {
             {shareLinks.map((link) => (
               <div
                 key={link}
-                className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm"
+                className="rounded-[10px] border border-border/60 bg-muted/30 px-3 py-2 text-sm"
               >
                 {link}
               </div>

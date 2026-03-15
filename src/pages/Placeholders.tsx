@@ -18,10 +18,10 @@ function PageShell({
   children: ReactNode
 }) {
   return (
-    <div className="app-panel flex-1 rounded-2xl border border-border/60 p-5 shadow-sm">
+    <div className="app-panel flex-1 rounded-[15px] border border-border/60 p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
+          <h1 className="text-[15px] font-semibold">{title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
         {action}
@@ -37,9 +37,9 @@ export function Buckets() {
     <PageShell
       title="存储桶"
       description="统一从设置中心管理存储桶、连接策略与 CORS 检测。"
-      action={<Button onClick={() => navigate("/settings/buckets")}>打开设置中心</Button>}
+      action={<Button onClick={() => navigate("/settings/storage")}>打开设置中心</Button>}
     >
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-6 text-sm text-muted-foreground">
         存储桶新建、命名和策略参数都已经迁移到右上角设置页的「存储桶管理」Tab。
       </div>
     </PageShell>
@@ -139,7 +139,7 @@ export function Tasks() {
     <PageShell title="后台任务" description="展示离线下载、打包下载等后台任务的执行状态。">
       <div className="space-y-4">
         {offlineTasks.map((task) => (
-          <div key={task.id} className="rounded-2xl border border-border/60 bg-background p-4">
+          <div key={task.id} className="rounded-[15px] border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{task.name}</div>
@@ -196,7 +196,7 @@ export function Mounts() {
       title="连接与挂载"
       description="挂载列表、CORS 检测结果和存储策略参数从同一数据源派生。"
       action={
-        <Button variant="outline" onClick={() => navigate("/settings/buckets")}>
+        <Button variant="outline" onClick={() => navigate("/settings/storage")}>
           去管理
           <IconArrowRight size={14} />
         </Button>
@@ -204,7 +204,7 @@ export function Mounts() {
     >
       <div className="grid gap-4 lg:grid-cols-2">
         {buckets.map((bucket) => (
-          <div key={bucket.id} className="rounded-2xl border border-border/60 bg-background p-4">
+          <div key={bucket.id} className="rounded-[15px] border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{bucket.name}</div>
@@ -231,7 +231,7 @@ export function Offline() {
     <PageShell title="离线下载" description="保留与其他页面一致的容器风格，展示下载队列状态。">
       <div className="space-y-4">
         {offlineTasks.map((task) => (
-          <div key={task.id} className="rounded-2xl border border-border/60 bg-background p-4">
+          <div key={task.id} className="rounded-[15px] border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{task.name}</div>
@@ -252,7 +252,7 @@ export function Offline() {
 export function Store() {
   return (
     <PageShell title="商店" description="应用商店位于后续版本，这里先保留页面框架。">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
         当前版本专注于文件系统与设置中心，插件商店稍后接入。
       </div>
     </PageShell>
@@ -262,7 +262,7 @@ export function Store() {
 export function Discussions() {
   return (
     <PageShell title="讨论" description="团队讨论入口预留。">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
         讨论区尚未接入实际会话数据。
       </div>
     </PageShell>
@@ -272,7 +272,7 @@ export function Discussions() {
 export function Users() {
   return (
     <PageShell title="用户管理" description="管理后台页面预留。">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
         当前任务聚焦于用户端文件系统和设置页。
       </div>
     </PageShell>
@@ -282,7 +282,7 @@ export function Users() {
 export function Guests() {
   return (
     <PageShell title="访客管理" description="管理后台页面预留。">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
         访客权限页面仍为预留布局。
       </div>
     </PageShell>
@@ -292,7 +292,7 @@ export function Guests() {
 export function System() {
   return (
     <PageShell title="系统设置" description="管理后台系统配置预留。">
-      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
+      <div className="rounded-[15px] border border-dashed border-border/70 bg-muted/20 p-8 text-sm text-muted-foreground">
         系统级配置后续将独立接入。
       </div>
     </PageShell>

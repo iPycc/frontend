@@ -1,0 +1,260 @@
+import * as React from "react"
+import {
+  IconBucket,
+  IconPalette,
+  IconShieldLock,
+  IconUserCircle,
+} from "@tabler/icons-react"
+import type { ThemeMode } from "@/lib/mock-data"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+export type SettingsTabId =
+  | "profile"
+  | "personalization"
+  | "security"
+  | "storage"
+
+export const settingsTabs: Array<{
+  id: SettingsTabId
+  label: string
+  description: string
+  icon: React.ComponentType<{ size?: number; className?: string }>
+}> = [
+  {
+    id: "profile",
+    label: "个人资料",
+    description: "账户身份与公开信息",
+    icon: IconUserCircle,
+  },
+  {
+    id: "personalization",
+    label: "偏好",
+    description: "语言、时区与界面偏好",
+    icon: IconPalette,
+  },
+  {
+    id: "security",
+    label: "密码和安全",
+    description: "密码、二步验证与登录记录",
+    icon: IconShieldLock,
+  },
+  {
+    id: "storage",
+    label: "存储空间",
+    description: "COS 连接策略与挂载配置",
+    icon: IconBucket,
+  },
+]
+
+export const languageOptions = [
+  { label: "简体中文", value: "zh-CN" },
+  { label: "English", value: "en-US" },
+  { label: "日本語", value: "ja-JP" },
+]
+
+export const timezoneOptions = [
+  { label: "Asia/Shanghai", value: "Asia/Shanghai" },
+  { label: "Asia/Tokyo", value: "Asia/Tokyo" },
+  { label: "Europe/Berlin", value: "Europe/Berlin" },
+  { label: "America/Los_Angeles", value: "America/Los_Angeles" },
+]
+
+export const themeOptions: Array<{ label: string; value: ThemeMode }> = [
+  { label: "浅色", value: "light" },
+  { label: "系统", value: "system" },
+  { label: "黑暗", value: "dark" },
+]
+
+export function SettingsRow({
+  title,
+  description,
+  children,
+  badge,
+}: {
+  title: string
+  description: string
+  children: React.ReactNode
+  badge?: React.ReactNode
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-medium">{title}</h2>
+          {badge}
+        </div>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
+export function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="grid gap-2 py-4 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="text-foreground/70">{icon}</span>
+        <span>{label}</span>
+      </div>
+      <div className="text-sm font-medium">{value}</div>
+    </div>
+  )
+}
+
+export function StatusBadge({
+  active = false,
+  children,
+}: {
+  active?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
+        active
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground"
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+export function SelectField({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ label: string; value: string }>
+}) {
+  return (
+    <select
+      className="h-11  w-full rounded-[15px] border border-input bg-transparent px-3 text-sm outline-none focus:border-[color:var(--focus-border)] focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-[color:var(--focus-border)] focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((item) => (
+        <option key={item.value} value={item.value}>
+          {item.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function OptionGroup<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: Array<{ label: string; value: T }>
+  onChange: (value: T) => void
+}) {
+  return (
+    <div
+      data-slot="button-group"
+      className="inline-flex flex-wrap gap-2 rounded-[15px] p-1"
+      style={{ backgroundColor: "var(--app-shell)" }}
+    >
+      {options.map((item) => (
+        <Button
+          key={item.value}
+          variant={value === item.value ? "default" : "outline"}
+          size="sm"
+          onClick={() => onChange(item.value)}
+        >
+          {item.label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+export function FieldBlock({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-sm text-muted-foreground">{hint}</div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export function CheckboxRow({
+  checked,
+  label,
+  description,
+  onToggle,
+}: {
+  checked: boolean
+  label: string
+  description: string
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-[15px] border px-4 py-3 text-left transition-colors",
+        checked ? "border-primary/25 bg-primary/10" : "border-border bg-background"
+      )}
+    >
+      <span
+        className={cn(
+          "mt-1 h-3 w-3 rounded-full",
+          checked ? "bg-primary" : "bg-muted-foreground"
+        )}
+      />
+      <span className="space-y-1">
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="block text-sm text-muted-foreground">{description}</span>
+      </span>
+    </button>
+  )
+}
+
+export function BucketMeta({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div
+      className="space-y-1 rounded-[15px] px-3 py-3"
+      style={{ backgroundColor: "var(--app-panel)" }}
+    >
+      <dt className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="text-sm text-foreground">{value}</dd>
+    </div>
+  )
+}

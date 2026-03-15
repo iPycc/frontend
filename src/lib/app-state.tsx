@@ -24,6 +24,7 @@ import {
 const STORAGE_KEY = "cloudrave-app-state-v1"
 
 type BucketWizardInput = {
+  name: string
   provider: string
   bucket: string
   region: string
@@ -31,11 +32,16 @@ type BucketWizardInput = {
   basePrefix: string
   secretId: string
   secretKey: string
+  sessionToken?: string
   multipartThreshold: string
   partSize: string
   presignTtl: string
   concurrency: number
+  protocol: "https" | "http"
+  pathStyle: boolean
+  accelerate: boolean
   corsConfigured: boolean
+  advancedMode: boolean
 }
 
 type AuthRegisterInput = {
@@ -75,6 +81,7 @@ type AppStateValue = {
   updateSecurity: (patch: Partial<SecurityState>) => void
   setActiveBucket: (bucketId: string) => void
   renameBucket: (bucketId: string, name: string) => void
+  updateBucket: (bucketId: string, patch: Partial<BucketMount>) => void
   addBucket: (input: BucketWizardInput) => BucketMount
   getNodeById: (nodeId: string) => FileNode | undefined
   getFolderPathId: (path: string, bucketId?: string) => string | null
@@ -144,6 +151,10 @@ function nowString() {
   return new Date().toLocaleString("zh-CN", { hour12: false })
 }
 
+function createHomepage(username: string) {
+  return `https://cloudrave.app/u/${encodeURIComponent(username.trim().toLowerCase().replace(/\s+/g, "-"))}`
+}
+
 function appendCopySuffix(name: string) {
   const dotIndex = name.lastIndexOf(".")
   if (dotIndex <= 0) {
@@ -161,6 +172,7 @@ function buildProfileFromAuthUser(user: MockAuthUser): UserProfile {
     uid: `u_${user.id}`,
     registeredAt: user.registeredAt,
     group: user.group,
+    homepage: createHomepage(user.username),
   }
 }
 
@@ -493,12 +505,34 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [updateSnapshot])
 
+  const updateBucket = React.useCallback((bucketId: string, patch: Partial<BucketMount>) => {
+    updateSnapshot((current) => ({
+      ...current,
+      buckets: current.buckets.map((bucket) =>
+        bucket.id === bucketId
+          ? {
+              ...bucket,
+              ...patch,
+              strategy: patch.strategy
+                ? { ...bucket.strategy, ...patch.strategy }
+                : bucket.strategy,
+            }
+          : bucket
+      ),
+      nodes: current.nodes.map((node) =>
+        node.id === current.buckets.find((bucket) => bucket.id === bucketId)?.rootNodeId && patch.name
+          ? { ...node, name: patch.name, updatedAt: nowString() }
+          : node
+      ),
+    }))
+  }, [updateSnapshot])
+
   const addBucket = React.useCallback((input: BucketWizardInput) => {
     const bucketId = createId("bucket")
     const rootNodeId = createId("root")
     const mount: BucketMount = {
       id: bucketId,
-      name: input.bucket,
+      name: input.name,
       provider: input.provider,
       bucket: input.bucket,
       region: input.region,
@@ -506,16 +540,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       basePrefix: input.basePrefix,
       secretId: input.secretId,
       secretKey: input.secretKey,
+      sessionToken: input.sessionToken,
       strategy: {
         multipartThreshold: input.multipartThreshold,
         partSize: input.partSize,
         presignTtl: input.presignTtl,
         concurrency: input.concurrency,
+        protocol: input.protocol,
+        pathStyle: input.pathStyle,
+        accelerate: input.accelerate,
       },
       rootNodeId,
       createdAt: nowString(),
       corsStatus: input.corsConfigured ? "healthy" : "warning",
       corsMessage: input.corsConfigured ? "CORS 配置匹配当前挂载策略" : "发现未配置或不匹配项，建议一键修复",
+      advancedMode: input.advancedMode,
       isLocal: false,
       canEditConnection: true,
       canDelete: true,
@@ -533,7 +572,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           bucketId,
           parentId: null,
           kind: "folder",
-          name: input.bucket,
+          name: input.name,
           updatedAt: nowString(),
           isSystemRoot: true,
         },
@@ -744,6 +783,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSecurity,
     setActiveBucket,
     renameBucket,
+    updateBucket,
     addBucket,
     getNodeById,
     getFolderPathId,
@@ -797,6 +837,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     permanentlyDeleteNodes,
     register,
     renameBucket,
+    updateBucket,
     renameNode,
     resetPasswordVerification,
     restoreNodes,

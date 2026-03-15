@@ -20,13 +20,13 @@ import {
 } from "./pages/Placeholders"
 import { Login } from "./pages/Login"
 import { Register } from "./pages/Register"
-import { SettingsLayout } from "./pages/SettingsLayout"
 import {
-  Profile,
-  SettingsBuckets,
-  SettingsPersonalization,
-  SettingsSecurity,
-} from "./pages/Profile"
+  PersonalizationSettingsPage,
+  ProfileSettingsPage,
+  SecuritySettingsPage,
+  SettingsLayout,
+  StorageSettingsPage,
+} from "./pages/settings"
 
 export default function App() {
   const { isAuthenticated } = useAppState()
@@ -57,11 +57,14 @@ export default function App() {
           <Route path="/app/*" element={<AppFiles />} />
 
           <Route path="/settings" element={<SettingsLayout />}>
-            <Route index element={<Navigate to="profile" replace />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="security" element={<SettingsSecurity />} />
-            <Route path="personalization" element={<SettingsPersonalization />} />
-            <Route path="buckets" element={<SettingsBuckets />} />
+            <Route index element={<Navigate to="/settings/profile" replace />} />
+            <Route path="profile" element={<ProfileSettingsPage />} />
+            <Route
+              path="personalization"
+              element={<PersonalizationSettingsPage />}
+            />
+            <Route path="security" element={<SecuritySettingsPage />} />
+            <Route path="storage" element={<StorageSettingsPage />} />
           </Route>
 
           <Route path="/images" element={<AppFiles />} />

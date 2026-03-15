@@ -17,6 +17,7 @@ export interface UserProfile {
   uid: string
   registeredAt: string
   group: string
+  homepage: string
 }
 
 export interface UserSettings {
@@ -27,10 +28,19 @@ export interface UserSettings {
   showSidebarTree: boolean
 }
 
+export interface PasskeyCredential {
+  id: string
+  name: string
+  createdAt: string
+  lastUsedAt: string
+}
+
 export interface SecurityState {
   passwordVerified: boolean
+  passwordUpdatedAt: string
   twoFactorEnabled: boolean
   passkeysEnabled: boolean
+  passkeys: PasskeyCredential[]
 }
 
 export interface MockAuthUser {
@@ -61,6 +71,9 @@ export interface BucketStrategy {
   partSize: string
   presignTtl: string
   concurrency: number
+  protocol: "https" | "http"
+  pathStyle: boolean
+  accelerate: boolean
 }
 
 export interface BucketMount {
@@ -73,11 +86,13 @@ export interface BucketMount {
   basePrefix?: string
   secretId?: string
   secretKey?: string
+  sessionToken?: string
   strategy: BucketStrategy
   rootNodeId: string
   createdAt: string
   corsStatus: "healthy" | "warning"
   corsMessage: string
+  advancedMode: boolean
   isLocal: boolean
   canEditConnection: boolean
   canDelete: boolean
@@ -151,6 +166,7 @@ export const defaultProfile: UserProfile = {
   uid: "u_20260310_a8m1",
   registeredAt: "2025-12-18 09:24",
   group: "超级管理员",
+  homepage: "https://cloudrave.app/u/cloudrave-admin",
 }
 
 export const defaultSettings: UserSettings = {
@@ -163,8 +179,17 @@ export const defaultSettings: UserSettings = {
 
 export const defaultSecurity: SecurityState = {
   passwordVerified: false,
+  passwordUpdatedAt: "2026-02-28 18:30",
   twoFactorEnabled: false,
-  passkeysEnabled: false,
+  passkeysEnabled: true,
+  passkeys: [
+    {
+      id: "passkey-1",
+      name: "Windows 上的 Chrome",
+      createdAt: "2026-01-22 03:47",
+      lastUsedAt: "2026-03-15 09:12",
+    },
+  ],
 }
 
 export const defaultMockAuthUsers: MockAuthUser[] = [
@@ -185,10 +210,12 @@ export const defaultAuth: AuthState = {
 }
 
 export const defaultLoginActivity: LoginActivityEntry[] = [
-  { id: "login-1", method: "密码", device: "Chrome / Windows 11", ip: "223.104.58.10", time: "2026-03-12 00:18" },
-  { id: "login-2", method: "验证码", device: "Safari / iPhone 15", ip: "120.230.16.81", time: "2026-03-11 21:42" },
-  { id: "login-3", method: "密码", device: "Edge / macOS", ip: "117.136.12.40", time: "2026-03-11 09:03" },
-  { id: "login-4", method: "二维码", device: "Cloudrave Desktop", ip: "61.148.245.66", time: "2026-03-10 22:16" },
+  { id: "login-1", method: "通行密钥 - Windows 上的 Chrome", device: "Chrome - Windows - Other", ip: "188.253.4.192", time: "1 小时前" },
+  { id: "login-2", method: "QQ", device: "Chrome - Windows - Other", ip: "188.253.4.192", time: "1 小时前" },
+  { id: "login-3", method: "QQ", device: "Chrome - Windows - Other", ip: "2409:8a56:2331:43f1:d6f:5320:38b8:ff86", time: "2026/3/4 21:54:45" },
+  { id: "login-4", method: "通行密钥 - Windows 上的 Chrome", device: "Chrome - Windows - Other", ip: "103.220.218.90", time: "2026/1/22 03:47:45" },
+  { id: "login-5", method: "QQ", device: "Chrome - Windows - Other", ip: "103.220.218.90", time: "2026/1/22 03:47:24" },
+  { id: "login-6", method: "QQ", device: "Chrome - Windows - Other", ip: "188.253.124.85", time: "2026/1/9 21:40:38" },
 ]
 
 export const defaultBuckets: BucketMount[] = [
@@ -197,16 +224,25 @@ export const defaultBuckets: BucketMount[] = [
     name: "我的腾讯云存储",
     provider: "Tencent COS",
     region: "ap-guangzhou",
+    endpoint: "cos.ap-guangzhou.myqcloud.com",
+    bucket: "cloudrave-assets-prod-1250000000",
+    basePrefix: "team-assets",
+    secretId: "AKID********************",
+    secretKey: "********************************",
     strategy: {
       multipartThreshold: "64 MB",
       partSize: "16 MB",
       presignTtl: "900",
       concurrency: 4,
+      protocol: "https",
+      pathStyle: false,
+      accelerate: false,
     },
     rootNodeId: localRootId,
     createdAt: "2026-03-10 10:00",
     corsStatus: "healthy",
     corsMessage: "存储桶域名和签名策略已同步",
+    advancedMode: true,
     isLocal: false,
     canEditConnection: true,
     canDelete: false,

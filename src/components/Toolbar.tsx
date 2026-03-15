@@ -85,7 +85,7 @@ export function Toolbar({
   currentLabel,
 }: ToolbarProps) {
   return (
-    <div className="app-panel relative flex h-14 shrink-0 items-center justify-between overflow-hidden rounded-[22px] border border-[#d9d9d9] px-4 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
+    <div className="app-panel relative flex h-11.5 shrink-0 items-center justify-between overflow-hidden rounded-[15px] border border-[#d9d9d9] px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait">
         {selectedCount > 0 ? (
           <motion.div
@@ -94,7 +94,7 @@ export function Toolbar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="absolute inset-0 flex items-center justify-between bg-[#eef8ff] px-4"
+            className="absolute inset-0 flex items-center justify-between bg-primary/10 px-4 dark:bg-primary/15"
           >
             <div className="flex items-center gap-4">
               <button
@@ -121,7 +121,7 @@ export function Toolbar({
                 <DropdownMenuTrigger className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-2xl">
+                <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={onCopy}>复制</DropdownMenuItem>
                   <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem>
                   <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
@@ -143,7 +143,7 @@ export function Toolbar({
           >
             <div className="min-w-0 flex-1">
               <Breadcrumb>
-                <BreadcrumbList className="gap-1.5 text-[15px]">
+                <BreadcrumbList className="gap-1.5 text-[13px]">
                   <BreadcrumbItem>
                     <BreadcrumbLink asChild>
                       <Link
@@ -209,7 +209,7 @@ export function Toolbar({
 
             <div className="flex items-center gap-2">
               <DropdownMenu>
-                <DropdownMenuTrigger className="hidden h-10 items-center gap-2 rounded-[14px] border border-[#d8d8d8] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                <DropdownMenuTrigger className="hidden  items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
                   {viewMode === "grid" ? (
                     <IconLayoutGrid size={16} />
                   ) : (
@@ -217,7 +217,7 @@ export function Toolbar({
                   )}
                   视图
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-2xl">
+                <DropdownMenuContent align="end">
                   <DropdownMenuRadioGroup
                     value={viewMode}
                     onValueChange={(value) =>
@@ -231,11 +231,11 @@ export function Toolbar({
               </DropdownMenu>
 
               <DropdownMenu>
-                <DropdownMenuTrigger className="hidden h-10 items-center gap-2 rounded-[14px] border border-[#d8d8d8] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                <DropdownMenuTrigger className="hidden h-10 items-center rounded-[14px] bg-white text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
                   <IconArrowsSort size={16} />
                   排序
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-2xl">
+                <DropdownMenuContent align="end">
                   <DropdownMenuRadioGroup
                     value={sortValue}
                     onValueChange={(value) => onSortChange(value as SortValue)}
@@ -250,10 +250,10 @@ export function Toolbar({
               </DropdownMenu>
 
               <DropdownMenu>
-                <DropdownMenuTrigger className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#d8d8d8] bg-white text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                <DropdownMenuTrigger className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-white text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-2xl">
+                <DropdownMenuContent align="end">
                   <div className="md:hidden">
                     <DropdownMenuItem
                       onClick={() =>

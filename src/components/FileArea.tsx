@@ -108,7 +108,7 @@ export function FileArea({
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel flex flex-1 flex-col overflow-hidden rounded-[24px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
+          className="app-panel flex flex-1 flex-col overflow-hidden rounded-[15px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-1">
@@ -183,8 +183,7 @@ export function FileArea({
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="rounded-2xl">
-        <ContextMenuLabel>空白区域</ContextMenuLabel>
+      <ContextMenuContent>
         <ContextMenuItem onClick={onCreateFolder}>新建文件夹</ContextMenuItem>
         <ContextMenuItem onClick={onUploadMock}>上传模拟文件</ContextMenuItem>
         <ContextMenuItem onClick={onRefresh}>刷新</ContextMenuItem>
@@ -265,7 +264,7 @@ function FileSection({
   return (
     <section>
       {title ? (
-        <h2 className="mb-4 text-[20px] text-[#2f2f2f] dark:text-[#f0f0f0]">{title}</h2>
+        <h2 className="mb-4 text-[16px] text-[#2f2f2f] dark:text-[#f0f0f0]">{title}</h2>
       ) : null}
       {items.length === 0 ? (
         emptyText ? <div className="text-sm text-muted-foreground">{emptyText}</div> : null
@@ -556,7 +555,7 @@ function ItemContextMenu({
   const isFolder = item.kind === "folder"
 
   return (
-    <ContextMenuContent className="rounded-2xl">
+    <ContextMenuContent >
       <ContextMenuLabel>
         {multiple ? `已选 ${ids.length} 项` : isFolder ? "文件夹" : "文件"}
       </ContextMenuLabel>

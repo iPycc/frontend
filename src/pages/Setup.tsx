@@ -6,7 +6,7 @@ export function Setup() {
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="bg-primary/10 p-3 rounded-2xl">
+          <div className="bg-primary/10 p-3 rounded-[15px]">
             <IconCloud size={40} className="text-primary" />
           </div>
         </div>

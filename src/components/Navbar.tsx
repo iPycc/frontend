@@ -66,11 +66,11 @@ export function Navbar() {
         ) : null}
 
         <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-[16px] bg-primary px-5 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
+          <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-[10px] bg-primary px-4 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
             <IconPlus size={18} />
             {!isMobile ? "新建" : null}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52 rounded-2xl">
+          <DropdownMenuContent align="start" className="w-52 rounded-[15px]">
             <DropdownMenuItem
               onClick={() => createFolder(currentFolderId, "新建文件夹")}
             >
@@ -90,14 +90,14 @@ export function Navbar() {
               新建离线下载
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/settings/buckets")}>
+            <DropdownMenuItem onClick={() => navigate("/settings/storage")}>
               <IconSettings size={16} />
               存储桶设置
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="hidden h-11 min-w-0 max-w-[420px] flex-1 items-center rounded-[18px] border border-[#d6d6d6] bg-white px-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset] md:flex dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
+        <div className="hidden h-11 min-w-0 max-w-[420px] flex-1 items-center rounded-[10px] border border-[#d6d6d6] bg-white px-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset] md:flex dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
           <IconSearch className="shrink-0 text-[#4b4b4b] dark:text-[#b8b8b8]" size={20} />
           <input
             type="text"
@@ -115,7 +115,7 @@ export function Navbar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 pb-0.5">
+      <div className="flex items-center gap-4">
         <button
           className="rounded-full p-2 text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:hidden dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="search"
@@ -130,9 +130,9 @@ export function Navbar() {
           aria-label="toggle-theme"
         >
           {effectiveTheme === "dark" ? (
-            <IconSun size={20} />
+            <IconSun size={25} />
           ) : (
-            <IconMoon size={20} />
+            <IconMoon size={25} />
           )}
         </button>
         <button
@@ -140,7 +140,7 @@ export function Navbar() {
           className="flex h-10 w-10 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="open-settings"
         >
-          <IconSettings size={20} />
+          <IconSettings size={25} />
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -152,7 +152,7 @@ export function Navbar() {
               />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-2xl">
+          <DropdownMenuContent align="end" className="w-56 rounded-[15px]">
             <div className="relative flex items-center justify-start gap-2 p-2">
               <div className="flex w-full flex-col space-y-1 leading-none">
                 {profile.username ? (

@@ -197,9 +197,9 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-none bg-transparent">
-      <SidebarHeader className="gap-3 px-4 pb-2 pt-3">
-        <div className="group/logo relative flex h-12 items-center pl-5">
-          <Logo showText className="gap-2.5 text-[#2b2b2b] dark:text-[#f4f4f4]" />
+      <SidebarHeader className="gap-2 px-4 pb-1 pt-4">
+        <div className="group/logo relative flex h-12 items-center pl-4">
+          <Logo showText className="gap-2  text-[#2b2b2b] dark:text-[#f4f4f4]" />
           <button
             type="button"
             onClick={toggleSidebar}
@@ -208,6 +208,7 @@ export function AppSidebar() {
           >
             {open ? <IconChevronLeft size={16} /> : <IconChevronRight size={16} />}
           </button>
+          
         </div>
         <BucketSwitcher />
       </SidebarHeader>
@@ -331,11 +332,11 @@ export function AppSidebar() {
 
       <SidebarFooter className="px-4 pb-4 pt-3">
         {activeBucket.quota ? (
-          <div className="rounded-[18px] border border-[#dadada] bg-white/88 px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
+          <div className="rounded-[15px] border border-[#dadada] bg-white/88 px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[#252525] dark:text-[#f2f2f2]">存储空间</span>
+              <span className="text-sm text-[#252525] dark:text-[#f2f2f2]">已使用</span>
               <NavLink
-                to="/settings/buckets"
+                to="/settings/storage"
                 className="text-sm text-[#1976c9] transition-colors hover:text-[#0e5da5] dark:text-[#7dcbff] dark:hover:text-[#a3dcff]"
               >
                 详情
@@ -354,6 +355,7 @@ export function AppSidebar() {
             </div>
           </div>
         ) : null}
+        
       </SidebarFooter>
     </Sidebar>
   )

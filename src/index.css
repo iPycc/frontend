@@ -34,12 +34,12 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 15px;
+  --radius-[15px]: 15px;
+  --radius-3xl: 15px;
 }
 
 @layer base {
@@ -62,7 +62,9 @@
     --border: oklch(0.89 0 0);
     --input: oklch(0.89 0 0);
     --ring: oklch(0.77 0.07 232);
-    --radius: 1rem;
+    --focus-border: var(--primary);
+    --focus-border-destructive: var(--destructive);
+    --radius: 12px;
     --sidebar: oklch(0.95 0 0);
     --sidebar-foreground: oklch(0.24 0 0);
     --sidebar-primary: var(--primary);
@@ -94,6 +96,8 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.556 0 0);
+    --focus-border: var(--primary);
+    --focus-border-destructive: var(--destructive);
     --sidebar: var(--background);
     --sidebar-foreground: var(--foreground);
     --sidebar-primary: var(--primary);
@@ -122,7 +126,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-sans);
+    font-family: "Inter", "Noto Sans SC", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
@@ -158,4 +162,14 @@
   box-shadow:
     0 1px 0 rgb(255 255 255 / 0.02) inset,
     0 10px 24px rgb(0 0 0 / 0.24);
+}
+
+/* Keep legacy hard-coded radii aligned with the global 10-15px system. */
+[class*="rounded-[16px]"],
+[class*="rounded-[18px]"],
+[class*="rounded-[20px]"],
+[class*="rounded-[22px]"],
+[class*="rounded-[24px]"],
+[class*="rounded-[28px]"] {
+  border-radius: 14px !important;
 }
