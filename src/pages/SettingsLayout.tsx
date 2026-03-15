@@ -16,8 +16,8 @@ export function SettingsLayout() {
   const navigate = useNavigate()
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar">
-      <div className="app-panel flex min-h-full flex-col gap-6 rounded-none sm:rounded-2xl border-0 sm:border border-border/60 p-4 shadow-none sm:shadow-sm sm:p-6 bg-background">
+    <div className="custom-scrollbar flex-1 overflow-y-auto">
+      <div className="app-panel flex min-h-full flex-col gap-6 rounded-[24px] border border-border/60 bg-background p-6 dark:border-white/10 dark:shadow-none">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-foreground">设置</h1>
           <p className="text-sm text-muted-foreground">
@@ -70,4 +70,3 @@ export function SettingsLayout() {
     </div>
   )
 }
-

@@ -1,16 +1,6 @@
 import type { MouseEvent } from "react"
+import { IconFolderFilled } from "@tabler/icons-react"
 import { useNavigate } from "react-router-dom"
-import {
-  IconChevronRight,
-  IconCode,
-  IconFileText,
-  IconFolderFilled,
-  IconMusic,
-  IconPhoto,
-  IconPlayerPlay,
-  IconTrash,
-  IconVideo,
-} from "@tabler/icons-react"
 
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
 import { cn, truncateFilename } from "@/lib/utils"
@@ -109,27 +99,26 @@ export function FileArea({
     onPropertiesRequest(node.id)
   }
 
-  const getContextIds = (nodeId: string) => {
-    return selectedIds.includes(nodeId) && selectedIds.length > 1
+  const getContextIds = (nodeId: string) =>
+    selectedIds.includes(nodeId) && selectedIds.length > 1
       ? selectedIds
       : [nodeId]
-  }
 
   return (
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel custom-scrollbar flex flex-1 flex-col overflow-y-auto rounded-2xl border border-border/60 p-4 shadow-sm"
+          className="app-panel flex flex-1 flex-col overflow-hidden rounded-[24px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
-          {items.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
-            </div>
-          ) : viewMode === "grid" ? (
-            <div className="flex flex-1 flex-col gap-8">
-              {folders.length > 0 && files.length > 0 ? (
-                <>
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-1">
+            {items.length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="flex flex-1 flex-col gap-8">
+                {folders.length > 0 ? (
                   <FileSection
                     title="文件夹"
                     items={folders}
@@ -148,6 +137,9 @@ export function FileArea({
                     onCreateChildFolder={onCreateChildFolder}
                     getContextIds={getContextIds}
                   />
+                ) : null}
+
+                {files.length > 0 ? (
                   <FileSection
                     title="文件"
                     items={files}
@@ -166,68 +158,32 @@ export function FileArea({
                     onCreateChildFolder={onCreateChildFolder}
                     getContextIds={getContextIds}
                   />
-                </>
-              ) : folders.length > 0 ? (
-                <FileSection
-                  items={folders}
-                  selectedIds={selectedIds}
-                  onSelectNode={onSelectNode}
-                  onPrepareContext={onPrepareContext}
-                  onOpenNode={openNode}
-                  onRenameRequest={onRenameRequest}
-                  onMoveRequest={onMoveRequest}
-                  onShareRequest={onShareRequest}
-                  onDownloadRequest={onDownloadRequest}
-                  onDeleteRequest={onDeleteRequest}
-                  onCopyRequest={onCopyRequest}
-                  onCutRequest={onCutRequest}
-                  onPropertiesRequest={onPropertiesRequest}
-                  onCreateChildFolder={onCreateChildFolder}
-                  getContextIds={getContextIds}
-                />
-              ) : (
-                <FileSection
-                  items={files}
-                  selectedIds={selectedIds}
-                  onSelectNode={onSelectNode}
-                  onPrepareContext={onPrepareContext}
-                  onOpenNode={openNode}
-                  onRenameRequest={onRenameRequest}
-                  onMoveRequest={onMoveRequest}
-                  onShareRequest={onShareRequest}
-                  onDownloadRequest={onDownloadRequest}
-                  onDeleteRequest={onDeleteRequest}
-                  onCopyRequest={onCopyRequest}
-                  onCutRequest={onCutRequest}
-                  onPropertiesRequest={onPropertiesRequest}
-                  onCreateChildFolder={onCreateChildFolder}
-                  getContextIds={getContextIds}
-                />
-              )}
-            </div>
-          ) : (
-            <FileList
-              items={items}
-              selectedIds={selectedIds}
-              onSelectNode={onSelectNode}
-              onPrepareContext={onPrepareContext}
-              onOpenNode={openNode}
-              onRenameRequest={onRenameRequest}
-              onMoveRequest={onMoveRequest}
-              onShareRequest={onShareRequest}
-              onDownloadRequest={onDownloadRequest}
-              onDeleteRequest={onDeleteRequest}
-              onCopyRequest={onCopyRequest}
-              onCutRequest={onCutRequest}
-              onPropertiesRequest={onPropertiesRequest}
-              onCreateChildFolder={onCreateChildFolder}
-              getContextIds={getContextIds}
-            />
-          )}
+                ) : null}
+              </div>
+            ) : (
+              <FileList
+                items={items}
+                selectedIds={selectedIds}
+                onSelectNode={onSelectNode}
+                onPrepareContext={onPrepareContext}
+                onOpenNode={openNode}
+                onRenameRequest={onRenameRequest}
+                onMoveRequest={onMoveRequest}
+                onShareRequest={onShareRequest}
+                onDownloadRequest={onDownloadRequest}
+                onDeleteRequest={onDeleteRequest}
+                onCopyRequest={onCopyRequest}
+                onCutRequest={onCutRequest}
+                onPropertiesRequest={onPropertiesRequest}
+                onCreateChildFolder={onCreateChildFolder}
+                getContextIds={getContextIds}
+              />
+            )}
+          </div>
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent>
+      <ContextMenuContent className="rounded-2xl">
         <ContextMenuLabel>空白区域</ContextMenuLabel>
         <ContextMenuItem onClick={onCreateFolder}>新建文件夹</ContextMenuItem>
         <ContextMenuItem onClick={onUploadMock}>上传模拟文件</ContextMenuItem>
@@ -308,15 +264,13 @@ function FileSection({
 }) {
   return (
     <section>
-      {title && (
-        <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-          {title}
-        </h2>
-      )}
+      {title ? (
+        <h2 className="mb-4 text-[20px] text-[#2f2f2f] dark:text-[#f0f0f0]">{title}</h2>
+      ) : null}
       {items.length === 0 ? (
-        emptyText && <div className="text-sm text-muted-foreground">{emptyText}</div>
+        emptyText ? <div className="text-sm text-muted-foreground">{emptyText}</div> : null
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] md:gap-3">
           {items.map((item) => (
             <div key={item.id}>
               <FileCard
@@ -380,49 +334,47 @@ function FileCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onSelectNode(item.id, event)
-          }}
-          onDoubleClick={(event) => {
-            event.stopPropagation()
-            onOpenNode(item)
-          }}
+        <div
           className={cn(
-            "group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 transition-colors text-left",
+            "group flex h-12 w-full items-center gap-3 rounded-[14px] border px-3.5 text-left transition-colors",
             selected
-              ? "border-transparent bg-primary/10"
-              : "border-border/60 bg-background hover:bg-muted/40"
+              ? "border-[#7fcbff] bg-[#ebf7ff] dark:border-[#265a87] dark:bg-[#112235]"
+              : "border-transparent bg-[#f2f2f2] hover:bg-[#ececec] dark:bg-[#202020] dark:hover:bg-[#272727]"
           )}
         >
-          <div
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onSelectNode(item.id, event)
+            }}
             className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
               selected
-                ? "bg-primary/20 text-primary"
-                : "bg-muted/60 text-muted-foreground group-hover:bg-muted"
+                ? "bg-[#dff2ff] text-primary dark:bg-[#16334f]"
+                : "bg-[#ebebeb] text-[#777777] hover:bg-[#e2e2e2] dark:bg-[#272727] dark:text-[#9b9b9b] dark:hover:bg-[#2f2f2f]"
             )}
             aria-label={`选择 ${item.name}`}
           >
-            {getItemIcon(item)}
-          </div>
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div
-                className="truncate text-sm font-medium text-foreground"
-                title={item.name}
-              >
-                {truncateFilename(item.name, 20)}
-              </div>
+            <FileGlyph item={item} />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenNode(item)
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              onOpenNode(item)
+            }}
+            className="min-w-0 flex-1 text-left"
+          >
+            <div className="truncate text-sm text-[#404040] dark:text-[#eaeaea]" title={item.name}>
+              {truncateFilename(item.name, 22)}
             </div>
-            <IconChevronRight
-              size={16}
-              className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-            />
-          </div>
-        </button>
+          </button>
+        </div>
       </ContextMenuTrigger>
       <ItemContextMenu
         item={item}
@@ -480,13 +432,13 @@ function FileList({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
-      <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-border/60 px-4 py-3 text-xs font-medium text-muted-foreground">
+    <div className="overflow-hidden rounded-[20px] border border-[#dddddd] bg-white dark:border-white/10 dark:bg-[#171717]">
+      <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-[#e5e5e5] px-4 py-3 text-xs text-[#8a8a8a] dark:border-white/10 dark:text-[#8d8d8d]">
         <div className="text-center">选择</div>
         <div>名称</div>
         <div>类型</div>
       </div>
-      <div className="divide-y divide-border/60">
+      <div className="divide-y divide-[#efefef] dark:divide-white/10">
         {items.map((item) => {
           const selected = selectedIds.includes(item.id)
 
@@ -496,8 +448,8 @@ function FileList({
                 <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
                   <div
                     className={cn(
-                      "grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40",
-                      selected ? "bg-primary/8" : ""
+                      "grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[#f7f7f7] dark:hover:bg-[#1d1d1d]",
+                      selected ? "bg-[#eef8ff] dark:bg-[#112235]" : ""
                     )}
                   >
                     <div className="flex items-center justify-center">
@@ -510,31 +462,41 @@ function FileList({
                         className={cn(
                           "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
                           selected
-                            ? "bg-primary/12 text-primary"
-                            : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                            ? "bg-[#dff2ff] text-primary dark:bg-[#16334f]"
+                            : "bg-[#f3f3f3] text-[#777777] hover:bg-[#ebebeb] dark:bg-[#202020] dark:text-[#9b9b9b] dark:hover:bg-[#272727]"
                         )}
                         aria-label={`选择 ${item.name}`}
                       >
-                        {getItemIcon(item)}
+                        <FileGlyph item={item} />
                       </button>
                     </div>
                     <button
                       type="button"
-                      onClick={() => onOpenNode(item)}
-                      className="flex min-w-0 items-center justify-between gap-3 text-left"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenNode(item)
+                      }}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation()
+                        onOpenNode(item)
+                      }}
+                      className="min-w-0 text-left"
                     >
-                      <div className="truncate text-sm font-medium text-foreground">
+                      <div className="truncate text-sm text-[#3f3f3f] dark:text-[#eaeaea]">
                         {item.name}
                       </div>
-                      <IconChevronRight
-                        size={16}
-                        className="shrink-0 text-muted-foreground"
-                      />
                     </button>
                     <button
                       type="button"
-                      onClick={() => onOpenNode(item)}
-                      className="truncate text-left text-sm text-muted-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenNode(item)
+                      }}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation()
+                        onOpenNode(item)
+                      }}
+                      className="truncate text-left text-sm text-[#7e7e7e] dark:text-[#969696]"
                     >
                       {getItemMeta(item)}
                     </button>
@@ -594,7 +556,7 @@ function ItemContextMenu({
   const isFolder = item.kind === "folder"
 
   return (
-    <ContextMenuContent>
+    <ContextMenuContent className="rounded-2xl">
       <ContextMenuLabel>
         {multiple ? `已选 ${ids.length} 项` : isFolder ? "文件夹" : "文件"}
       </ContextMenuLabel>
@@ -608,26 +570,13 @@ function ItemContextMenu({
         </ContextMenuItem>
       ) : null}
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => onDownloadRequest(ids)}>
-        下载
-      </ContextMenuItem>
-      <ContextMenuItem onClick={() => onShareRequest(ids)}>
-        分享
-      </ContextMenuItem>
-      <ContextMenuItem onClick={() => onCopyRequest(ids)}>
-        复制
-      </ContextMenuItem>
+      <ContextMenuItem onClick={() => onDownloadRequest(ids)}>下载</ContextMenuItem>
+      <ContextMenuItem onClick={() => onShareRequest(ids)}>分享</ContextMenuItem>
+      <ContextMenuItem onClick={() => onCopyRequest(ids)}>复制</ContextMenuItem>
       <ContextMenuItem onClick={() => onCutRequest(ids)}>剪切</ContextMenuItem>
-      <ContextMenuItem onClick={() => onRenameRequest(ids)}>
-        重命名
-      </ContextMenuItem>
-      <ContextMenuItem onClick={() => onMoveRequest(ids)}>
-        移动到…
-      </ContextMenuItem>
-      <ContextMenuItem
-        variant="destructive"
-        onClick={() => onDeleteRequest(ids)}
-      >
+      <ContextMenuItem onClick={() => onRenameRequest(ids)}>重命名</ContextMenuItem>
+      <ContextMenuItem onClick={() => onMoveRequest(ids)}>移动到…</ContextMenuItem>
+      <ContextMenuItem variant="destructive" onClick={() => onDeleteRequest(ids)}>
         删除
       </ContextMenuItem>
       <ContextMenuSeparator />
@@ -650,25 +599,59 @@ function getItemMeta(item: FileNode) {
   return "文件"
 }
 
-function getItemIcon(item: FileNode) {
+function FileGlyph({ item }: { item: FileNode }) {
   if (item.kind === "folder") {
-    return <IconFolderFilled size={20} className="text-primary" />
+    return <IconFolderFilled size={20} className="text-[#8d8d8d]" />
   }
 
-  switch (item.mediaType) {
-    case "image":
-      return <IconPhoto size={20} className="text-sky-500" />
-    case "video":
-      return <IconVideo size={20} className="text-violet-500" />
-    case "audio":
-      return <IconMusic size={20} className="text-pink-500" />
-    case "code":
-      return <IconCode size={20} className="text-emerald-500" />
-    case "document":
-      return <IconFileText size={20} className="text-amber-500" />
-    case "archive":
-      return <IconTrash size={20} className="text-orange-500" />
-    default:
-      return <IconPlayerPlay size={20} className="text-slate-500" />
+  const ext = item.ext?.toLowerCase() ?? "file"
+  const badge = ext.slice(0, 1).toUpperCase()
+  const color = getFileBadgeColor(ext, item.mediaType)
+
+  return (
+    <span
+      className={cn(
+        "flex h-5 w-5 items-center justify-center rounded-[5px] text-[10px] font-semibold text-white",
+        color
+      )}
+    >
+      {badge}
+    </span>
+  )
+}
+
+function getFileBadgeColor(ext: string, mediaType?: FileNode["mediaType"]) {
+  if (["ppt", "pptx", "pdf"].includes(ext)) {
+    return "bg-[#ff5b12]"
   }
+
+  if (["doc", "docx"].includes(ext)) {
+    return "bg-[#2563eb]"
+  }
+
+  if (["xls", "xlsx", "csv"].includes(ext)) {
+    return "bg-[#16a34a]"
+  }
+
+  if (["zip", "rar", "7z"].includes(ext)) {
+    return "bg-[#f59e0b]"
+  }
+
+  if (["ts", "tsx", "js", "jsx"].includes(ext) || mediaType === "code") {
+    return "bg-[#0f9e8a]"
+  }
+
+  if (mediaType === "image") {
+    return "bg-[#0ea5e9]"
+  }
+
+  if (mediaType === "video") {
+    return "bg-[#8b5cf6]"
+  }
+
+  if (mediaType === "audio") {
+    return "bg-[#ec4899]"
+  }
+
+  return "bg-[#7c7c7c]"
 }

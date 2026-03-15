@@ -17,7 +17,7 @@ export function Logo({
           <path d="M12 5.5 14.5 8 12 10.5 9.5 8Z" fill="#fff" stroke="#fff" strokeWidth="1" strokeLinejoin="round" />
         </g>
       </svg>
-      {showText && <span className="text-xl font-bold tracking-wide text-foreground">Cloudrave</span>}
+      {showText && <span className="text-xl font-bold tracking-wide text-current">Cloudrave</span>}
     </div>
   )
 }

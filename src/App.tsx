@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import { MainLayout } from "./components/MainLayout"
+import { useAppState } from "./lib/app-state"
 import { AppFiles } from "./pages/AppFiles"
+import { AuthLayout } from "./pages/AuthLayout"
 import {
   Buckets,
   Discussions,
@@ -17,7 +19,7 @@ import {
   Users,
 } from "./pages/Placeholders"
 import { Login } from "./pages/Login"
-import { Setup } from "./pages/Setup"
+import { Register } from "./pages/Register"
 import { SettingsLayout } from "./pages/SettingsLayout"
 import {
   Profile,
@@ -27,12 +29,21 @@ import {
 } from "./pages/Profile"
 
 export default function App() {
+  const { isAuthenticated } = useAppState()
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/app" replace />} />
+        <Route
+          path="/"
+          element={<Navigate to={isAuthenticated ? "/app" : "/login"} replace />}
+        />
 
-        <Route element={<MainLayout />}>
+        <Route
+          element={
+            isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />
+          }
+        >
           <Route path="/app" element={<AppFiles />} />
           <Route path="/app/buckets" element={<Buckets />} />
           <Route path="/app/shares" element={<Shares />} />
@@ -60,8 +71,15 @@ export default function App() {
           <Route path="/admin/system" element={<System />} />
         </Route>
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/setup" element={<Setup />} />
+        <Route
+          element={
+            isAuthenticated ? <Navigate to="/app" replace /> : <AuthLayout />
+          }
+        >
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/setup" element={<Navigate to="/register" replace />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   )

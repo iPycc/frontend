@@ -47,7 +47,7 @@ export function AppFiles() {
   } = useAppState()
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid")
-  const [sortValue, setSortValue] = React.useState<SortValue>("updated-desc")
+  const [sortValue, setSortValue] = React.useState<SortValue>("name-asc")
   const [renameTargetId, setRenameTargetId] = React.useState<string | null>(
     null
   )
@@ -102,17 +102,12 @@ export function AppFiles() {
   const flash = React.useCallback((_message: string) => {}, [])
 
   const handleSelectNode = (id: string, event: React.MouseEvent) => {
-    if (event.metaKey || event.ctrlKey) {
-      setSelectedIds((current) =>
-        current.includes(id)
-          ? current.filter((item) => item !== id)
-          : [...current, id]
-      )
-      return
-    }
-
+    event.stopPropagation()
+    // 左侧图标改为独立多选区，单击即可加入或取消当前选择集合。
     setSelectedIds((current) =>
-      current.length === 1 && current[0] === id ? [] : [id]
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
     )
   }
 

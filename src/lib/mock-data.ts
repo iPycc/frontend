@@ -33,6 +33,21 @@ export interface SecurityState {
   passkeysEnabled: boolean
 }
 
+export interface MockAuthUser {
+  id: string
+  email: string
+  password: string
+  username: string
+  avatar: string
+  group: string
+  registeredAt: string
+}
+
+export interface AuthState {
+  currentUserId: string | null
+  users: MockAuthUser[]
+}
+
 export interface LoginActivityEntry {
   id: string
   method: string
@@ -117,6 +132,7 @@ export interface AppSnapshot {
   profile: UserProfile
   settings: UserSettings
   security: SecurityState
+  auth: AuthState
   loginActivity: LoginActivityEntry[]
   buckets: BucketMount[]
   activeBucketId: string
@@ -131,7 +147,7 @@ const localRootId = "bucket-local-root"
 export const defaultProfile: UserProfile = {
   username: "Cloudrave Admin",
   avatar: "https://api.dicebear.com/7.x/notionists/svg?seed=Cloudrave",
-  email: "admin@cloudrave.app",
+  email: "admin@cloudrave.org",
   uid: "u_20260310_a8m1",
   registeredAt: "2025-12-18 09:24",
   group: "超级管理员",
@@ -140,7 +156,7 @@ export const defaultProfile: UserProfile = {
 export const defaultSettings: UserSettings = {
   language: "zh-CN",
   timezone: "Asia/Shanghai",
-  themeMode: "system",
+  themeMode: "light",
   accentTheme: "默认蓝",
   showSidebarTree: true,
 }
@@ -149,6 +165,23 @@ export const defaultSecurity: SecurityState = {
   passwordVerified: false,
   twoFactorEnabled: false,
   passkeysEnabled: false,
+}
+
+export const defaultMockAuthUsers: MockAuthUser[] = [
+  {
+    id: "auth-admin",
+    email: "admin@cloudrave.org",
+    password: "admin123",
+    username: "Cloudrave Admin",
+    avatar: "https://api.dicebear.com/7.x/notionists/svg?seed=Cloudrave",
+    group: "超级管理员",
+    registeredAt: "2025-12-18 09:24",
+  },
+]
+
+export const defaultAuth: AuthState = {
+  currentUserId: null,
+  users: defaultMockAuthUsers,
 }
 
 export const defaultLoginActivity: LoginActivityEntry[] = [
@@ -161,8 +194,9 @@ export const defaultLoginActivity: LoginActivityEntry[] = [
 export const defaultBuckets: BucketMount[] = [
   {
     id: "bucket-local",
-    name: "本机存储",
-    provider: "Local",
+    name: "我的腾讯云存储",
+    provider: "Tencent COS",
+    region: "ap-guangzhou",
     strategy: {
       multipartThreshold: "64 MB",
       partSize: "16 MB",
@@ -172,22 +206,26 @@ export const defaultBuckets: BucketMount[] = [
     rootNodeId: localRootId,
     createdAt: "2026-03-10 10:00",
     corsStatus: "healthy",
-    corsMessage: "本地存储无需额外 CORS 配置",
-    isLocal: true,
-    canEditConnection: false,
+    corsMessage: "存储桶域名和签名策略已同步",
+    isLocal: false,
+    canEditConnection: true,
     canDelete: false,
     canRename: true,
-    quota: { used: 1.5 * 1024 * 1024 * 1024, total: 50 * 1024 * 1024 * 1024 }, // 1.5GB of 50GB
+    quota: { used: 12.6 * 1024 * 1024 * 1024, total: 128 * 1024 * 1024 * 1024 },
   },
 ]
 
 export const defaultNodes: FileNode[] = [
-  { id: localRootId, bucketId: "bucket-local", parentId: null, kind: "folder", name: "本机存储", updatedAt: "2026-03-12 00:00", isSystemRoot: true },
+  { id: localRootId, bucketId: "bucket-local", parentId: null, kind: "folder", name: "我的腾讯云存储", updatedAt: "2026-03-12 00:00", isSystemRoot: true },
   { id: "folder-design", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "设计资源", updatedAt: "2026-03-12 00:12" },
   { id: "folder-docs", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "产品文档", updatedAt: "2026-03-11 17:25" },
   { id: "folder-media", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "媒体库", updatedAt: "2026-03-10 20:08" },
   { id: "folder-project", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "项目 Alpha", updatedAt: "2026-03-11 14:46" },
   { id: "folder-shared", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "团队共享", updatedAt: "2026-03-09 13:28" },
+  { id: "file-courseware-1", bucketId: "bucket-local", parentId: localRootId, kind: "file", name: "新生第一课.pptx", ext: "pptx", size: 4200000, updatedAt: "2026-03-12 08:12", mediaType: "document" },
+  { id: "file-courseware-2", bucketId: "bucket-local", parentId: localRootId, kind: "file", name: "第二章导学.pptx", ext: "pptx", size: 3900000, updatedAt: "2026-03-12 07:42", mediaType: "document" },
+  { id: "file-courseware-3", bucketId: "bucket-local", parentId: localRootId, kind: "file", name: "课堂练习题.pptx", ext: "pptx", size: 5100000, updatedAt: "2026-03-11 20:18", mediaType: "document" },
+  { id: "file-courseware-4", bucketId: "bucket-local", parentId: localRootId, kind: "file", name: "结课复习.pptx", ext: "pptx", size: 3600000, updatedAt: "2026-03-11 18:46", mediaType: "document" },
   { id: "folder-design-brand", bucketId: "bucket-local", parentId: "folder-design", kind: "folder", name: "品牌稿", updatedAt: "2026-03-11 08:00" },
   { id: "folder-design-screen", bucketId: "bucket-local", parentId: "folder-design", kind: "folder", name: "界面稿", updatedAt: "2026-03-11 08:10" },
   { id: "folder-media-video", bucketId: "bucket-local", parentId: "folder-media", kind: "folder", name: "视频素材", updatedAt: "2026-03-10 22:10" },
@@ -263,6 +301,7 @@ export const defaultAppSnapshot: AppSnapshot = {
   profile: defaultProfile,
   settings: defaultSettings,
   security: defaultSecurity,
+  auth: defaultAuth,
   loginActivity: defaultLoginActivity,
   buckets: defaultBuckets,
   activeBucketId: defaultBuckets[0].id,

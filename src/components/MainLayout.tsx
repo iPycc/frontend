@@ -11,7 +11,7 @@ export function MainLayout() {
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Navbar />
-          <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
+          <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pb-4">
             <Outlet />
           </main>
         </div>

@@ -1,12 +1,14 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import {
   IconActivity,
   IconChevronDown,
+  IconChevronLeft,
   IconChevronRight,
-  IconDownload,
+  IconCloudDownload,
   IconFileText,
   IconFolderFilled,
+  IconHome,
   IconLink,
   IconMusic,
   IconPhoto,
@@ -17,6 +19,7 @@ import {
 } from "@tabler/icons-react"
 
 import { useAppState } from "@/lib/app-state"
+import { type FileNode } from "@/lib/mock-data"
 import { cn } from "../lib/utils"
 import { BucketSwitcher } from "./BucketSwitcher"
 import { Logo } from "./ui/logo"
@@ -24,15 +27,30 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  useSidebar,
 } from "./ui/sidebar"
+import { AnimatePresence, motion } from "motion/react"
 
-function buildTree(items: ReturnType<typeof useAppState>["getFoldersForBucket"], parentId: string) {
+const utilityPaths = [
+  "/app/shared-with-me",
+  "/app/recycle",
+  "/app/shares",
+  "/app/mounts",
+  "/app/tasks",
+  "/app/offline",
+  "/app/store",
+  "/app/discussions",
+]
+
+type FolderTreeNode = FileNode & {
+  children: FolderTreeNode[]
+}
+
+function buildTree(
+  items: ReturnType<typeof useAppState>["getFoldersForBucket"],
+  parentId: string
+): FolderTreeNode[] {
   return items()
     .filter((node) => node.parentId === parentId)
     .map((node) => ({
@@ -41,8 +59,38 @@ function buildTree(items: ReturnType<typeof useAppState>["getFoldersForBucket"],
     }))
 }
 
-function SidebarFolderTree({ items, basePath = "/app" }: { items: Array<any>; basePath?: string }) {
+function SidebarFolderTree({
+  items,
+  basePath = "/app",
+  level = 0,
+}: {
+  items: FolderTreeNode[]
+  basePath?: string
+  level?: number
+}) {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
+  const location = useLocation()
+
+  useEffect(() => {
+    setOpenStates((current) => {
+      let changed = false
+      const next = { ...current }
+
+      for (const folder of items) {
+        const currentPath = `${basePath}/${encodeURIComponent(folder.name)}`
+        const isInCurrentBranch =
+          location.pathname === currentPath ||
+          location.pathname.startsWith(`${currentPath}/`)
+
+        if (isInCurrentBranch && next[folder.id] !== true) {
+          next[folder.id] = true
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+  }, [basePath, items, location.pathname])
 
   const toggle = (id: string, event: MouseEvent) => {
     event.preventDefault()
@@ -51,34 +99,69 @@ function SidebarFolderTree({ items, basePath = "/app" }: { items: Array<any>; ba
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {items.map((folder) => {
-        const isOpen = openStates[folder.id] ?? true
         const currentPath = `${basePath}/${encodeURIComponent(folder.name)}`
         const hasChildren = folder.children.length > 0
+        const isCurrent = location.pathname === currentPath
+        const isInCurrentBranch =
+          isCurrent || location.pathname.startsWith(`${currentPath}/`)
+        const isOpen = openStates[folder.id] ?? isInCurrentBranch
 
         return (
-          <div key={folder.id}>
-            <div className="group relative flex items-center">
-              {hasChildren ? (
-                <button
-                  onClick={(event) => toggle(folder.id, event)}
-                  className="absolute left-[-16px] rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent"
-                >
-                  {isOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-                </button>
-              ) : null}
-              <SidebarItem
+          <div key={folder.id} className="space-y-0.5">
+            <div
+              style={{
+                paddingLeft: `${level * 16}px`,
+              }}
+            >
+              <SidebarTreeItem
                 to={currentPath}
-                icon={<IconFolderFilled size={16} className="text-slate-400 transition-colors group-hover:text-primary" />}
-                label={folder.name}
-              />
+                active={isCurrent}
+                className="min-w-0 w-full"
+                toggle={
+                  hasChildren ? (
+                    <button
+                      type="button"
+                      onClick={(event) => toggle(folder.id, event)}
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-[#4f4f4f] transition-colors dark:text-[#9a9a9a]"
+                    >
+                      {isOpen ? (
+                        <IconChevronDown size={12} />
+                      ) : (
+                        <IconChevronRight size={12} />
+                      )}
+                    </button>
+                  ) : null
+                }
+              >
+                <IconFolderFilled
+                  size={17}
+                  className={cn(
+                    "shrink-0 text-[#8b8b8b] dark:text-[#8f8f8f]",
+                    isCurrent ? "text-[#2d6f9a] dark:text-[#80c8ff]" : ""
+                  )}
+                />
+                <span className="truncate">{folder.name}</span>
+              </SidebarTreeItem>
             </div>
-            {isOpen && hasChildren ? (
-              <div className="mt-1 ml-2 border-l border-border/50 pl-4">
-                <SidebarFolderTree items={folder.children} basePath={currentPath} />
-              </div>
-            ) : null}
+            <AnimatePresence initial={false}>
+              {isOpen && hasChildren ? (
+                <motion.div
+                  initial={{ height: 0, opacity: 0, y: -4 }}
+                  animate={{ height: "auto", opacity: 1, y: 0 }}
+                  exit={{ height: 0, opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  <SidebarFolderTree
+                    items={folder.children}
+                    basePath={currentPath}
+                    level={level + 1}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
         )
       })}
@@ -87,116 +170,254 @@ function SidebarFolderTree({ items, basePath = "/app" }: { items: Array<any>; ba
 }
 
 export function AppSidebar() {
-  const { activeBucket, getFoldersForBucket, settings, formatBytes } = useAppState()
-  const [isTreeOpen, setIsTreeOpen] = useState(settings.showSidebarTree)
+  const { activeBucket, formatBytes, getFoldersForBucket, settings } = useAppState()
+  const { open, toggleSidebar } = useSidebar()
+  const location = useLocation()
+  const [isTreeOpen, setIsTreeOpen] = useState(false)
 
-  const rootFolders = useMemo(() => buildTree(getFoldersForBucket, activeBucket.rootNodeId), [activeBucket.rootNodeId, getFoldersForBucket])
+  const rootFolders = useMemo(
+    () => buildTree(getFoldersForBucket, activeBucket.rootNodeId),
+    [activeBucket.rootNodeId, getFoldersForBucket]
+  )
 
-  const quota = activeBucket.quota || { used: 0, total: 1 }
-  const percent = Math.min(100, Math.round((quota.used / quota.total) * 100))
+  const category = new URLSearchParams(location.search).get("type")
+  const isExplorerRoute =
+    (location.pathname === "/app" || location.pathname.startsWith("/app/")) &&
+    !utilityPaths.some((path) => location.pathname.startsWith(path))
+  const isRootExplorer = location.pathname === "/app" && !category
+  const quotaRatio = activeBucket.quota
+    ? Math.min(activeBucket.quota.used / activeBucket.quota.total, 1)
+    : 0
+
+  useEffect(() => {
+    if (location.pathname !== "/app" && isExplorerRoute) {
+      setIsTreeOpen(true)
+    }
+  }, [isExplorerRoute, location.pathname])
 
   return (
     <Sidebar className="border-none bg-transparent">
-      <SidebarHeader className="px-4 py-3">
-        <div className="mb-2 flex items-center pl-1">
-          <Logo showText />
+      <SidebarHeader className="gap-3 px-4 pb-2 pt-3">
+        <div className="group/logo relative flex h-12 items-center pl-5">
+          <Logo showText className="gap-2.5 text-[#2b2b2b] dark:text-[#f4f4f4]" />
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="pointer-events-none absolute right-0 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#666666] opacity-0 transition-all group-hover/logo:pointer-events-auto group-hover/logo:opacity-100 hover:bg-[#edf3f8] hover:text-[#2b2b2b] md:flex dark:text-[#b7b7b7] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]"
+            aria-label={open ? "收起侧边栏" : "展开侧边栏"}
+          >
+            {open ? <IconChevronLeft size={16} /> : <IconChevronRight size={16} />}
+          </button>
         </div>
         <BucketSwitcher />
       </SidebarHeader>
 
-      <SidebarContent className="custom-scrollbar px-2">
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <div className="group relative flex items-center">
-                  {settings.showSidebarTree ? (
-                    <button
-                      onClick={() => setIsTreeOpen((current) => !current)}
-                      className="absolute left-[-16px] rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent"
-                    >
-                      {isTreeOpen ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-                    </button>
-                  ) : null}
-                  <SidebarItem
-                    to="/app"
-                    icon={<IconFolderFilled size={18} className="text-primary" />}
-                    label="我的文件"
-                    exact
-                  />
-                </div>
+      <SidebarContent className="custom-scrollbar px-4">
+        <div className="space-y-6 pt-3">
+          <div>
+            <div
+              className={cn(
+                "flex h-9 items-center rounded-full pr-3 text-[15px] transition-colors",
+                isRootExplorer
+                  ? "bg-[#cfe7f9] text-[#1d3040] hover:bg-[#c1def4] hover:text-[#1d3040] dark:bg-[#18384d] dark:text-[#eef6ff] dark:hover:bg-[#21455f] dark:hover:text-[#eef6ff]"
+                  : "text-[#303030] hover:bg-[#ebf2f8] hover:text-[#1f2c39] dark:text-[#c1c1c1] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]"
+              )}
+            >
+              {settings.showSidebarTree ? (
+                <button
+                  type="button"
+                  onClick={() => setIsTreeOpen((current) => !current)}
+                  className="flex h-full w-8 shrink-0 items-center justify-center text-[#7a7a7a] transition-colors dark:text-[#8e8e8e]"
+                  aria-label={isTreeOpen ? "收起目录树" : "展开目录树"}
+                >
+                  {isTreeOpen ? (
+                    <IconChevronDown size={12} />
+                  ) : (
+                    <IconChevronRight size={12} />
+                  )}
+                </button>
+              ) : (
+                <span className="w-3 shrink-0" aria-hidden="true" />
+              )}
+              <NavLink to="/app" className="flex min-w-0 flex-1 items-center gap-3">
+                <IconHome size={17} className="shrink-0 text-[#5b6570] dark:text-[#c5d0da]" />
+                <span>我的文件</span>
+              </NavLink>
+            </div>
 
-                {settings.showSidebarTree && isTreeOpen ? (
-                  <div className="mt-1 pl-6">
-                    <SidebarFolderTree items={rootFolders} />
-                  </div>
-                ) : null}
-              </SidebarMenuItem>
+            <AnimatePresence initial={false}>
+              {settings.showSidebarTree && isTreeOpen ? (
+                <motion.div
+                  initial={{ height: 0, opacity: 0, y: -6 }}
+                  animate={{ height: "auto", opacity: 1, y: 0 }}
+                  exit={{ height: 0, opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="mt-1 overflow-hidden"
+                >
+                  <SidebarFolderTree items={rootFolders} level={1} />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
-              <div className="space-y-1 pt-2">
-                <SidebarItem to="/app?type=image" icon={<IconPhoto size={18} />} label="图片" />
-                <SidebarItem to="/app?type=video" icon={<IconVideo size={18} />} label="视频" />
-                <SidebarItem to="/app?type=audio" icon={<IconMusic size={18} />} label="音乐" />
-                <SidebarItem to="/app?type=document" icon={<IconFileText size={18} />} label="文档" />
-              </div>
+            <div className="space-y-0 pt-1">
+              <SidebarNavItem to="/app?type=image" active={category === "image"}>
+                <IconPhoto size={17} />
+                <span>图片</span>
+              </SidebarNavItem>
+              <SidebarNavItem to="/app?type=video" active={category === "video"}>
+                <IconVideo size={17} />
+                <span>视频</span>
+              </SidebarNavItem>
+              <SidebarNavItem to="/app?type=audio" active={category === "audio"}>
+                <IconMusic size={17} />
+                <span>音乐</span>
+              </SidebarNavItem>
+              <SidebarNavItem
+                to="/app?type=document"
+                active={category === "document"}
+              >
+                <IconFileText size={17} />
+                <span>文档</span>
+              </SidebarNavItem>
+              <SidebarNavItem
+                to="/app/recycle"
+                active={location.pathname === "/app/recycle"}
+              >
+                <IconTrash size={17} />
+                <span>回收站</span>
+              </SidebarNavItem>
+            </div>
+          </div>
 
-              <div className="space-y-1 pt-4">
-                <SidebarItem to="/app/shared-with-me" icon={<IconUsers size={18} />} label="与我共享" />
-                <SidebarItem to="/app/recycle" icon={<IconTrash size={18} />} label="回收站" />
-              </div>
-
-              <div className="space-y-1 pt-4">
-                <SidebarItem to="/app/shares" icon={<IconShare size={18} />} label="我的分享" />
-                <SidebarItem to="/app/mounts" icon={<IconLink size={18} />} label="连接与挂载" />
-                <SidebarItem to="/app/tasks" icon={<IconActivity size={18} />} label="后台任务" />
-                <SidebarItem to="/app/offline" icon={<IconDownload size={18} />} label="离线下载" />
-              </div>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+          <div className="space-y-1.5">
+            <SidebarNavItem
+              to="/app/shared-with-me"
+              active={location.pathname === "/app/shared-with-me"}
+            >
+              <IconUsers size={17} />
+              <span>与我共享</span>
+            </SidebarNavItem>
+            <SidebarNavItem
+              to="/app/shares"
+              active={location.pathname === "/app/shares"}
+            >
+              <IconShare size={17} />
+              <span>我的分享</span>
+            </SidebarNavItem>
+            <SidebarNavItem
+              to="/app/tasks"
+              active={location.pathname === "/app/tasks"}
+            >
+              <IconActivity size={17} />
+              <span>后台任务</span>
+            </SidebarNavItem>
+            <SidebarNavItem
+              to="/app/mounts"
+              active={location.pathname === "/app/mounts"}
+            >
+              <IconLink size={17} />
+              <span>存储桶</span>
+            </SidebarNavItem>
+            <SidebarNavItem
+              to="/app/offline"
+              active={location.pathname === "/app/offline"}
+            >
+              <IconCloudDownload size={17} />
+              <span>离线下载</span>
+            </SidebarNavItem>
+          </div>
+        </div>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <div className="rounded-2xl border border-border/60 bg-background p-4 shadow-sm">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{activeBucket.name}使用空间</span>
+      <SidebarFooter className="px-4 pb-4 pt-3">
+        {activeBucket.quota ? (
+          <div className="rounded-[18px] border border-[#dadada] bg-white/88 px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#252525] dark:text-[#f2f2f2]">存储空间</span>
+              <NavLink
+                to="/settings/buckets"
+                className="text-sm text-[#1976c9] transition-colors hover:text-[#0e5da5] dark:text-[#7dcbff] dark:hover:text-[#a3dcff]"
+              >
+                详情
+              </NavLink>
+            </div>
+            <div className="mt-3 h-2 rounded-full bg-[#e5e5e5] dark:bg-[#2a2a2a]">
+              <div
+                className="h-full rounded-full bg-[#6eb9ff] dark:bg-[#4f98d9]"
+                style={{
+                  width: `${Math.max(quotaRatio * 100, activeBucket.quota.used > 0 ? 8 : 0)}%`,
+                }}
+              />
+            </div>
+            <div className="mt-2 text-sm text-[#505050] dark:text-[#c7c7c7]">
+              {formatBytes(activeBucket.quota.used)} / {formatBytes(activeBucket.quota.total)}
+            </div>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${percent}%` }} />
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">{formatBytes(quota.used)} / {formatBytes(quota.total)}</div>
-        </div>
+        ) : null}
       </SidebarFooter>
     </Sidebar>
   )
 }
 
-function SidebarItem({
+function SidebarNavItem({
   to,
-  icon,
-  label,
-  exact,
+  active,
+  children,
+  className,
 }: {
   to: string
-  icon: ReactNode
-  label: string
-  exact?: boolean
+  active?: boolean
+  children: ReactNode
+  className?: string
 }) {
-  const location = useLocation()
-  const current = `${location.pathname}${location.search}`
-  const isActive = exact ? current === to : current.startsWith(to)
-
   return (
-    <SidebarMenuButton
-      render={<NavLink to={to} className="flex items-center gap-3" />}
-      isActive={isActive}
+    <NavLink
+      to={to}
       className={cn(
-        "h-9",
-        isActive ? "bg-primary/10 text-primary hover:bg-primary/10 dark:text-white" : ""
+        "flex h-9 items-center gap-3 rounded-full px-8 text-[15px] text-[#303030] transition-colors hover:bg-[#ebf2f8] hover:text-[#1f2c39] dark:text-[#c1c1c1] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]",
+        active
+          ? "bg-[#cfe7f9] text-[#1d3040] hover:bg-[#c1def4] hover:text-[#1d3040] dark:bg-[#18384d] dark:text-[#eef6ff] dark:hover:bg-[#21455f] dark:hover:text-[#eef6ff]"
+          : "",
+        className
       )}
     >
-      {icon}
-      <span>{label}</span>
-    </SidebarMenuButton>
+      {children}
+    </NavLink>
+  )
+}
+
+function SidebarTreeItem({
+  to,
+  active,
+  children,
+  className,
+  toggle,
+}: {
+  to: string
+  active?: boolean
+  children: ReactNode
+  className?: string
+  toggle?: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-8 items-center rounded-full pr-3 text-[15px] transition-colors",
+        active
+          ? "bg-[#cfe7f9] text-[#1d3040] hover:bg-[#c1def4] hover:text-[#1d3040] dark:bg-[#18384d] dark:text-[#eef6ff] dark:hover:bg-[#21455f] dark:hover:text-[#eef6ff]"
+          : "text-[#404040] hover:bg-[#edf3f8] hover:text-[#1f2c39] dark:text-[#b9b9b9] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]",
+        className
+      )}
+    >
+      <span
+        className="flex h-full w-8 shrink-0 items-center justify-center"
+        aria-hidden={toggle ? undefined : true}
+      >
+        {toggle}
+      </span>
+      <NavLink to={to} className="flex min-w-0 flex-1 items-center gap-3">
+        {children}
+      </NavLink>
+    </div>
   )
 }

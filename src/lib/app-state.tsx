@@ -2,14 +2,17 @@ import * as React from "react"
 
 import {
   createId,
+  defaultAuth,
   defaultAppSnapshot,
   formatBytes,
   getBucketRoot,
   isVisibleNode,
+  type AuthState,
   type AppSnapshot,
   type BucketMount,
   type FileNode,
   type LoginActivityEntry,
+  type MockAuthUser,
   type OfflineTask,
   type SecurityState,
   type ShareRecord,
@@ -35,7 +38,21 @@ type BucketWizardInput = {
   corsConfigured: boolean
 }
 
+type AuthRegisterInput = {
+  email: string
+  password: string
+  username: string
+}
+
+type AuthResult = {
+  success: boolean
+  message?: string
+}
+
 type AppStateValue = {
+  auth: AuthState
+  currentUser: MockAuthUser | null
+  isAuthenticated: boolean
   profile: UserProfile
   settings: UserSettings
   security: SecurityState
@@ -50,6 +67,9 @@ type AppStateValue = {
   setThemeMode: (mode: ThemeMode) => void
   updateSettings: (patch: Partial<UserSettings>) => void
   updateProfile: (patch: Partial<UserProfile>) => void
+  login: (email: string, password: string) => AuthResult
+  register: (input: AuthRegisterInput) => AuthResult
+  logout: () => void
   verifyPassword: (value: string) => boolean
   resetPasswordVerification: () => void
   updateSecurity: (patch: Partial<SecurityState>) => void
@@ -101,6 +121,12 @@ function loadSnapshot(): AppSnapshot {
       profile: { ...defaultAppSnapshot.profile, ...parsed.profile },
       settings: { ...defaultAppSnapshot.settings, ...parsed.settings },
       security: { ...defaultAppSnapshot.security, ...parsed.security },
+      auth: {
+        ...defaultAuth,
+        ...parsed.auth,
+        users: parsed.auth?.users ?? defaultAuth.users,
+        currentUserId: parsed.auth?.currentUserId ?? defaultAuth.currentUserId,
+      },
       loginActivity: parsed.loginActivity ?? defaultAppSnapshot.loginActivity,
       buckets: parsed.buckets ?? defaultAppSnapshot.buckets,
       nodes: parsed.nodes ?? defaultAppSnapshot.nodes,
@@ -125,6 +151,17 @@ function appendCopySuffix(name: string) {
   }
 
   return `${name.slice(0, dotIndex)} 副本${name.slice(dotIndex)}`
+}
+
+function buildProfileFromAuthUser(user: MockAuthUser): UserProfile {
+  return {
+    username: user.username,
+    avatar: user.avatar,
+    email: user.email,
+    uid: `u_${user.id}`,
+    registeredAt: user.registeredAt,
+    group: user.group,
+  }
 }
 
 function cloneNode(node: FileNode, snapshot: AppSnapshot, parentIdMap = new Map<string, string>()): FileNode[] {
@@ -187,6 +224,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const activeBucket = React.useMemo(() => {
     return snapshot.buckets.find((bucket) => bucket.id === snapshot.activeBucketId) ?? snapshot.buckets[0]
   }, [snapshot.activeBucketId, snapshot.buckets])
+
+  const currentUser = React.useMemo(() => {
+    return snapshot.auth.users.find((user) => user.id === snapshot.auth.currentUserId) ?? null
+  }, [snapshot.auth.currentUserId, snapshot.auth.users])
 
   const updateSnapshot = React.useCallback((recipe: (current: AppSnapshot) => AppSnapshot) => {
     setSnapshot((current) => recipe(current))
@@ -294,11 +335,129 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSnapshot((current) => ({
       ...current,
       profile: { ...current.profile, ...patch },
+      auth: {
+        ...current.auth,
+        users: current.auth.users.map((user) =>
+          user.id === current.auth.currentUserId
+            ? {
+                ...user,
+                username: patch.username ?? user.username,
+                email: patch.email ?? user.email,
+                avatar: patch.avatar ?? user.avatar,
+                group: patch.group ?? user.group,
+                registeredAt: patch.registeredAt ?? user.registeredAt,
+              }
+            : user
+        ),
+      },
+    }))
+  }, [updateSnapshot])
+
+  const login = React.useCallback((email: string, password: string): AuthResult => {
+    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedPassword = password.trim()
+    const matchedUser = snapshot.auth.users.find(
+      (user) =>
+        user.email.toLowerCase() === normalizedEmail &&
+        user.password === normalizedPassword
+    )
+
+    if (!matchedUser) {
+      return {
+        success: false,
+        message: "邮箱或密码错误，请使用 mock 账号重新尝试。",
+      }
+    }
+
+    updateSnapshot((current) => ({
+      ...current,
+      profile: buildProfileFromAuthUser(matchedUser),
+      security: { ...current.security, passwordVerified: false },
+      auth: {
+        ...current.auth,
+        currentUserId: matchedUser.id,
+      },
+      loginActivity: [
+        {
+          id: createId("login"),
+          method: "密码",
+          device: "Cloudrave Mock Web",
+          ip: "127.0.0.1",
+          time: nowString(),
+        },
+        ...current.loginActivity,
+      ],
+    }))
+
+    return { success: true }
+  }, [snapshot.auth.users, updateSnapshot])
+
+  const register = React.useCallback((input: AuthRegisterInput): AuthResult => {
+    const normalizedEmail = input.email.trim().toLowerCase()
+    const normalizedName = input.username.trim()
+    const normalizedPassword = input.password.trim()
+
+    if (!normalizedEmail || !normalizedName || !normalizedPassword) {
+      return {
+        success: false,
+        message: "请完整填写注册信息。",
+      }
+    }
+
+    if (snapshot.auth.users.some((user) => user.email.toLowerCase() === normalizedEmail)) {
+      return {
+        success: false,
+        message: "该邮箱已存在，请直接登录。",
+      }
+    }
+
+    const nextUser: MockAuthUser = {
+      id: createId("auth"),
+      email: normalizedEmail,
+      password: normalizedPassword,
+      username: normalizedName,
+      avatar: `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(normalizedName)}`,
+      group: "普通用户",
+      registeredAt: nowString(),
+    }
+
+    updateSnapshot((current) => ({
+      ...current,
+      profile: buildProfileFromAuthUser(nextUser),
+      security: { ...current.security, passwordVerified: false },
+      auth: {
+        currentUserId: nextUser.id,
+        users: [...current.auth.users, nextUser],
+      },
+      loginActivity: [
+        {
+          id: createId("login"),
+          method: "注册",
+          device: "Cloudrave Mock Web",
+          ip: "127.0.0.1",
+          time: nowString(),
+        },
+        ...current.loginActivity,
+      ],
+    }))
+
+    return { success: true }
+  }, [snapshot.auth.users, updateSnapshot])
+
+  const logout = React.useCallback(() => {
+    updateSnapshot((current) => ({
+      ...current,
+      security: { ...current.security, passwordVerified: false },
+      auth: {
+        ...current.auth,
+        currentUserId: null,
+      },
     }))
   }, [updateSnapshot])
 
   const verifyPassword = React.useCallback((value: string) => {
-    const passed = value === "cloudrave123"
+    const expectedPassword = currentUser?.password ?? "admin123"
+    const passed = value === expectedPassword
     if (passed) {
       updateSnapshot((current) => ({
         ...current,
@@ -307,7 +466,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     return passed
-  }, [updateSnapshot])
+  }, [currentUser, updateSnapshot])
 
   const resetPasswordVerification = React.useCallback(() => {
     updateSnapshot((current) => ({
@@ -557,7 +716,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return task
   }, [updateSnapshot])
 
+  const isAuthenticated = Boolean(currentUser)
+
   const value = React.useMemo<AppStateValue>(() => ({
+    auth: snapshot.auth,
+    currentUser,
+    isAuthenticated,
     profile: snapshot.profile,
     settings: snapshot.settings,
     security: snapshot.security,
@@ -572,6 +736,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setThemeMode,
     updateSettings,
     updateProfile,
+    login,
+    register,
+    logout,
     verifyPassword,
     resetPasswordVerification,
     updateSecurity,
@@ -603,6 +770,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     formatBytes,
   }), [
     activeBucket,
+    currentUser,
     addBucket,
     addOfflineTask,
     copyNodes,
@@ -612,6 +780,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     deleteNodes,
     duplicateNodes,
     effectiveTheme,
+    isAuthenticated,
     getCategoryNodes,
     getFolderPathId,
     getFoldersForBucket,
@@ -621,9 +790,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getShareRecords,
     getSharedWithMeNodes,
     getTreeNodes,
+    login,
+    logout,
     moveNodes,
     pasteNodes,
     permanentlyDeleteNodes,
+    register,
     renameBucket,
     renameNode,
     resetPasswordVerification,
@@ -631,6 +803,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setActiveBucket,
     setThemeMode,
     shareNodes,
+    snapshot.auth,
     snapshot.buckets,
     snapshot.clipboard,
     snapshot.loginActivity,

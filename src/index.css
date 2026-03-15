@@ -44,34 +44,34 @@
 
 @layer base {
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.965 0 0);
+    --foreground: oklch(0.24 0 0);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.24 0 0);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.63 0.19 244);
-    --primary-foreground: oklch(0.985 0 0);
+    --popover-foreground: oklch(0.24 0 0);
+    --primary: oklch(0.72 0.14 232);
+    --primary-foreground: oklch(0.99 0 0);
     --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --secondary-foreground: oklch(0.24 0 0);
+    --muted: oklch(0.96 0 0);
+    --muted-foreground: oklch(0.56 0 0);
+    --accent: oklch(0.96 0 0);
+    --accent-foreground: oklch(0.24 0 0);
     --destructive: oklch(0.58 0.22 27);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --radius: 0.875rem;
-    --sidebar: oklch(0.97 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
+    --border: oklch(0.89 0 0);
+    --input: oklch(0.89 0 0);
+    --ring: oklch(0.77 0.07 232);
+    --radius: 1rem;
+    --sidebar: oklch(0.95 0 0);
+    --sidebar-foreground: oklch(0.24 0 0);
     --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: var(--primary-foreground);
-    --sidebar-accent: oklch(0.95 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-    --app-shell: oklch(0.97 0 0);
+    --sidebar-accent: oklch(0.98 0 0);
+    --sidebar-accent-foreground: oklch(0.24 0 0);
+    --sidebar-border: oklch(0.88 0 0);
+    --sidebar-ring: oklch(0.77 0.07 232);
+    --app-shell: oklch(0.95 0 0);
     --app-panel: oklch(1 0 0);
   }
 
@@ -114,11 +114,18 @@
     @apply font-sans;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
   }
 }
 
@@ -143,8 +150,8 @@
 .app-panel {
   background: var(--app-panel);
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.4) inset,
-    0 8px 30px rgb(15 23 42 / 0.03);
+    0 1px 0 rgb(255 255 255 / 0.65) inset,
+    0 8px 24px rgb(15 23 42 / 0.03);
 }
 
 .dark .app-panel {

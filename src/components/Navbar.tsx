@@ -9,10 +9,10 @@ import {
   IconSun,
   IconUpload,
 } from "@tabler/icons-react"
+import { Menu } from "lucide-react"
 
 import { useAppState } from "@/lib/app-state"
-import { SidebarTrigger } from "./ui/sidebar"
-import { Input } from "./ui/input"
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,16 +20,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
-import { useIsMobile } from "@/hooks/use-mobile"
+import { SidebarTrigger, useSidebar } from "./ui/sidebar"
 
 export function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
+  const { open, toggleSidebar } = useSidebar()
   const {
     profile,
     effectiveTheme,
     setThemeMode,
+    logout,
     addOfflineTask,
     createFolder,
     createSampleFile,
@@ -41,22 +43,37 @@ export function Navbar() {
       return null
     }
 
-    const path = location.pathname === "/app" ? "" : decodeURIComponent(location.pathname.replace("/app", ""))
+    const path =
+      location.pathname === "/app"
+        ? ""
+        : decodeURIComponent(location.pathname.replace("/app", ""))
     return getFolderPathId(path)
   }, [getFolderPathId, location.pathname])
 
   return (
-    <header className="flex h-[65px] shrink-0 items-center justify-between px-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+    <header className="flex shrink-0 items-center justify-between gap-4 px-4 p-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <SidebarTrigger className="text-[#666666] hover:bg-white hover:text-[#2b2b2b] md:hidden" />
+        {!isMobile && !open ? (
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#4b4b4b] transition-colors hover:bg-[#edf3f8] hover:text-[#232323] md:flex dark:text-[#d1d1d1] dark:hover:bg-[#23282f] dark:hover:text-[#f5f5f5]"
+            aria-label="展开侧边栏"
+          >
+            <Menu size={20} />
+          </button>
+        ) : null}
 
         <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+          <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-[16px] bg-primary px-5 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
             <IconPlus size={18} />
             {!isMobile ? "新建" : null}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
-            <DropdownMenuItem onClick={() => createFolder(currentFolderId, "新建文件夹")}>
+          <DropdownMenuContent align="start" className="w-52 rounded-2xl">
+            <DropdownMenuItem
+              onClick={() => createFolder(currentFolderId, "新建文件夹")}
+            >
               <IconFolderPlus size={16} />
               新建文件夹
             </DropdownMenuItem>
@@ -64,7 +81,11 @@ export function Navbar() {
               <IconUpload size={16} />
               上传模拟文件
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => addOfflineTask("https://download.example.com/demo-package.zip")}>
+            <DropdownMenuItem
+              onClick={() =>
+                addOfflineTask("https://download.example.com/demo-package.zip")
+              }
+            >
               <IconUpload size={16} />
               新建离线下载
             </DropdownMenuItem>
@@ -76,48 +97,77 @@ export function Navbar() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="relative hidden md:block md:w-[400px]">
-          <IconSearch className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" size={18} />
-          <Input
+        <div className="hidden h-11 min-w-0 max-w-[420px] flex-1 items-center rounded-[18px] border border-[#d6d6d6] bg-white px-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset] md:flex dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
+          <IconSearch className="shrink-0 text-[#4b4b4b] dark:text-[#b8b8b8]" size={20} />
+          <input
             type="text"
-            placeholder="搜文件、文件夹或功能..."
-            className="h-10 w-full rounded-full bg-muted/50 pl-10 pr-4 text-sm focus-visible:bg-background"
+            placeholder="按下 Ctrl K 进行检索..."
+            className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-[#333333] outline-none placeholder:text-[#8a8a8a] dark:text-[#efefef] dark:placeholder:text-[#8e8e8e]"
           />
+          <div className="flex shrink-0 items-center gap-1 text-[11px] text-[#8a8a8a] dark:text-[#8e8e8e]">
+            <span className="rounded-md border border-[#d4d4d4] bg-[#f4f4f4] px-1.5 py-0.5 dark:border-white/10 dark:bg-[#232323]">
+              Ctrl
+            </span>
+            <span className="rounded-md border border-[#d4d4d4] bg-[#f4f4f4] px-1.5 py-0.5 dark:border-white/10 dark:bg-[#232323]">
+              K
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 pb-0.5">
         <button
-          className="md:hidden rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="rounded-full p-2 text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:hidden dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="search"
         >
           <IconSearch size={20} />
         </button>
         <button
-          onClick={() => setThemeMode(effectiveTheme === "dark" ? "light" : "dark")}
-          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() =>
+            setThemeMode(effectiveTheme === "dark" ? "light" : "dark")
+          }
+          className="flex h-10 w-10 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="toggle-theme"
         >
-          {effectiveTheme === "dark" ? <IconSun size={20} /> : <IconMoon size={20} />}
+          {effectiveTheme === "dark" ? (
+            <IconSun size={20} />
+          ) : (
+            <IconMoon size={20} />
+          )}
         </button>
         <button
           onClick={() => navigate("/settings/profile")}
-          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="open-settings"
         >
           <IconSettings size={20} />
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="ml-1 h-9 w-9 overflow-hidden rounded-full border border-border/70 bg-muted focus:outline-none">
-              <img src={profile.avatar} alt={profile.username} className="h-full w-full object-cover" />
+            <button className="ml-1 h-10 w-10 overflow-hidden rounded-full border border-[#d6d6d6] bg-white focus:outline-none dark:border-white/10 dark:bg-[#171717]">
+              <img
+                src={profile.avatar}
+                alt={profile.username}
+                className="h-full w-full object-cover"
+              />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <div className="flex items-center justify-start gap-2 p-2 relative">
-               <div className="flex flex-col space-y-1 leading-none w-full">
-                {profile.username && <p className="font-medium text-sm flex justify-between items-center w-full"><span>{profile.username}</span><span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-md">管理</span></p>}
-                {profile.email && <p className="w-[180px] truncate leading-none text-xs text-muted-foreground mt-1">{profile.email}</p>}
+          <DropdownMenuContent align="end" className="w-56 rounded-2xl">
+            <div className="relative flex items-center justify-start gap-2 p-2">
+              <div className="flex w-full flex-col space-y-1 leading-none">
+                {profile.username ? (
+                  <p className="flex w-full items-center justify-between text-sm">
+                    <span>{profile.username}</span>
+                    <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                      管理
+                    </span>
+                  </p>
+                ) : null}
+                {profile.email ? (
+                  <p className="mt-1 w-[180px] truncate text-xs leading-none text-muted-foreground">
+                    {profile.email}
+                  </p>
+                ) : null}
               </div>
             </div>
             <DropdownMenuSeparator />
@@ -125,7 +175,13 @@ export function Navbar() {
               个人主页
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600 focus:text-red-600">
+            <DropdownMenuItem
+              className="text-red-600 focus:text-red-600"
+              onClick={() => {
+                logout()
+                navigate("/login", { replace: true })
+              }}
+            >
               退出登录
             </DropdownMenuItem>
           </DropdownMenuContent>
