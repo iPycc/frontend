@@ -1,0 +1,29 @@
+import { PageShell } from "@/components/shared/PageShell"
+import { usePageTitle } from "@/hooks/use-page-title"
+import { useAppState } from "@/lib/app-state"
+
+export function Tasks() {
+  usePageTitle("后台任务")
+  const { offlineTasks } = useAppState()
+
+  return (
+    <PageShell title="后台任务" description="展示离线下载、打包下载等后台任务的执行状态。">
+      <div className="space-y-4">
+        {offlineTasks.map((task) => (
+          <div key={task.id} className="rounded-[15px] border border-border/60 bg-background p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-medium">{task.name}</div>
+                <div className="text-sm text-muted-foreground">{task.url}</div>
+              </div>
+              <div className="text-sm text-muted-foreground">{task.status}</div>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${task.progress}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </PageShell>
+  )
+}
