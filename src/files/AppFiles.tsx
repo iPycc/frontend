@@ -1,8 +1,8 @@
 import * as React from "react"
 import { useLocation } from "react-router-dom"
 
-import { FileArea } from "../components/FileArea"
-import { Toolbar } from "../components/Toolbar"
+import { FileArea } from "@/files/FileAreaLayout"
+import { Toolbar } from "@/toolbar/Toolbar"
 import { useAppState } from "@/lib/app-state"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"

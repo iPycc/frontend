@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
-import { Button } from "./components/button"
+import { Button } from "@/components/ui/button"
 import { useLocation, useNavigate } from "react-router-dom"
 import { Cloud, Mail, User, RectangleEllipsis } from "lucide-react"
 import { ModeToggle } from "@/components/mode-toggle"
@@ -12,15 +12,15 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "./components/card"
+} from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
   FieldSeparator
-} from "./components/field"
-import { Input } from "./components/input"
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import "@/styles/slide-transition.css"
 
 export function SignupForm({

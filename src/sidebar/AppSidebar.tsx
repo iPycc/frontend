@@ -20,16 +20,16 @@ import {
 
 import { useAppState } from "@/lib/app-state"
 import { type FileNode } from "@/lib/mock-data"
-import { cn } from "../lib/utils"
+import { cn } from "@/lib/utils"
 import { BucketSwitcher } from "./BucketSwitcher"
-import { Logo } from "./ui/logo"
+import { Logo } from "@/components/ui/logo"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   useSidebar,
-} from "./ui/sidebar"
+} from "@/components/ui/sidebar"
 import { AnimatePresence, motion } from "motion/react"
 
 const utilityPaths = [

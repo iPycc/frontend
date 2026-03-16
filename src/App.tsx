@@ -1,9 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
-import { MainLayout } from "./components/MainLayout"
+import { MainLayout } from "@/layout/MainLayout"
 import { useAppState } from "./lib/app-state"
-import { AppFiles } from "./pages/AppFiles"
-import { AuthLayout } from "./pages/AuthLayout"
+import { AppFiles } from "./files/AppFiles"
+import { AuthLayout } from "@/auth/AuthLayout"
 import {
   Buckets,
   Discussions,
@@ -18,15 +18,15 @@ import {
   Tasks,
   Users,
 } from "./pages/Placeholders"
-import { Login } from "./pages/Login"
-import { Register } from "./pages/Register"
+import { Login } from "./auth/LoginPage"
+import { Register } from "./auth/RegisterPage"
 import {
   PersonalizationSettingsPage,
   ProfileSettingsPage,
   SecuritySettingsPage,
   SettingsLayout,
   StorageSettingsPage,
-} from "./pages/settings"
+} from "./settings"
 
 export default function App() {
   const { isAuthenticated } = useAppState()

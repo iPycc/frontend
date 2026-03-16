@@ -2,7 +2,7 @@ import * as React from "react"
 import { useState, useRef, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
-import { Button } from "./components/button"
+import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Logo } from "@/components/ui/logo" // 使用 Cloudrave Logo
 import { Mail, RectangleEllipsis, ArrowLeft, Loader2 } from "lucide-react"
@@ -13,15 +13,15 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "./components/card"
+} from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
-} from "./components/field"
-import { Input } from "./components/input"
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import "@/styles/slide-transition.css"
 
 // 登录阶段类型

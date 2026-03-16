@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .git
 .figma
+src_old

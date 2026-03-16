@@ -11,7 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu"
 
 export function BucketSwitcher({ className }: { className?: string }) {
   const navigate = useNavigate()

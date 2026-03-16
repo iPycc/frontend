@@ -19,8 +19,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu"
-import { SidebarTrigger, useSidebar } from "./ui/sidebar"
+} from "@/components/ui/dropdown-menu"
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 
 export function Navbar() {
   const navigate = useNavigate()
