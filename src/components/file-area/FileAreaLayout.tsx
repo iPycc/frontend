@@ -111,7 +111,7 @@ export function FileArea({
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-[15px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
+          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-1">

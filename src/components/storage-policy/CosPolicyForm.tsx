@@ -75,7 +75,7 @@ export function CosPolicyForm({ draft, onChange, onBack, onNext }: CosPolicyForm
         <h2 className="text-xl font-semibold tracking-wide">添加 腾讯云COS</h2>
       </div>
 
-      <div className="rounded-[12px] border border-border/50 px-6">
+      <div className="rounded-md border border-border/50 px-6">
         <Row label="名称" hint="存储策略的展示名，也会用于向用户展示。">
           <Input
             className="h-10 w-full text-[15px]"

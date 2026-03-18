@@ -17,7 +17,7 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete }: StoragePolicyCar
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3 rounded-[15px] border border-border/60 px-4 py-4 transition-colors hover:border-border",
+        "group relative flex flex-col gap-3 rounded-xl border border-border/60 px-4 py-4 transition-colors hover:border-border",
         "bg-card"
       )}
     >

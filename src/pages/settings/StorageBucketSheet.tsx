@@ -110,7 +110,7 @@ export function StorageBucketSheet({
                 type="button"
                 onClick={() => onStepChange(index)}
                 className={cn(
-                  "rounded-[12px] px-2 py-2 text-left transition-colors",
+                  "rounded-md px-2 py-2 text-left transition-colors",
                   index === step
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/70 text-muted-foreground hover:text-foreground"
@@ -150,7 +150,7 @@ export function StorageBucketSheet({
               </FieldBlock>
 
               <div
-                className="rounded-[15px] px-4 py-4"
+                className="rounded-xl px-4 py-4"
                 style={{ backgroundColor: "var(--app-shell)" }}
               >
                 <div className="text-sm font-medium">开始前请准备</div>
@@ -312,7 +312,7 @@ export function StorageBucketSheet({
 
               {draft.advancedMode ? (
                 <div
-                  className="space-y-4 rounded-[15px] px-4 py-4"
+                  className="space-y-4 rounded-xl px-4 py-4"
                   style={{ backgroundColor: "var(--app-shell)" }}
                 >
                   <div className="text-sm font-medium">高级模式</div>
@@ -352,7 +352,7 @@ export function StorageBucketSheet({
           {step === 5 ? (
             <div className="space-y-4">
               <div
-                className="rounded-[15px] px-4 py-4"
+                className="rounded-xl px-4 py-4"
                 style={{ backgroundColor: "var(--app-shell)" }}
               >
                 <div className="text-sm font-medium">{draft.name || "未命名存储桶"}</div>

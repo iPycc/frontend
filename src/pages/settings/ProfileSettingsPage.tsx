@@ -422,11 +422,11 @@ export function ProfileSettingsPage() {
           <button
             type="button"
             onClick={triggerUpload}
-            className="block h-[180px] w-[180px] overflow-hidden rounded-[15px] transition-opacity hover:opacity-90"
+            className="block h-[180px] w-[180px] overflow-hidden rounded-xl transition-opacity hover:opacity-90"
           >
-            <Avatar className="h-full w-full rounded-[15px] after:hidden">
+            <Avatar className="h-full w-full rounded-xl after:hidden">
               <AvatarImage src={profile.avatar} alt={profile.username} className="object-cover" />
-              <AvatarFallback className="rounded-[15px] text-3xl">
+              <AvatarFallback className="rounded-xl text-3xl">
                 {profile.username.slice(0, 1).toUpperCase()}
               </AvatarFallback>
             </Avatar>

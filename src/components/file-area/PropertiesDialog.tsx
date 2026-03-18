@@ -25,7 +25,7 @@ export function PropertiesDialog({ node, bucketName, formatBytes, onClose }: Pro
           <DialogDescription>查看当前对象的 mock 元信息。</DialogDescription>
         </DialogHeader>
         {node ? (
-          <div className="grid gap-3 rounded-[10px] border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+          <div className="grid gap-3 rounded-lg border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
             <div>名称：{node.name}</div>
             <div>类型：{node.kind === "folder" ? "文件夹" : node.ext?.toUpperCase() || "文件"}</div>
             <div>大小：{formatBytes(node.size)}</div>

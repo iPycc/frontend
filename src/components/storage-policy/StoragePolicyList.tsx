@@ -37,7 +37,7 @@ export function StoragePolicyList({
         <button
           type="button"
           onClick={onAddPolicy}
-          className="flex min-h-[100px] items-center justify-center gap-2 rounded-[15px] border border-dashed border-border/60 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          className="flex min-h-[100px] items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
         >
           <IconPlus size={16} />
           添加存储策略

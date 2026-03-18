@@ -23,7 +23,7 @@ export function ShareDialog({ links, onClose }: ShareDialogProps) {
         </DialogHeader>
         <div className="space-y-2">
           {links.map((link) => (
-            <div key={link} className="rounded-[10px] border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+            <div key={link} className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
               {link}
             </div>
           ))}

@@ -43,7 +43,7 @@ export function SecuritySettingsPage() {
     <div className="space-y-8">
       <section className="space-y-3">
         <div className="text-sm font-medium">密码</div>
-        <div className="rounded-[14px] bg-[#04222e] px-4 py-4 text-sm text-[#8fd7ff] dark:bg-[#04222e]">
+        <div className="rounded-lg bg-primary/[0.08] px-4 py-4 text-sm text-foreground">
           <div className="flex items-center gap-2">
             <IconInfoCircle size={18} />
             <span>显示设置于 {security.passwordUpdatedAt}</span>
@@ -73,7 +73,7 @@ export function SecuritySettingsPage() {
           {security.passkeys.map((item) => (
             <div
               key={item.id}
-              className="flex items-start justify-between gap-3 rounded-[15px] border border-border/70 px-4 py-4 sm:items-center"
+              className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-4 py-4 sm:items-center"
             >
               <div className="flex min-w-0 flex-1 items-start gap-4">
                 <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
@@ -84,7 +84,7 @@ export function SecuritySettingsPage() {
                   <div className="mt-1 text-sm text-muted-foreground">
                     创建于 {item.createdAt}
                   </div>
-                  <div className="text-sm text-[#70d56c]">
+                  <div className="text-sm text-green-600 dark:text-green-400">
                     上次使用于 {item.lastUsedAt}
                   </div>
                 </div>
@@ -116,7 +116,7 @@ export function SecuritySettingsPage() {
           {loginActivity.map((item) => (
             <div
               key={item.id}
-              className="rounded-[15px] border border-border/70 px-4 py-4"
+              className="rounded-xl border border-border/70 px-4 py-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -138,7 +138,7 @@ export function SecuritySettingsPage() {
             </div>
           ))}
         </div>
-        <div className="hidden overflow-hidden rounded-[15px] border border-border/70 md:block">
+        <div className="hidden overflow-hidden rounded-xl border border-border/70 md:block">
           <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -171,7 +171,7 @@ export function SecuritySettingsPage() {
 
 function ActivityStatusBadge() {
   return (
-    <span className="inline-flex rounded-full bg-[#4caf50]/20 px-2 py-0.5 text-xs text-[#71db74]">
+    <span className="inline-flex rounded-full bg-green-500/15 px-2 py-0.5 text-xs text-green-600 dark:text-green-400">
       成功
     </span>
   )

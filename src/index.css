@@ -34,12 +34,13 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: 10px;
+  --color-nav-active-bg: var(--nav-active-bg);
+  --color-nav-active-fg: var(--nav-active-fg);
+  --color-nav-hover-bg: var(--nav-hover-bg);
+  --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 14px;
-  --radius-xl: 15px;
-  --radius-[15px]: 15px;
-  --radius-3xl: 15px;
+  --radius-xl: 16px;
 }
 
 @layer base {
@@ -75,6 +76,9 @@
     --sidebar-ring: oklch(0.77 0.07 232);
     --app-shell: oklch(0.95 0 0);
     --app-panel: oklch(1 0 0);
+    --nav-active-bg: oklch(0.88 0.07 232);
+    --nav-active-fg: oklch(0.22 0.05 232);
+    --nav-hover-bg: oklch(0.95 0.02 220);
   }
 
   .dark {
@@ -110,6 +114,9 @@
     --sidebar-ring: var(--ring);
     --app-shell: var(--background);
     --app-panel: var(--card);
+    --nav-active-bg: oklch(0.26 0.09 244);
+    --nav-active-fg: oklch(0.97 0.01 220);
+    --nav-hover-bg: oklch(0.23 0.03 240);
   }
 
   * {
@@ -164,14 +171,4 @@
   box-shadow:
     0 1px 0 rgb(255 255 255 / 0.02) inset,
     0 10px 24px rgb(0 0 0 / 0.24);
-}
-
-/* Keep legacy hard-coded radii aligned with the global 10-15px system. */
-[class*="rounded-[16px]"],
-[class*="rounded-[18px]"],
-[class*="rounded-[20px]"],
-[class*="rounded-[22px]"],
-[class*="rounded-[24px]"],
-[class*="rounded-[28px]"] {
-  border-radius: 14px !important;
 }

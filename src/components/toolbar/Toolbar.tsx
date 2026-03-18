@@ -86,7 +86,7 @@ export function Toolbar({
   currentLabel,
 }: ToolbarProps) {
   return (
-    <div className="app-panel relative flex h-11.5 shrink-0 items-center justify-between overflow-hidden rounded-[15px] border border-[#d9d9d9] px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
+    <div className="app-panel relative flex h-11.5 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait">
         {selectedCount > 0 ? (
           <motion.div
@@ -149,9 +149,9 @@ export function Toolbar({
                     <BreadcrumbLink asChild>
                       <Link
                         to="/app"
-                        className="flex h-8 items-center gap-2 text-[#3b3b3b] dark:text-[#f0f0f0]"
+                        className="flex h-8 items-center gap-2 text-foreground"
                       >
-                        <IconHome2 size={18} className="text-[#3b3b3b] dark:text-[#f0f0f0]" />
+                        <IconHome2 size={18} className="text-foreground" />
                         我的文件
                       </Link>
                     </BreadcrumbLink>
@@ -159,10 +159,10 @@ export function Toolbar({
                   {currentLabel ? (
                     <>
                       <BreadcrumbSeparator>
-                        <IconChevronRight size={14} className="text-[#8b8b8b] dark:text-[#7f7f7f]" />
+                        <IconChevronRight size={14} className="text-muted-foreground" />
                       </BreadcrumbSeparator>
                       <BreadcrumbItem>
-                        <BreadcrumbPage className="text-[#3b3b3b] dark:text-[#f0f0f0]">
+                        <BreadcrumbPage className="text-foreground">
                           {currentLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
@@ -182,18 +182,18 @@ export function Toolbar({
                           key={`${part}-${index}`}
                         >
                           <BreadcrumbSeparator>
-                            <IconChevronRight size={14} className="text-[#8b8b8b] dark:text-[#7f7f7f]" />
+                            <IconChevronRight size={14} className="text-muted-foreground" />
                           </BreadcrumbSeparator>
                           <BreadcrumbItem>
                             {isLast ? (
-                              <BreadcrumbPage className="text-[#3b3b3b] dark:text-[#f0f0f0]">
+                              <BreadcrumbPage className="text-foreground">
                                 {part}
                               </BreadcrumbPage>
                             ) : (
                               <BreadcrumbLink asChild>
                                 <Link
                                   to={toPath}
-                                  className="flex h-8 items-center text-[#666666] dark:text-[#9c9c9c]"
+                                  className="flex h-8 items-center text-muted-foreground"
                                 >
                                   {part}
                                 </Link>
@@ -209,9 +209,9 @@ export function Toolbar({
             </div>
 
             <div className="flex items-center gap-2">
-              <ButtonGroup className="hidden md:flex [&>[data-slot=dropdown-menu-trigger]]:flex [&>[data-slot=dropdown-menu-trigger]]:h-10 [&>[data-slot=dropdown-menu-trigger]]:items-center [&>[data-slot=dropdown-menu-trigger]]:gap-2 [&>[data-slot=dropdown-menu-trigger]]:bg-white [&>[data-slot=dropdown-menu-trigger]]:px-3.5 [&>[data-slot=dropdown-menu-trigger]]:text-sm [&>[data-slot=dropdown-menu-trigger]]:text-[#4e4e4e] [&>[data-slot=dropdown-menu-trigger]]:transition-colors [&>[data-slot=dropdown-menu-trigger]]:hover:bg-[#f5f5f5] dark:[&>[data-slot=dropdown-menu-trigger]]:border-white/10 dark:[&>[data-slot=dropdown-menu-trigger]]:bg-[#171717] dark:[&>[data-slot=dropdown-menu-trigger]]:text-[#d1d1d1] dark:[&>[data-slot=dropdown-menu-trigger]]:hover:bg-[#1d1d1d]">
+              <ButtonGroup className="hidden md:flex [&>[data-slot=dropdown-menu-trigger]]:flex [&>[data-slot=dropdown-menu-trigger]]:h-10 [&>[data-slot=dropdown-menu-trigger]]:items-center [&>[data-slot=dropdown-menu-trigger]]:gap-2 [&>[data-slot=dropdown-menu-trigger]]:bg-card [&>[data-slot=dropdown-menu-trigger]]:px-3.5 [&>[data-slot=dropdown-menu-trigger]]:text-sm [&>[data-slot=dropdown-menu-trigger]]:text-foreground [&>[data-slot=dropdown-menu-trigger]]:transition-colors [&>[data-slot=dropdown-menu-trigger]]:hover:bg-muted">
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-lg bg-card px-3.5 text-sm text-foreground transition-colors hover:bg-muted">
                     {viewMode === "grid" ? (
                       <IconLayoutGrid size={16} />
                     ) : (
@@ -233,7 +233,7 @@ export function Toolbar({
                 </DropdownMenu>
 
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-lg bg-card px-3.5 text-sm text-foreground transition-colors hover:bg-muted">
                     <IconArrowsSort size={16} />
                     排序
                   </DropdownMenuTrigger>
@@ -253,7 +253,7 @@ export function Toolbar({
               </ButtonGroup>
 
               <DropdownMenu>
-                <DropdownMenuTrigger className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-white text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                <DropdownMenuTrigger className="flex h-10 w-10 items-center justify-center rounded-lg bg-card text-foreground transition-colors hover:bg-muted">
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

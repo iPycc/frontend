@@ -107,7 +107,7 @@ export function SidebarFolderTree({
                     <button
                       type="button"
                       onClick={(event) => toggle(folder.id, event)}
-                      className="flex h-5 w-5 items-center justify-center rounded-full text-[#4f4f4f] transition-colors dark:text-[#9a9a9a]"
+                      className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors"
                     >
                       {isOpen ? (
                         <IconChevronDown size={12} />
@@ -121,8 +121,8 @@ export function SidebarFolderTree({
                 <IconFolderFilled
                   size={17}
                   className={cn(
-                    "shrink-0 text-[#8b8b8b] dark:text-[#8f8f8f]",
-                    isCurrent ? "text-[#2d6f9a] dark:text-[#80c8ff]" : ""
+                    "shrink-0 text-muted-foreground",
+                    isCurrent ? "text-primary" : ""
                   )}
                 />
                 <span className="truncate">{folder.name}</span>

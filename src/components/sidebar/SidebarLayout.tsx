@@ -75,11 +75,11 @@ export function SidebarLayout() {
     <Sidebar className="border-none bg-transparent">
       <SidebarHeader className="px-2 pl-3 pt-3">
         <div className="group/logo relative flex h-12 items-center pl-5">
-          <Logo showText className="gap-2 text-[#2b2b2b] dark:text-[#f4f4f4]" />
+          <Logo showText className="gap-2 text-foreground" />
           <button
             type="button"
             onClick={toggleSidebar}
-            className="pointer-events-none absolute right-0 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#666666] opacity-0 transition-all group-hover/logo:pointer-events-auto group-hover/logo:opacity-100 hover:bg-[#edf3f8] hover:text-[#2b2b2b] md:flex dark:text-[#b7b7b7] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]"
+            className="pointer-events-none absolute right-0 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-all group-hover/logo:pointer-events-auto group-hover/logo:opacity-100 hover:bg-nav-hover-bg hover:text-foreground md:flex"
             aria-label={open ? "收起侧边栏" : "展开侧边栏"}
           >
             {open ? <IconChevronLeft size={16} /> : <IconChevronRight size={16} />}
@@ -93,16 +93,16 @@ export function SidebarLayout() {
           <div>
             <div
               className={cn(
-                "flex h-9 items-center rounded-full pr-3 text-[15px] transition-colors",
+                "flex h-9 items-center rounded-full pr-3 text-sm transition-colors",
                 isRootExplorer
-                  ? "bg-[#cfe7f9] text-[#1d3040] hover:bg-[#c1def4] hover:text-[#1d3040] dark:bg-[#18384d] dark:text-[#eef6ff] dark:hover:bg-[#21455f] dark:hover:text-[#eef6ff]"
-                  : "text-[#303030] hover:bg-[#ebf2f8] hover:text-[#1f2c39] dark:text-[#c1c1c1] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]"
+                  ? "bg-nav-active-bg text-nav-active-fg hover:bg-nav-active-bg hover:text-nav-active-fg"
+                  : "text-foreground hover:bg-nav-hover-bg hover:text-foreground"
               )}
             >
               <button
                 type="button"
                 onClick={() => setIsTreeOpen((current) => !current)}
-                className="flex h-full w-8 shrink-0 items-center justify-center text-[#7a7a7a] transition-colors dark:text-[#8e8e8e]"
+                className="flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors"
                 aria-label={isTreeOpen ? "收起目录树" : "展开目录树"}
               >
                 {isTreeOpen ? (
@@ -112,7 +112,7 @@ export function SidebarLayout() {
                 )}
               </button>
               <NavLink to="/app" className="flex min-w-0 flex-1 items-center gap-3">
-                <IconHome size={17} className="shrink-0 text-[#5b6570] dark:text-[#c5d0da]" />
+                <IconHome size={17} className="shrink-0 text-muted-foreground" />
                 <span>我的文件</span>
               </NavLink>
             </div>

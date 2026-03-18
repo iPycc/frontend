@@ -37,11 +37,11 @@ export function CreateMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-[10px] bg-primary px-4 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
+      <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-lg bg-primary px-4 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
         <IconPlus size={18} />
         {!isMobile ? "新建" : null}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52 rounded-[15px]">
+      <DropdownMenuContent align="start" className="w-52 rounded-xl">
         <DropdownMenuItem
           onClick={() => createFolder(currentFolderId, "新建文件夹")}
         >

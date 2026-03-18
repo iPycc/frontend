@@ -9,25 +9,25 @@ interface SidebarQuotaProps {
 
 export function SidebarQuota({ used, total, quotaRatio, formatBytes }: SidebarQuotaProps) {
   return (
-    <div className="rounded-[15px] border border-[#dadada] bg-white/88 px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:bg-[#171717] dark:shadow-none">
+    <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:shadow-none">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[#252525] dark:text-[#f2f2f2]">已使用</span>
+        <span className="text-sm text-foreground">已使用</span>
         <NavLink
           to="/settings/storage"
-          className="text-sm text-[#1976c9] transition-colors hover:text-[#0e5da5] dark:text-[#7dcbff] dark:hover:text-[#a3dcff]"
+          className="text-sm text-primary transition-colors hover:text-primary/80"
         >
           详情
         </NavLink>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-[#e5e5e5] dark:bg-[#2a2a2a]">
+      <div className="mt-3 h-2 rounded-full bg-border/70 dark:bg-muted">
         <div
-          className="h-full rounded-full bg-[#6eb9ff] dark:bg-[#4f98d9]"
+          className="h-full rounded-full bg-primary"
           style={{
             width: `${Math.max(quotaRatio * 100, used > 0 ? 8 : 0)}%`,
           }}
         />
       </div>
-      <div className="mt-2 text-sm text-[#505050] dark:text-[#c7c7c7]">
+      <div className="mt-2 text-sm text-muted-foreground">
         {formatBytes(used)} / {formatBytes(total)}
       </div>
     </div>

@@ -9,3 +9,4 @@ coverage/
 .git
 .figma
 src_old
+package-lock.json

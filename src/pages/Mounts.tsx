@@ -23,7 +23,7 @@ export function Mounts() {
     >
       <div className="grid gap-4 lg:grid-cols-2">
         {buckets.map((bucket) => (
-          <div key={bucket.id} className="rounded-[15px] border border-border/60 bg-background p-4">
+          <div key={bucket.id} className="rounded-xl border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{bucket.name}</div>

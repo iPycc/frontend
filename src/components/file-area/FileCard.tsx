@@ -34,10 +34,10 @@ export function FileCard({
       <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
         <div
           className={cn(
-            "group flex h-12 w-full items-center gap-3 rounded-[14px] border px-3.5 text-left transition-colors",
+            "group flex h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition-colors",
             selected
-              ? "border-[#7fcbff] bg-[#ebf7ff] dark:border-[#265a87] dark:bg-[#112235]"
-              : "border-transparent bg-[#f2f2f2] hover:bg-[#ececec] dark:bg-[#202020] dark:hover:bg-[#272727]"
+              ? "border-primary/30 bg-primary/[0.08] dark:border-primary/40 dark:bg-primary/[0.13]"
+              : "border-transparent bg-muted hover:bg-muted/70 dark:bg-muted dark:hover:bg-muted/70"
           )}
         >
           <button
@@ -49,8 +49,8 @@ export function FileCard({
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors",
               selected
-                ? "bg-[#dff2ff] text-primary dark:bg-[#16334f]"
-                : "bg-[#ebebeb] text-[#777777] hover:bg-[#e2e2e2] dark:bg-[#272727] dark:text-[#9b9b9b] dark:hover:bg-[#2f2f2f]"
+                ? "bg-primary/[0.12] text-primary dark:bg-primary/20"
+                : "bg-muted/80 text-muted-foreground hover:bg-border dark:bg-accent dark:hover:bg-accent/70"
             )}
             aria-label={`选择 ${item.name}`}
           >
@@ -68,7 +68,7 @@ export function FileCard({
             }}
             className="min-w-0 flex-1 text-left"
           >
-            <div className="truncate text-sm text-[#404040] dark:text-[#eaeaea]" title={item.name}>
+            <div className="truncate text-sm text-foreground" title={item.name}>
               {truncateFilename(item.name, 22)}
             </div>
           </button>
