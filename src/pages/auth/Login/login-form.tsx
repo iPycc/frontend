@@ -41,6 +41,7 @@ export function LoginForm({
   const [isAnimating, setIsAnimating] = useState(false)
   const [isGoingBack, setIsGoingBack] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isEnteringApp, setIsEnteringApp] = useState(false)
   const [containerHeight, setContainerHeight] = useState<number | "auto">(
     state?.fromRegister && state?.initialHeight ? state.initialHeight : "auto"
   )
@@ -89,11 +90,13 @@ export function LoginForm({
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isLoading) {
+    if (!isLoading && !isEnteringApp) {
       setIsLoading(true)
       try {
         const result = login(email, password)
         if (result.success) {
+          setIsEnteringApp(true)
+          await new Promise((resolve) => setTimeout(resolve, 700))
           navigate("/app")
         } else {
           alert(result.message || "登录失败，请检查邮箱和密码")
@@ -101,6 +104,7 @@ export function LoginForm({
       } catch (error) {
         console.error("登录错误:", error)
         alert("登录出错，请稍后重试")
+        setIsEnteringApp(false)
       } finally {
         setIsLoading(false)
       }
@@ -128,10 +132,23 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-3", className)} {...props}>
-      <Card>
+      <Card className="relative overflow-hidden">
+        {isEnteringApp ? (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-card/96 backdrop-blur-sm">
+            <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Loader2 className="size-7 animate-spin" />
+            </div>
+            <div className="space-y-1 text-center">
+              <div className="text-base font-medium">正在进入 Cloudrave</div>
+              <div className="text-sm text-muted-foreground">
+                正在同步工作区与用户状态...
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-row items-center justify-between pr-5">
           <div className="flex items-center gap-2 font-semibold flex-row justify-start px-6">
-            <Logo showText className="text-white" />
+            <Logo showText className="text-foreground" />
           </div>
           <ModeToggle />
         </div>
@@ -220,7 +237,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading} className="w-full">
+                      <Button type="submit" disabled={isLoading || isEnteringApp} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
@@ -239,7 +256,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="button" variant="outline" onClick={handleBack} className="w-full">
+                      <Button type="button" variant="outline" onClick={handleBack} disabled={isEnteringApp} className="w-full">
                         <ArrowLeft className="size-4" />
                         上一步
                       </Button>
@@ -273,7 +290,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading} className="w-full">
+                      <Button type="submit" disabled={isLoading || isEnteringApp} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
@@ -286,7 +303,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading} className="w-full">
+                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp} className="w-full">
                         <ArrowLeft className="size-4" />
                         上一步
                       </Button>

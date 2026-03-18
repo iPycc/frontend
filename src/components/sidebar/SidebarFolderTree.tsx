@@ -28,15 +28,19 @@ export function SidebarFolderTree({
   items,
   basePath = "/app",
   level = 0,
+  followTree = true,
 }: {
   items: FolderTreeNode[]
   basePath?: string
   level?: number
+  followTree?: boolean
 }) {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
   const location = useLocation()
 
   useEffect(() => {
+    if (!followTree) return
+
     setOpenStates((current) => {
       let changed = false
       const next = { ...current }
@@ -47,15 +51,26 @@ export function SidebarFolderTree({
           location.pathname === currentPath ||
           location.pathname.startsWith(`${currentPath}/`)
 
+        // Auto-open when entering a branch
         if (isInCurrentBranch && next[folder.id] !== true) {
           next[folder.id] = true
           changed = true
+        }
+
+        // Auto-close when leaving a branch (user navigated out)
+        if (!isInCurrentBranch && next[folder.id] === true) {
+          // Only collapse if we're not in any sub-path of this folder
+          const stillInside = location.pathname.startsWith(`${currentPath}/`)
+          if (!stillInside && location.pathname !== currentPath) {
+            next[folder.id] = false
+            changed = true
+          }
         }
       }
 
       return changed ? next : current
     })
-  }, [basePath, items, location.pathname])
+  }, [basePath, items, location.pathname, followTree])
 
   const toggle = (id: string, event: MouseEvent) => {
     event.preventDefault()
@@ -71,7 +86,10 @@ export function SidebarFolderTree({
         const isCurrent = location.pathname === currentPath
         const isInCurrentBranch =
           isCurrent || location.pathname.startsWith(`${currentPath}/`)
-        const isOpen = openStates[folder.id] ?? isInCurrentBranch
+        // When followTree is on, open state is driven by location; when off, use manual state
+        const isOpen = followTree
+          ? (openStates[folder.id] ?? isInCurrentBranch)
+          : (openStates[folder.id] ?? false)
 
         return (
           <div key={folder.id} className="space-y-0.5">
@@ -123,6 +141,7 @@ export function SidebarFolderTree({
                     items={folder.children}
                     basePath={currentPath}
                     level={level + 1}
+                    followTree={followTree}
                   />
                 </motion.div>
               ) : null}

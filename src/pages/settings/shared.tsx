@@ -1,12 +1,24 @@
 import * as React from "react"
 import {
   IconBucket,
+  IconMoon,
   IconPalette,
   IconShieldLock,
+  IconSun,
   IconUserCircle,
+  IconTree,
+  IconEyeOff,
 } from "@tabler/icons-react"
 import type { ThemeMode } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 export type SettingsTabId =
@@ -142,18 +154,30 @@ export function SelectField({
   options: Array<{ label: string; value: string }>
 }) {
   return (
-    <select
-      className="h-11 w-full rounded-[15px] border border-input bg-transparent px-3 text-sm outline-none focus:border-[color:var(--focus-border)] focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-[color:var(--focus-border)] focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map((item) => (
-        <option key={item.value} value={item.value}>
-          {item.label}
-        </option>
-      ))}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-11 w-full rounded-[15px] border-input">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
+}
+
+const themeIcons: Record<string, React.ReactNode> = {
+  light: <IconSun size={14} />,
+  system: null,
+  dark: <IconMoon size={14} />,
+}
+
+const treeIcons: Record<string, React.ReactNode> = {
+  follow: <IconTree size={14} />,
+  static: <IconEyeOff size={14} />,
 }
 
 export function OptionGroup<T extends string>({
@@ -166,22 +190,27 @@ export function OptionGroup<T extends string>({
   onChange: (value: T) => void
 }) {
   return (
-    <div
-      data-slot="button-group"
-      className="inline-flex flex-wrap gap-2 rounded-[15px] p-1"
-      style={{ backgroundColor: "var(--app-shell)" }}
-    >
-      {options.map((item) => (
-        <Button
-          key={item.value}
-          variant={value === item.value ? "default" : "outline"}
-          size="sm"
-          onClick={() => onChange(item.value)}
-        >
-          {item.label}
-        </Button>
-      ))}
-    </div>
+    <ButtonGroup>
+      {options.map((item) => {
+        const icon = themeIcons[item.value] ?? treeIcons[item.value] ?? null
+        const isActive = value === item.value
+        return (
+          <Button
+            key={item.value}
+            variant="outline"
+            size="sm"
+            className={cn(
+              "gap-1.5",
+              isActive && "!bg-primary !text-primary-foreground hover:!bg-primary/90 hover:!text-primary-foreground !border-primary"
+            )}
+            onClick={() => onChange(item.value)}
+          >
+            {icon}
+            {item.label}
+          </Button>
+        )
+      })}
+    </ButtonGroup>
   )
 }
 

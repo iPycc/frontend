@@ -1,5 +1,5 @@
-import { IconInfoCircle, IconPlus } from "@tabler/icons-react"
-import { KeyRound, Trash2 } from "lucide-react"
+import { IconInfoCircle, IconPlus, IconX } from "@tabler/icons-react"
+import { KeyRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -69,36 +69,41 @@ export function SecuritySettingsPage() {
 
       <section className="space-y-3">
         <div className="text-sm font-medium">通行密钥</div>
-        {security.passkeys.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between gap-4 rounded-[15px] border border-border/70 px-4 py-3"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-primary">
-                <KeyRound size={24} />
-              </div>
-              <div>
-                <div className="text-sm font-medium">{item.name}</div>
-                <div className="text-sm text-muted-foreground">
-                  创建于 {item.createdAt}
+        <div className="space-y-3">
+          {security.passkeys.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start justify-between gap-3 rounded-[15px] border border-border/70 px-4 py-4 sm:items-center"
+            >
+              <div className="flex min-w-0 flex-1 items-start gap-4">
+                <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
+                  <KeyRound size={22} />
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{item.name}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    创建于 {item.createdAt}
+                  </div>
+                  <div className="text-sm text-[#70d56c]">
+                    上次使用于 {item.lastUsedAt}
+                  </div>
                 </div>
               </div>
-              <div className="text-sm text-[#70d56c]">上次使用于 {item.lastUsedAt}</div>
+              <button
+                type="button"
+                className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                onClick={() => {
+                  updateSecurity({
+                    passkeys: security.passkeys.filter((k) => k.id !== item.id),
+                  })
+                }}
+                aria-label={`删除 ${item.name}`}
+              >
+                <IconX size={18} />
+              </button>
             </div>
-            <button
-              type="button"
-              className="text-muted-foreground transition-colors hover:text-destructive"
-              onClick={() => {
-                updateSecurity({
-                  passkeys: security.passkeys.filter((k) => k.id !== item.id),
-                })
-              }}
-            >
-              <Trash2 size={18} />
-            </button>
-          </div>
-        ))}
+          ))}
+        </div>
         <Button variant="outline" onClick={addPasskey}>
           <IconPlus size={16} />
           添加新凭证
@@ -107,7 +112,33 @@ export function SecuritySettingsPage() {
 
       <section className="space-y-3">
         <div className="text-sm font-medium">最近登录活动</div>
-        <div className="overflow-hidden rounded-[15px] border border-border/70">
+        <div className="space-y-3 md:hidden">
+          {loginActivity.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-[15px] border border-border/70 px-4 py-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{item.method}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{item.device}</div>
+                </div>
+                <ActivityStatusBadge />
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">IP</span>
+                  <span className="max-w-[60%] text-right break-all">{item.ip}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">时间</span>
+                  <span className="max-w-[60%] text-right">{item.time}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden overflow-hidden rounded-[15px] border border-border/70 md:block">
           <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -123,9 +154,7 @@ export function SecuritySettingsPage() {
                 <TableRow key={item.id}>
                   <TableCell>{item.method}</TableCell>
                   <TableCell>
-                    <span className="inline-flex rounded-full bg-[#4caf50]/20 px-2 py-0.5 text-xs text-[#71db74]">
-                      成功
-                    </span>
+                    <ActivityStatusBadge />
                   </TableCell>
                   <TableCell>{item.device}</TableCell>
                   <TableCell>{item.ip}</TableCell>
@@ -137,5 +166,13 @@ export function SecuritySettingsPage() {
         </div>
       </section>
     </div>
+  )
+}
+
+function ActivityStatusBadge() {
+  return (
+    <span className="inline-flex rounded-full bg-[#4caf50]/20 px-2 py-0.5 text-xs text-[#71db74]">
+      成功
+    </span>
   )
 }

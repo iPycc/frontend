@@ -73,9 +73,9 @@ export function SidebarLayout() {
 
   return (
     <Sidebar className="border-none bg-transparent">
-      <SidebarHeader className="gap-2 px-4 pb-1 pt-4">
-        <div className="group/logo relative flex h-12 items-center pl-4">
-          <Logo showText className="gap-2  text-[#2b2b2b] dark:text-[#f4f4f4]" />
+      <SidebarHeader className="px-2 pl-3 pt-3">
+        <div className="group/logo relative flex h-12 items-center pl-5">
+          <Logo showText className="gap-2 text-[#2b2b2b] dark:text-[#f4f4f4]" />
           <button
             type="button"
             onClick={toggleSidebar}
@@ -99,22 +99,18 @@ export function SidebarLayout() {
                   : "text-[#303030] hover:bg-[#ebf2f8] hover:text-[#1f2c39] dark:text-[#c1c1c1] dark:hover:bg-[#23282f] dark:hover:text-[#f1f1f1]"
               )}
             >
-              {settings.showSidebarTree ? (
-                <button
-                  type="button"
-                  onClick={() => setIsTreeOpen((current) => !current)}
-                  className="flex h-full w-8 shrink-0 items-center justify-center text-[#7a7a7a] transition-colors dark:text-[#8e8e8e]"
-                  aria-label={isTreeOpen ? "收起目录树" : "展开目录树"}
-                >
-                  {isTreeOpen ? (
-                    <IconChevronDown size={12} />
-                  ) : (
-                    <IconChevronRight size={12} />
-                  )}
-                </button>
-              ) : (
-                <span className="w-3 shrink-0" aria-hidden="true" />
-              )}
+              <button
+                type="button"
+                onClick={() => setIsTreeOpen((current) => !current)}
+                className="flex h-full w-8 shrink-0 items-center justify-center text-[#7a7a7a] transition-colors dark:text-[#8e8e8e]"
+                aria-label={isTreeOpen ? "收起目录树" : "展开目录树"}
+              >
+                {isTreeOpen ? (
+                  <IconChevronDown size={12} />
+                ) : (
+                  <IconChevronRight size={12} />
+                )}
+              </button>
               <NavLink to="/app" className="flex min-w-0 flex-1 items-center gap-3">
                 <IconHome size={17} className="shrink-0 text-[#5b6570] dark:text-[#c5d0da]" />
                 <span>我的文件</span>
@@ -122,7 +118,7 @@ export function SidebarLayout() {
             </div>
 
             <AnimatePresence initial={false}>
-              {settings.showSidebarTree && isTreeOpen ? (
+              {isTreeOpen ? (
                 <motion.div
                   initial={{ height: 0, opacity: 0, y: -6 }}
                   animate={{ height: "auto", opacity: 1, y: 0 }}
@@ -130,7 +126,7 @@ export function SidebarLayout() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                   className="mt-1 overflow-hidden"
                 >
-                  <SidebarFolderTree items={rootFolders} level={1} />
+                  <SidebarFolderTree items={rootFolders} level={1} followTree={settings.showSidebarTree} />
                 </motion.div>
               ) : null}
             </AnimatePresence>

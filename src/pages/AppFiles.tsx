@@ -1,5 +1,7 @@
 import * as React from "react"
 import { useLocation } from "react-router-dom"
+import { toast } from "sonner"
+import { motion, AnimatePresence } from "motion/react"
 
 import { FileArea } from "@/components/file-area"
 import {
@@ -13,6 +15,15 @@ import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 const categoryMap = {
   image: "图片",
@@ -68,6 +79,13 @@ export function AppFiles() {
   const [propertyId, setPropertyId] = React.useState<string | null>(null)
   const [shareLinks, setShareLinks] = React.useState<string[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
+  const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
+  const [createFolderName, setCreateFolderName] = React.useState("新建文件夹")
+  const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
+  const [fileAreaLoading, setFileAreaLoading] = React.useState(false)
+  const [fileAreaLoadingLabel, setFileAreaLoadingLabel] = React.useState("正在载入内容")
+  const loadingTimerRef = React.useRef<number | null>(null)
+  const routeKeyRef = React.useRef<string | null>(null)
 
   const basePath = "/app"
   const category = new URLSearchParams(location.search).get(
@@ -113,7 +131,53 @@ export function AppFiles() {
     setSelectedIds([])
   }, [currentPath, category])
 
-  const flash = React.useCallback((_message: string) => {}, [])
+  const startFileAreaLoading = React.useCallback(
+    (label = "正在载入内容", duration = 420) => {
+      setFileAreaLoadingLabel(label)
+      setFileAreaLoading(true)
+
+      if (loadingTimerRef.current) {
+        window.clearTimeout(loadingTimerRef.current)
+      }
+
+      loadingTimerRef.current = window.setTimeout(() => {
+        setFileAreaLoading(false)
+        loadingTimerRef.current = null
+      }, duration)
+    },
+    []
+  )
+
+  React.useEffect(() => {
+    const routeKey = `${location.pathname}${location.search}`
+
+    if (routeKeyRef.current && routeKeyRef.current !== routeKey) {
+      startFileAreaLoading("正在进入文件夹", 220)
+    }
+
+    routeKeyRef.current = routeKey
+  }, [location.pathname, location.search, startFileAreaLoading])
+
+  React.useEffect(() => {
+    return () => {
+      if (loadingTimerRef.current) {
+        window.clearTimeout(loadingTimerRef.current)
+      }
+    }
+  }, [])
+
+  const flash = React.useCallback((message: string) => {
+    const toastMap: Record<string, string> = {
+      "create-folder": "文件夹已创建",
+      "upload-mock": "文件已上传",
+      "refresh": "内容已刷新",
+      "copy": "已复制到剪贴板",
+      "cut": "已剪切",
+      "paste": "已粘贴",
+    }
+    const text = toastMap[message] || (message.startsWith("download-") ? "开始下载" : null)
+    if (text) toast.success(text)
+  }, [])
 
   const handleSelectNode = (id: string, event: React.MouseEvent) => {
     event.stopPropagation()
@@ -129,7 +193,16 @@ export function AppFiles() {
   }
 
   const handleCreateFolder = (parentId = currentFolderId) => {
-    createFolder(parentId, "新建文件夹")
+    setCreateFolderParentId(parentId)
+    setCreateFolderName("新建文件夹")
+    setCreateFolderOpen(true)
+  }
+
+  const submitCreateFolder = () => {
+    const name = createFolderName.trim()
+    if (!name) return
+    createFolder(createFolderParentId, name)
+    setCreateFolderOpen(false)
     flash("create-folder")
   }
 
@@ -139,6 +212,7 @@ export function AppFiles() {
   }
 
   const handleRefresh = () => {
+    startFileAreaLoading("正在同步目录", 560)
     flash("refresh")
   }
 
@@ -238,32 +312,45 @@ export function AppFiles() {
         onShare={() => handleShareRequest(selectedIds)}
         onDownload={() => handleDownloadRequest(selectedIds)}
       />
-      <FileArea
-        items={items}
-        currentPath={currentPath}
-        selectedIds={selectedIds}
-        viewMode={viewMode}
-        sortValue={sortValue}
-        canPaste={Boolean(clipboard)}
-        onSelectNode={handleSelectNode}
-        onPrepareContext={handlePrepareContext}
-        onClearSelection={() => setSelectedIds([])}
-        onRenameRequest={handleRenameRequest}
-        onMoveRequest={handleMoveRequest}
-        onShareRequest={handleShareRequest}
-        onDownloadRequest={handleDownloadRequest}
-        onDeleteRequest={handleDeleteRequest}
-        onCopyRequest={handleCopyIds}
-        onCutRequest={handleCutIds}
-        onPropertiesRequest={setPropertyId}
-        onCreateFolder={() => handleCreateFolder()}
-        onCreateChildFolder={handleCreateFolder}
-        onUploadMock={handleUploadMock}
-        onRefresh={handleRefresh}
-        onPaste={handlePaste}
-        onViewModeChange={setViewMode}
-        onSortChange={setSortValue}
-      />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={location.pathname + location.search}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="contents"
+        >
+          <FileArea
+            items={items}
+            currentPath={currentPath}
+            selectedIds={selectedIds}
+            viewMode={viewMode}
+            sortValue={sortValue}
+            isLoading={fileAreaLoading}
+            loadingLabel={fileAreaLoadingLabel}
+            canPaste={Boolean(clipboard)}
+            onSelectNode={handleSelectNode}
+            onPrepareContext={handlePrepareContext}
+            onClearSelection={() => setSelectedIds([])}
+            onRenameRequest={handleRenameRequest}
+            onMoveRequest={handleMoveRequest}
+            onShareRequest={handleShareRequest}
+            onDownloadRequest={handleDownloadRequest}
+            onDeleteRequest={handleDeleteRequest}
+            onCopyRequest={handleCopyIds}
+            onCutRequest={handleCutIds}
+            onPropertiesRequest={setPropertyId}
+            onCreateFolder={() => handleCreateFolder()}
+            onCreateChildFolder={handleCreateFolder}
+            onUploadMock={handleUploadMock}
+            onRefresh={handleRefresh}
+            onPaste={handlePaste}
+            onViewModeChange={setViewMode}
+            onSortChange={setSortValue}
+          />
+        </motion.div>
+      </AnimatePresence>
 
       <RenameDialog
         open={Boolean(renameTargetId)}
@@ -298,6 +385,37 @@ export function AppFiles() {
         onClose={() => setDeleteIds([])}
         onConfirm={submitDelete}
       />
+
+      <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>新建文件夹</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitCreateFolder()
+            }}
+          >
+            <Input
+              autoFocus
+              value={createFolderName}
+              onChange={(e) => setCreateFolderName(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              placeholder="文件夹名称"
+              className="mt-2"
+            />
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setCreateFolderOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!createFolderName.trim()}>
+                创建
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

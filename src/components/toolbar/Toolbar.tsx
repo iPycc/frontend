@@ -33,6 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { type SortValue, type ViewMode } from "@/lib/mock-data"
 
 interface ToolbarProps {
@@ -208,46 +209,48 @@ export function Toolbar({
             </div>
 
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger className="hidden  items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
-                  {viewMode === "grid" ? (
-                    <IconLayoutGrid size={16} />
-                  ) : (
-                    <IconListDetails size={16} />
-                  )}
-                  视图
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuRadioGroup
-                    value={viewMode}
-                    onValueChange={(value) =>
-                      onViewModeChange(value as ViewMode)
-                    }
-                  >
-                    <DropdownMenuRadioItem value="grid">网格</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="list">列表</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ButtonGroup className="hidden md:flex [&>[data-slot=dropdown-menu-trigger]]:flex [&>[data-slot=dropdown-menu-trigger]]:h-10 [&>[data-slot=dropdown-menu-trigger]]:items-center [&>[data-slot=dropdown-menu-trigger]]:gap-2 [&>[data-slot=dropdown-menu-trigger]]:bg-white [&>[data-slot=dropdown-menu-trigger]]:px-3.5 [&>[data-slot=dropdown-menu-trigger]]:text-sm [&>[data-slot=dropdown-menu-trigger]]:text-[#4e4e4e] [&>[data-slot=dropdown-menu-trigger]]:transition-colors [&>[data-slot=dropdown-menu-trigger]]:hover:bg-[#f5f5f5] dark:[&>[data-slot=dropdown-menu-trigger]]:border-white/10 dark:[&>[data-slot=dropdown-menu-trigger]]:bg-[#171717] dark:[&>[data-slot=dropdown-menu-trigger]]:text-[#d1d1d1] dark:[&>[data-slot=dropdown-menu-trigger]]:hover:bg-[#1d1d1d]">
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                    {viewMode === "grid" ? (
+                      <IconLayoutGrid size={16} />
+                    ) : (
+                      <IconListDetails size={16} />
+                    )}
+                    视图
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup
+                      value={viewMode}
+                      onValueChange={(value) =>
+                        onViewModeChange(value as ViewMode)
+                      }
+                    >
+                      <DropdownMenuRadioItem value="grid">网格</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="list">列表</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger className="hidden h-10 items-center rounded-[14px] bg-white text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] md:flex dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
-                  <IconArrowsSort size={16} />
-                  排序
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuRadioGroup
-                    value={sortValue}
-                    onValueChange={(value) => onSortChange(value as SortValue)}
-                  >
-                    {Object.entries(sortLabels).map(([value, label]) => (
-                      <DropdownMenuRadioItem key={value} value={value}>
-                        {label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-[14px] bg-white px-3.5 text-sm text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">
+                    <IconArrowsSort size={16} />
+                    排序
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup
+                      value={sortValue}
+                      onValueChange={(value) => onSortChange(value as SortValue)}
+                    >
+                      {Object.entries(sortLabels).map(([value, label]) => (
+                        <DropdownMenuRadioItem key={value} value={value}>
+                          {label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </ButtonGroup>
 
               <DropdownMenu>
                 <DropdownMenuTrigger className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-white text-[#4e4e4e] transition-colors hover:bg-[#f5f5f5] dark:border-white/10 dark:bg-[#171717] dark:text-[#d1d1d1] dark:hover:bg-[#1d1d1d]">

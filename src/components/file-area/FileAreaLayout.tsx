@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import { IconFolder } from "@tabler/icons-react"
 
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -23,6 +24,8 @@ interface FileAreaProps {
   selectedIds: string[]
   viewMode: ViewMode
   sortValue: SortValue
+  isLoading?: boolean
+  loadingLabel?: string
   canPaste: boolean
   onSelectNode: (id: string, event: MouseEvent) => void
   onPrepareContext: (id: string) => void
@@ -58,6 +61,8 @@ export function FileArea({
   selectedIds,
   viewMode,
   sortValue,
+  isLoading = false,
+  loadingLabel = "正在载入内容",
   canPaste,
   onSelectNode,
   onPrepareContext,
@@ -106,7 +111,7 @@ export function FileArea({
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel flex flex-1 flex-col overflow-hidden rounded-[15px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
+          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-[15px] border border-[#dcdcdc] p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-1">
@@ -177,6 +182,7 @@ export function FileArea({
               />
             )}
           </div>
+          {isLoading ? <FileAreaLoading label={loadingLabel} /> : null}
         </div>
       </ContextMenuTrigger>
 
@@ -218,5 +224,30 @@ export function FileArea({
         </ContextMenuSub>
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+function FileAreaLoading({ label }: { label: string }) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/78 backdrop-blur-[2px]">
+      <div className="flex min-w-[220px] items-center gap-4 rounded-[18px] border border-border/70 bg-background/95 px-4 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.3)]">
+        <div className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <IconFolder size={18} />
+          <span className="absolute inset-0 rounded-full border border-primary/25 animate-ping" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{label}</div>
+          <div className="mt-1 flex items-center gap-1">
+            {[0, 150, 300].map((delay) => (
+              <span
+                key={delay}
+                className="size-1.5 rounded-full bg-primary/75 animate-bounce"
+                style={{ animationDelay: `${delay}ms`, animationDuration: "0.9s" }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
