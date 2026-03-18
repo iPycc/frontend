@@ -15,14 +15,12 @@ export function UserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="ml-1 h-10 w-10 overflow-hidden rounded-full border border-[#d6d6d6] bg-white focus:outline-none dark:border-white/10 dark:bg-[#171717]">
-          <img
-            src={profile.avatar}
-            alt={profile.username}
-            className="h-full w-full object-cover"
-          />
-        </button>
+      <DropdownMenuTrigger className="ml-1 h-10 w-10 overflow-hidden rounded-full border border-[#d6d6d6] bg-white focus:outline-none dark:border-white/10 dark:bg-[#171717]">
+        <img
+          src={profile.avatar}
+          alt={profile.username}
+          className="h-full w-full object-cover"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 rounded-[15px]">
         <div className="relative flex items-center justify-start gap-2 p-2">

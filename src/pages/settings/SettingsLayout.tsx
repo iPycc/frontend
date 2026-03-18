@@ -27,13 +27,13 @@ export function SettingsLayout() {
       className={cn(
         "flex h-full min-h-0 flex-1 flex-col overflow-hidden",
         isMobile
-          ? "px-4 py-5"
+          ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-2 pb-3"
           : "app-panel rounded-[15px] border border-[#dcdcdc] px-5 py-6 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none sm:px-6"
       )}
     >
       <h1 className="text-[30px] font-semibold tracking-tight">设置</h1>
 
-      <div className="mt-5 border-b border-border/60">
+      <div className="mt-2 border-b border-border/60">
         {isMobile ? (
           <div className="flex items-center gap-5">
             <NavLink
