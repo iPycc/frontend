@@ -35,13 +35,13 @@ export function FileList({
   }
 
   return (
-    <div className="overflow-hidden rounded-[20px] border border-[#dddddd] bg-white dark:border-white/10 dark:bg-[#171717]">
-      <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-[#e5e5e5] px-4 py-3 text-xs text-[#8a8a8a] dark:border-white/10 dark:text-[#8d8d8d]">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-border px-4 py-3 text-xs text-muted-foreground">
         <div className="text-center">选择</div>
         <div>名称</div>
         <div>类型</div>
       </div>
-      <div className="divide-y divide-[#efefef] dark:divide-white/10">
+      <div className="divide-y divide-border">
         {items.map((item) => {
           const selected = selectedIds.includes(item.id)
 
@@ -51,8 +51,8 @@ export function FileList({
                 <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
                   <div
                     className={cn(
-                      "grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[#f7f7f7] dark:hover:bg-[#1d1d1d]",
-                      selected ? "bg-[#eef8ff] dark:bg-[#112235]" : ""
+                      "grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50",
+                      selected ? "bg-primary/[0.08] dark:bg-primary/[0.13]" : ""
                     )}
                   >
                     <div className="flex items-center justify-center">
@@ -65,8 +65,8 @@ export function FileList({
                         className={cn(
                           "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
                           selected
-                            ? "bg-[#dff2ff] text-primary dark:bg-[#16334f]"
-                            : "bg-[#f3f3f3] text-[#777777] hover:bg-[#ebebeb] dark:bg-[#202020] dark:text-[#9b9b9b] dark:hover:bg-[#272727]"
+                            ? "bg-primary/[0.12] text-primary dark:bg-primary/20"
+                            : "bg-muted text-muted-foreground hover:bg-muted/70 dark:bg-accent dark:hover:bg-accent/70"
                         )}
                         aria-label={`选择 ${item.name}`}
                       >
@@ -85,7 +85,7 @@ export function FileList({
                       }}
                       className="min-w-0 text-left"
                     >
-                      <div className="truncate text-sm text-[#3f3f3f] dark:text-[#eaeaea]">
+                      <div className="truncate text-sm text-foreground">
                         {item.name}
                       </div>
                     </button>
@@ -99,7 +99,7 @@ export function FileList({
                         event.stopPropagation()
                         onOpenNode(item)
                       }}
-                      className="truncate text-left text-sm text-[#7e7e7e] dark:text-[#969696]"
+                      className="truncate text-left text-sm text-muted-foreground"
                     >
                       {getItemMeta(item)}
                     </button>

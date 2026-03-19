@@ -42,7 +42,7 @@ export function CorsStep({ onBack, onSubmit }: CorsStepProps) {
         <h2 className="text-xl font-semibold tracking-wide">跨域策略</h2>
       </div>
 
-      <div className="overflow-hidden rounded-[12px] border border-border/60">
+      <div className="overflow-hidden rounded-md border border-border/60">
         <Table>
           <TableHeader>
             <TableRow>

@@ -28,10 +28,10 @@ export function SettingsLayout() {
         "flex h-full min-h-0 flex-1 flex-col overflow-hidden",
         isMobile
           ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-2 pb-3"
-          : "app-panel rounded-[15px] border border-[#dcdcdc] px-5 py-6 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none sm:px-6"
+          : "app-panel rounded-xl border border-border px-5 py-6 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:shadow-none sm:px-6"
       )}
     >
-      <h1 className="text-[30px] font-semibold tracking-tight">设置</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
 
       <div className="mt-2 border-b border-border/60">
         {isMobile ? (

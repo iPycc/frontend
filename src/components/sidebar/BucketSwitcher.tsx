@@ -64,7 +64,7 @@ export function BucketSwitcher({ className }: { className?: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "flex h-14 w-full items-center justify-between rounded-[15px] border border-[#d6d6d6] bg-white px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-white/95 dark:border-white/10 dark:bg-[#171717] dark:shadow-none dark:hover:bg-[#1d1d1d]",
+          "flex h-14 w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-card/90 dark:shadow-none",
           className
         )}
       >
@@ -73,17 +73,17 @@ export function BucketSwitcher({ className }: { className?: string }) {
             <ProviderIcon provider={activeBucket.provider} />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[14px] text-[#2b2b2b] dark:text-[#f3f3f3]">
+            <div className="truncate text-sm text-foreground">
               {activeBucket.name}
             </div>
-            <div className="truncate text-[12px] text-[#7c7c7c] dark:text-[#9b9b9b]">
+            <div className="truncate text-xs text-muted-foreground">
               {activeBucket.provider}
             </div>
           </div>
         </div>
-        <IconChevronDown size={18} className="text-[#666666] dark:text-[#b7b7b7]" />
+        <IconChevronDown size={18} className="text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={0} className="w-72 rounded-[22px]">
+      <DropdownMenuContent align="start" sideOffset={0} className="w-72 rounded-xl">
         <DropdownMenuGroup>
           <DropdownMenuLabel>已挂载存储桶</DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -91,7 +91,7 @@ export function BucketSwitcher({ className }: { className?: string }) {
             <DropdownMenuItem
               key={bucket.id}
               onClick={() => setActiveBucket(bucket.id)}
-              className="flex items-center gap-3 rounded-[14px] px-3 py-2.5"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5"
             >
               <div className="shrink-0">
                 <ProviderIcon provider={bucket.provider} size="menu" />

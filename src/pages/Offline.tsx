@@ -10,7 +10,7 @@ export function Offline() {
     <PageShell title="离线下载" description="保留与其他页面一致的容器风格，展示下载队列状态。">
       <div className="space-y-4">
         {offlineTasks.map((task) => (
-          <div key={task.id} className="rounded-[15px] border border-border/60 bg-background p-4">
+          <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{task.name}</div>

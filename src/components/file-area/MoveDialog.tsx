@@ -35,7 +35,7 @@ export function MoveDialog({ open, folderOptions, defaultTargetId, onClose, onSu
         <div className="space-y-2">
           <Label>目标目录</Label>
           <select
-            className="flex h-9 w-full rounded-[15px] border border-input bg-background px-3 text-sm outline-none focus:border-[color:var(--focus-border)] focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-[color:var(--focus-border)] focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
+            className="flex h-9 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-[color:var(--focus-border)] focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-[color:var(--focus-border)] focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
           >

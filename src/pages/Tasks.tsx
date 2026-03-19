@@ -10,7 +10,7 @@ export function Tasks() {
     <PageShell title="后台任务" description="展示离线下载、打包下载等后台任务的执行状态。">
       <div className="space-y-4">
         {offlineTasks.map((task) => (
-          <div key={task.id} className="rounded-[15px] border border-border/60 bg-background p-4">
+          <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{task.name}</div>

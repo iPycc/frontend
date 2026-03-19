@@ -31,7 +31,7 @@ export function FileSection({
   return (
     <section>
       {title ? (
-        <h2 className="mb-4 text-[16px] text-[#2f2f2f] dark:text-[#f0f0f0]">{title}</h2>
+        <h2 className="mb-4 text-sm font-medium text-foreground">{title}</h2>
       ) : null}
       {items.length === 0 ? (
         emptyText ? <div className="text-sm text-muted-foreground">{emptyText}</div> : null

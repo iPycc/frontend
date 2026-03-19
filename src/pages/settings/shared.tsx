@@ -155,7 +155,7 @@ export function SelectField({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-11 w-full rounded-[15px] border-input">
+      <SelectTrigger className="h-11 w-full rounded-xl border-input">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -250,7 +250,7 @@ export function CheckboxRow({
       type="button"
       onClick={onToggle}
       className={cn(
-        "flex w-full items-start gap-3 rounded-[15px] border px-4 py-3 text-left transition-colors",
+        "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
         checked ? "border-primary/25 bg-primary/10" : "border-border bg-background"
       )}
     >
@@ -277,7 +277,7 @@ export function BucketMeta({
 }) {
   return (
     <div
-      className="space-y-1 rounded-[15px] px-3 py-3"
+      className="space-y-1 rounded-xl px-3 py-3"
       style={{ backgroundColor: "var(--app-panel)" }}
     >
       <dt className="text-xs uppercase tracking-[0.12em] text-muted-foreground">

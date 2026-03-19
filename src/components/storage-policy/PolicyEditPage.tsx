@@ -88,7 +88,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
       {/* 基本信息 */}
       <section>
         <h3 className="mb-2 text-lg font-semibold tracking-wide">基本信息</h3>
-        <div className="rounded-[12px] border border-border/50 px-6">
+        <div className="rounded-md border border-border/50 px-6">
           <Row label="名称" hint="存储策略的展示名，也会用于向用户展示。">
             <Input
               className="h-10 w-full text-[15px]"
@@ -196,7 +196,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
       {/* 跨域策略 */}
       <section className="space-y-4">
         <h3 className="text-lg font-semibold tracking-wide">跨域策略</h3>
-        <div className="overflow-hidden rounded-[12px] border border-border/50">
+        <div className="overflow-hidden rounded-md border border-border/50">
           <Table>
             <TableHeader>
               <TableRow>
@@ -233,7 +233,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
       {/* 存储与上传 */}
       <section>
         <h3 className="mb-2 text-lg font-semibold tracking-wide">存储与上传</h3>
-        <div className="rounded-[12px] border border-border/50 px-6">
+        <div className="rounded-md border border-border/50 px-6">
           <Row
             label="Blob 存储目录"
             hint="文件 Blob 的存放目录，可以使用魔法变量。修改此设置不会影响存储策略下已有文件。"

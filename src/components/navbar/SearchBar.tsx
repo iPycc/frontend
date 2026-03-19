@@ -79,20 +79,20 @@ export function SearchBar() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden h-11 min-w-0 max-w-[420px] flex-1 items-center rounded-[10px] border border-[#d6d6d6] bg-white px-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset] md:flex dark:border-white/10 dark:bg-[#171717] dark:shadow-none"
+        className="hidden h-11 min-w-0 max-w-[420px] flex-1 items-center rounded-lg border border-border bg-card px-4 shadow-[0_1px_0_rgba(255,255,255,0.7)_inset] md:flex dark:shadow-none"
       >
         <IconSearch
-          className="shrink-0 text-[#4b4b4b] dark:text-[#b8b8b8]"
+          className="shrink-0 text-foreground/60"
           size={20}
         />
-        <span className="flex h-full min-w-0 flex-1 items-center justify-start px-3 text-left text-sm text-[#8a8a8a] dark:text-[#8e8e8e]">
+        <span className="flex h-full min-w-0 flex-1 items-center justify-start px-3 text-left text-sm text-muted-foreground">
           按下 Ctrl K 进行检索...
         </span>
-        <div className="flex shrink-0 items-center gap-1 text-[11px] text-[#8a8a8a] dark:text-[#8e8e8e]">
-          <span className="rounded-md border border-[#d4d4d4] bg-[#f4f4f4] px-1.5 py-0.5 dark:border-white/10 dark:bg-[#232323]">
+        <div className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="rounded-md border border-border bg-muted px-1.5 py-0.5">
             Ctrl
           </span>
-          <span className="rounded-md border border-[#d4d4d4] bg-[#f4f4f4] px-1.5 py-0.5 dark:border-white/10 dark:bg-[#232323]">
+          <span className="rounded-md border border-border bg-muted px-1.5 py-0.5">
             K
           </span>
         </div>
@@ -107,7 +107,7 @@ export function SearchBar() {
         title="全局搜索"
         description="搜索文件或文件夹"
         showCloseButton={false}
-        className="rounded-[15px] sm:max-w-[560px]"
+        className="rounded-xl sm:max-w-[560px]"
       >
         <CommandInput
           placeholder="搜索文件或文件夹..."

@@ -49,7 +49,7 @@ export function ProviderSelector({ onBack, onSelect }: ProviderSelectorProps) {
             type="button"
             onClick={() => onSelect(provider.id)}
             className={cn(
-              "flex items-center gap-4 overflow-hidden rounded-[15px] border border-border/60 text-left transition-all",
+              "flex items-center gap-4 overflow-hidden rounded-xl border border-border/60 text-left transition-all",
               "hover:border-primary/40 hover:shadow-sm"
             )}
           >

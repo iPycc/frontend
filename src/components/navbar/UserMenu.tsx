@@ -22,7 +22,7 @@ export function UserMenu() {
           className="h-full w-full object-cover"
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 rounded-[15px]">
+      <DropdownMenuContent align="end" className="w-56 rounded-xl">
         <div className="relative flex items-center justify-start gap-2 p-2">
           <div className="flex w-full flex-col space-y-1 leading-none">
             {profile.username ? (
