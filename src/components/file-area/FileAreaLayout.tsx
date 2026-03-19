@@ -114,7 +114,7 @@ export function FileArea({
           className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
-          <div className="custom-scrollbar flex-1 overflow-y-auto pr-1">
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-2 md:pr-1">
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />

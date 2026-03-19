@@ -75,7 +75,7 @@ export function CorsStep({ onBack, onSubmit }: CorsStepProps) {
 
       {corsAction === null ? (
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" size="lg" className="px-5 py-2.5 text-[15px]" onClick={() => setCorsAction("auto")}>
+          <Button variant="default" size="lg" className="px-5 py-2.5 text-[15px]" onClick={() => setCorsAction("auto")}>
             让 Cloudrave 帮我设置
           </Button>
           <Button variant="outline" size="lg" className="px-5 py-2.5 text-[15px]" onClick={() => setCorsAction("manual")}>

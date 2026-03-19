@@ -88,7 +88,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
       {/* 基本信息 */}
       <section>
         <h3 className="mb-2 text-lg font-semibold tracking-wide">基本信息</h3>
-        <div className="rounded-md border border-border/50 px-6">
+        <div className="rounded-md px-4">
           <Row label="名称" hint="存储策略的展示名，也会用于向用户展示。">
             <Input
               className="h-10 w-full text-[15px]"
@@ -198,7 +198,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
         <h3 className="text-lg font-semibold tracking-wide">跨域策略</h3>
         <div className="overflow-hidden rounded-md border border-border/50">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted">
               <TableRow>
                 <TableHead className="w-20 text-sm">来源</TableHead>
                 <TableHead className="text-sm">允许 Methods</TableHead>
@@ -225,7 +225,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
         <p className="text-sm leading-relaxed text-muted-foreground">
           此存储策略需要正确配置如上跨域策略后才能使用 Web 端上传文件，Cloudrave 可以帮你自动设置，你也可以手动设置。如果你已设置过此 Bucket 的跨域策略，此步骤可以跳过。
         </p>
-        <Button variant="outline" className="px-5 py-2.5 text-[15px]">
+        <Button variant="default" className="px-5 py-2.5 text-[15px]">
           让 Cloudrave 帮我设置
         </Button>
       </section>
@@ -233,7 +233,7 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
       {/* 存储与上传 */}
       <section>
         <h3 className="mb-2 text-lg font-semibold tracking-wide">存储与上传</h3>
-        <div className="rounded-md border border-border/50 px-6">
+        <div className="rounded-md px-4">
           <Row
             label="Blob 存储目录"
             hint="文件 Blob 的存放目录，可以使用魔法变量。修改此设置不会影响存储策略下已有文件。"
@@ -260,21 +260,25 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
             label="上传分片大小"
             hint="允许范围：1 MB ~ 1 GB，通过分片上传，用户上传的文件将会被切分成分片逐个上传到存储端。"
           >
-            <div className="flex gap-3">
-              <Input
-                className="h-10 w-28 text-[15px]"
+            <div className="flex h-10 w-48 overflow-hidden rounded-md border border-input bg-transparent focus-within:ring-1 focus-within:ring-ring">
+              <input
+                className="h-full min-w-0 flex-1 bg-transparent px-3 text-[15px] outline-none"
                 value={chunkSize}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setChunkSize(e.target.value)}
               />
-              <Select value={chunkSizeUnit} onValueChange={setChunkSizeUnit}>
-                <SelectTrigger className="h-10 w-24 text-[15px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MB">MB</SelectItem>
-                  <SelectItem value="GB">GB</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center border-l border-input">
+                <Select value={chunkSizeUnit} onValueChange={setChunkSizeUnit}>
+                  <SelectTrigger className="h-full w-20 rounded-none border-0 text-[15px] shadow-none focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="B">B</SelectItem>
+                    <SelectItem value="KB">KB</SelectItem>
+                    <SelectItem value="MB">MB</SelectItem>
+                    <SelectItem value="GB">GB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </Row>
 

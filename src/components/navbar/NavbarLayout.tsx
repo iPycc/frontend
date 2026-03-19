@@ -34,9 +34,9 @@ export function NavbarLayout() {
         <SearchBar />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         <button
-          className="rounded-full p-2 text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:hidden dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:hidden dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="search"
         >
           <IconSearch size={20} />
@@ -45,7 +45,7 @@ export function NavbarLayout() {
           onClick={() =>
             setThemeMode(effectiveTheme === "dark" ? "light" : "dark")
           }
-          className="flex h-10 w-10 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:h-10 md:w-10 dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="toggle-theme"
         >
           {effectiveTheme === "dark" ? (
@@ -56,7 +56,7 @@ export function NavbarLayout() {
         </button>
         <button
           onClick={() => navigate("/settings/profile")}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:h-10 md:w-10 dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
           aria-label="open-settings"
         >
           <IconSettings size={25} />

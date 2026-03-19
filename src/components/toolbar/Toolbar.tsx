@@ -95,9 +95,9 @@ export function Toolbar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="absolute inset-0 flex items-center justify-between bg-primary/10 px-4 dark:bg-primary/15"
+            className="absolute inset-0 flex items-center justify-between bg-primary/10 px-2 md:px-4 dark:bg-primary/15"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
               <button
                 type="button"
                 onClick={onClearSelection}

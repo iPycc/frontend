@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { IconChevronDown } from "@tabler/icons-react"
+import { motion } from "motion/react"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -72,22 +73,28 @@ export function SettingsLayout() {
           <div className="flex flex-wrap gap-6">
             {settingsTabs.map((item) => {
               const Icon = item.icon
+              const isActive = location.pathname.endsWith(`/${item.id}`)
 
               return (
                 <NavLink
                   key={item.id}
                   to={`/settings/${item.id}`}
-                  className={({ isActive }) =>
-                    cn(
-                      "inline-flex items-center gap-2 border-b-2 border-transparent pb-3 text-sm transition-colors",
-                      isActive
-                        ? "border-primary text-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    )
-                  }
+                  className={cn(
+                    "relative inline-flex items-center gap-2 pb-3 text-sm transition-colors",
+                    isActive
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
                   <Icon size={16} />
                   <span>{item.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="settings-tab-indicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
                 </NavLink>
               )
             })}

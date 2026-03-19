@@ -41,6 +41,7 @@ export function SecuritySettingsPage() {
 
   return (
     <div className="space-y-8">
+      <div className="max-w-2xl space-y-8">
       <section className="space-y-3">
         <div className="text-sm font-medium">密码</div>
         <div className="rounded-lg bg-primary/[0.08] px-4 py-4 text-sm text-foreground">
@@ -109,6 +110,7 @@ export function SecuritySettingsPage() {
           添加新凭证
         </Button>
       </section>
+      </div>
 
       <section className="space-y-3">
         <div className="text-sm font-medium">最近登录活动</div>
