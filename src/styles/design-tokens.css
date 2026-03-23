@@ -1,0 +1,41 @@
+/**
+ * Cloudrave 统一设计令牌
+ *
+ * 集中管理圆角、间距、字体等设计变量，
+ * 确保全局样式一致，符合大厂规范。
+ */
+
+@theme inline {
+  /* ---- 圆角 ---- */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ---- 字体 ---- */
+  --font-sans: "Noto Sans SC", "Geist Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    /* ---- 间距令牌 ---- */
+    --spacing-page-x: 0.375rem;     /* 移动端页面水平边距 6px  */
+    --spacing-page-y: 0.375rem;     /* 移动端页面垂直边距 6px  */
+    --spacing-panel-x: 0.625rem;    /* 移动端面板内边距 10px   */
+    --spacing-panel-y: 0.625rem;    /* 移动端面板内边距 10px   */
+    --spacing-gap: 0.375rem;        /* 移动端组件间距 6px      */
+  }
+
+  @media (min-width: 768px) {
+    :root {
+      --spacing-page-x: 1rem;       /* 桌面端页面水平边距 16px */
+      --spacing-page-y: 1rem;       /* 桌面端页面垂直边距 16px */
+      --spacing-panel-x: 1.25rem;   /* 桌面端面板内边距 20px   */
+      --spacing-panel-y: 1.25rem;   /* 桌面端面板内边距 20px   */
+      --spacing-gap: 0.5rem;        /* 桌面端组件间距 8px      */
+    }
+  }
+}
