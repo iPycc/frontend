@@ -70,10 +70,10 @@ export function SidebarLayout() {
     : 0
 
   useEffect(() => {
-    if (location.pathname !== "/app" && isExplorerRoute) {
+    if (isInFolder) {
       setIsTreeOpen(true)
     }
-  }, [isExplorerRoute, location.pathname])
+  }, [isInFolder, folderParam])
 
   return (
     <Sidebar className="border-none bg-transparent">
