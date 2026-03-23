@@ -9,6 +9,7 @@ import {
   IconDownload,
   IconEdit,
   IconHome2,
+  IconInfoCircle,
   IconLayoutGrid,
   IconListDetails,
   IconShare3,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { type SortValue, type ViewMode } from "@/lib/mock-data"
+import { ViewSettingsPopover } from "./ViewSettingsPopover"
 
 interface ToolbarProps {
   pathParts?: string[]
@@ -44,6 +46,10 @@ interface ToolbarProps {
   onViewModeChange: (value: ViewMode) => void
   sortValue: SortValue
   onSortChange: (value: SortValue) => void
+  thumbnailsEnabled: boolean
+  onThumbnailsChange: (enabled: boolean) => void
+  pageSize: number
+  onPageSizeChange: (size: number) => void
   onRefresh: () => void
   onCreateFolder: () => void
   onPaste: () => void
@@ -54,6 +60,7 @@ interface ToolbarProps {
   onRename: () => void
   onShare: () => void
   onDownload: () => void
+  onProperties: () => void
   currentLabel?: string
 }
 
@@ -73,6 +80,10 @@ export function Toolbar({
   onViewModeChange,
   sortValue,
   onSortChange,
+  thumbnailsEnabled,
+  onThumbnailsChange,
+  pageSize,
+  onPageSizeChange,
   onRefresh,
   onCreateFolder,
   onPaste,
@@ -83,6 +94,7 @@ export function Toolbar({
   onRename,
   onShare,
   onDownload,
+  onProperties,
   currentLabel,
 }: ToolbarProps) {
   return (
@@ -128,6 +140,10 @@ export function Toolbar({
                   <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
                   <DropdownMenuItem onClick={onDownload}>下载</DropdownMenuItem>
                   <DropdownMenuItem onClick={onShare}>分享</DropdownMenuItem>
+                  <DropdownMenuItem onClick={onProperties}>
+                    <IconInfoCircle size={16} className="mr-2" /> 属性
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -169,10 +185,8 @@ export function Toolbar({
                     </>
                   ) : (
                     pathParts.map((part, index) => {
-                      const toPath = `/app/${pathParts
-                        .slice(0, index + 1)
-                        .map(encodeURIComponent)
-                        .join("/")}`
+                      const folderPath = "/" + pathParts.slice(0, index + 1).join("/")
+                      const toPath = `/app?folder=${encodeURIComponent(folderPath)}`
                       const isLast = index === pathParts.length - 1
                       const isMobileHidden = !isLast && pathParts.length > 1
 
@@ -210,27 +224,26 @@ export function Toolbar({
 
             <div className="flex items-center gap-2">
               <ButtonGroup className="hidden md:flex [&>[data-slot=dropdown-menu-trigger]]:flex [&>[data-slot=dropdown-menu-trigger]]:h-10 [&>[data-slot=dropdown-menu-trigger]]:items-center [&>[data-slot=dropdown-menu-trigger]]:gap-2 [&>[data-slot=dropdown-menu-trigger]]:bg-card [&>[data-slot=dropdown-menu-trigger]]:px-3.5 [&>[data-slot=dropdown-menu-trigger]]:text-sm [&>[data-slot=dropdown-menu-trigger]]:text-foreground [&>[data-slot=dropdown-menu-trigger]]:transition-colors [&>[data-slot=dropdown-menu-trigger]]:hover:bg-muted">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-lg bg-card px-3.5 text-sm text-foreground transition-colors hover:bg-muted">
+                <ViewSettingsPopover
+                  viewMode={viewMode}
+                  onViewModeChange={onViewModeChange}
+                  thumbnailsEnabled={thumbnailsEnabled}
+                  onThumbnailsChange={onThumbnailsChange}
+                  pageSize={pageSize}
+                  onPageSizeChange={onPageSizeChange}
+                >
+                  <button
+                    type="button"
+                    className="flex h-10 items-center gap-2 rounded-lg bg-card px-3.5 text-sm text-foreground transition-colors hover:bg-muted"
+                  >
                     {viewMode === "grid" ? (
                       <IconLayoutGrid size={16} />
                     ) : (
                       <IconListDetails size={16} />
                     )}
                     视图
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuRadioGroup
-                      value={viewMode}
-                      onValueChange={(value) =>
-                        onViewModeChange(value as ViewMode)
-                      }
-                    >
-                      <DropdownMenuRadioItem value="grid">网格</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="list">列表</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </button>
+                </ViewSettingsPopover>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger className="flex h-10 items-center gap-2 rounded-lg bg-card px-3.5 text-sm text-foreground transition-colors hover:bg-muted">
@@ -264,6 +277,11 @@ export function Toolbar({
                       }
                     >
                       切换为{viewMode === "grid" ? "列表" : "网格"}视图
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onThumbnailsChange(!thumbnailsEnabled)}
+                    >
+                      {thumbnailsEnabled ? "关闭缩略图" : "开启缩略图"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() =>

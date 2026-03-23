@@ -54,7 +54,6 @@ export default function App() {
           <Route path="/app/offline" element={<Offline />} />
           <Route path="/app/store" element={<Store />} />
           <Route path="/app/discussions" element={<Discussions />} />
-          <Route path="/app/*" element={<AppFiles />} />
 
           <Route path="/settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/profile" replace />} />

@@ -138,9 +138,15 @@
     font-family: "Noto Sans SC", sans-serif;
     font-size: 15px;
     line-height: 1.6;
+    color: oklch(0.18 0 0);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
+  }
+
+  .dark body {
+    font-size: 15.5px;
+    color: oklch(0.92 0 0);
   }
 }
 

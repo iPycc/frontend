@@ -56,11 +56,15 @@ export function SidebarLayout() {
     [activeBucket.rootNodeId, getFoldersForBucket]
   )
 
-  const category = new URLSearchParams(location.search).get("type")
+  const searchParams = new URLSearchParams(location.search)
+  const category = searchParams.get("type")
+  const folderParam = searchParams.get("folder")
   const isExplorerRoute =
-    (location.pathname === "/app" || location.pathname.startsWith("/app/")) &&
+    location.pathname === "/app" &&
     !utilityPaths.some((path) => location.pathname.startsWith(path))
-  const isRootExplorer = location.pathname === "/app" && !category
+  const isRootExplorer = location.pathname === "/app" && !category && !folderParam
+  const isInFolder = location.pathname === "/app" && folderParam && !category
+  const isMyFilesActive = isRootExplorer || isInFolder
   const quotaRatio = activeBucket.quota
     ? Math.min(activeBucket.quota.used / activeBucket.quota.total, 1)
     : 0

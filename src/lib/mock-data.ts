@@ -1,6 +1,6 @@
 export type ThemeMode = "light" | "dark" | "system"
 export type SortValue = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "size-desc"
-export type ViewMode = "grid" | "list"
+export type ViewMode = "grid" | "list" | "gallery"
 export type MediaType =
   | "image"
   | "video"
@@ -251,7 +251,7 @@ export const defaultBuckets: BucketMount[] = [
   },
 ]
 
-export const defaultNodes: FileNode[] = [
+export const defaultNodes: FileNode[] = ([
   { id: localRootId, bucketId: "bucket-local", parentId: null, kind: "folder", name: "我的腾讯云存储", updatedAt: "2026-03-12 00:00", isSystemRoot: true },
   { id: "folder-design", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "设计资源", updatedAt: "2026-03-12 00:12" },
   { id: "folder-docs", bucketId: "bucket-local", parentId: localRootId, kind: "folder", name: "产品文档", updatedAt: "2026-03-11 17:25" },
@@ -283,7 +283,12 @@ export const defaultNodes: FileNode[] = [
   { id: "file-share-png", bucketId: "bucket-local", parentId: "folder-shared", kind: "file", name: "渠道海报.png", ext: "png", size: 2200000, updatedAt: "2026-03-07 18:08", mediaType: "image", sharedWithMe: true },
   { id: "file-recycle-doc", bucketId: "bucket-local", parentId: "folder-docs", kind: "file", name: "旧版需求说明.docx", ext: "docx", size: 1600000, updatedAt: "2026-03-01 09:30", mediaType: "document", deletedAt: "2026-03-11 20:16" },
   { id: "file-recycle-video", bucketId: "bucket-local", parentId: "folder-media-video", kind: "file", name: "test-render.mp4", ext: "mp4", size: 420000000, updatedAt: "2026-02-28 12:31", mediaType: "video", deletedAt: "2026-03-10 18:05" },
-]
+] as FileNode[]).map(node => {
+  if (node.kind === "file" && (node.mediaType === "image" || node.mediaType === "video")) {
+    return { ...node, preview: `https://picsum.photos/seed/${node.id}/1920/1080` }
+  }
+  return node
+})
 
 export const defaultShares: ShareRecord[] = [
   {

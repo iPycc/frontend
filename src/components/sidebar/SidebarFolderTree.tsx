@@ -26,17 +26,18 @@ export function buildTree(
 
 export function SidebarFolderTree({
   items,
-  basePath = "/app",
+  parentFolderPath = "",
   level = 0,
   followTree = true,
 }: {
   items: FolderTreeNode[]
-  basePath?: string
+  parentFolderPath?: string
   level?: number
   followTree?: boolean
 }) {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
   const location = useLocation()
+  const currentFolderParam = new URLSearchParams(location.search).get("folder") ?? ""
 
   useEffect(() => {
     if (!followTree) return
@@ -46,10 +47,12 @@ export function SidebarFolderTree({
       const next = { ...current }
 
       for (const folder of items) {
-        const currentPath = `${basePath}/${encodeURIComponent(folder.name)}`
+        const folderPath = parentFolderPath
+          ? `${parentFolderPath}/${folder.name}`
+          : `/${folder.name}`
         const isInCurrentBranch =
-          location.pathname === currentPath ||
-          location.pathname.startsWith(`${currentPath}/`)
+          currentFolderParam === folderPath ||
+          currentFolderParam.startsWith(`${folderPath}/`)
 
         // Auto-open when entering a branch
         if (isInCurrentBranch && next[folder.id] !== true) {
@@ -59,9 +62,8 @@ export function SidebarFolderTree({
 
         // Auto-close when leaving a branch (user navigated out)
         if (!isInCurrentBranch && next[folder.id] === true) {
-          // Only collapse if we're not in any sub-path of this folder
-          const stillInside = location.pathname.startsWith(`${currentPath}/`)
-          if (!stillInside && location.pathname !== currentPath) {
+          const stillInside = currentFolderParam.startsWith(`${folderPath}/`)
+          if (!stillInside && currentFolderParam !== folderPath) {
             next[folder.id] = false
             changed = true
           }
@@ -70,7 +72,7 @@ export function SidebarFolderTree({
 
       return changed ? next : current
     })
-  }, [basePath, items, location.pathname, followTree])
+  }, [parentFolderPath, items, currentFolderParam, followTree])
 
   const toggle = (id: string, event: MouseEvent) => {
     event.preventDefault()
@@ -81,11 +83,14 @@ export function SidebarFolderTree({
   return (
     <div className="space-y-0.5">
       {items.map((folder) => {
-        const currentPath = `${basePath}/${encodeURIComponent(folder.name)}`
+        const folderPath = parentFolderPath
+          ? `${parentFolderPath}/${folder.name}`
+          : `/${folder.name}`
+        const linkTo = `/app?folder=${encodeURIComponent(folderPath)}`
         const hasChildren = folder.children.length > 0
-        const isCurrent = location.pathname === currentPath
+        const isCurrent = currentFolderParam === folderPath
         const isInCurrentBranch =
-          isCurrent || location.pathname.startsWith(`${currentPath}/`)
+          isCurrent || currentFolderParam.startsWith(`${folderPath}/`)
         // When followTree is on, open state is driven by location; when off, use manual state
         const isOpen = followTree
           ? (openStates[folder.id] ?? isInCurrentBranch)
@@ -99,7 +104,7 @@ export function SidebarFolderTree({
               }}
             >
               <SidebarTreeItem
-                to={currentPath}
+                to={linkTo}
                 active={isCurrent}
                 className="min-w-0 w-full"
                 toggle={
@@ -139,7 +144,7 @@ export function SidebarFolderTree({
                 >
                   <SidebarFolderTree
                     items={folder.children}
-                    basePath={currentPath}
+                    parentFolderPath={folderPath}
                     level={level + 1}
                     followTree={followTree}
                   />

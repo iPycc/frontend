@@ -7,13 +7,15 @@ import { FileArea } from "@/components/file-area"
 import {
   RenameDialog,
   MoveDialog,
-  PropertiesDialog,
   ShareDialog,
   DeleteConfirmDialog,
+  FilePreviewModal,
+  DocumentPreviewModal,
 } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
+import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
 import {
   Dialog,
@@ -48,6 +50,16 @@ function getPageTitle(
   return "我的文件"
 }
 
+/** Determine which preview type a file should use */
+function getPreviewType(file: FileNode): "media" | "document" | null {
+  const mt = file.mediaType
+  if (mt === "image" || mt === "video" || mt === "audio") return "media"
+  if (mt === "document" || mt === "code") return "document"
+  const ext = file.ext?.toLowerCase() ?? ""
+  if (["txt", "md", "json", "log", "csv", "xml", "yaml", "yml", "ini", "conf"].includes(ext)) return "document"
+  return null
+}
+
 export function AppFiles() {
   const location = useLocation()
   const {
@@ -69,14 +81,16 @@ export function AppFiles() {
     pasteNodes,
     formatBytes,
   } = useAppState()
+  const propertiesPanel = usePropertiesPanel()
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid")
   const [sortValue, setSortValue] = React.useState<SortValue>("name-asc")
+  const [thumbnailsEnabled, setThumbnailsEnabled] = React.useState(true)
+  const [pageSize, setPageSize] = React.useState(200)
   const [renameTargetId, setRenameTargetId] = React.useState<string | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
-  const [propertyId, setPropertyId] = React.useState<string | null>(null)
   const [shareLinks, setShareLinks] = React.useState<string[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
@@ -87,14 +101,13 @@ export function AppFiles() {
   const loadingTimerRef = React.useRef<number | null>(null)
   const routeKeyRef = React.useRef<string | null>(null)
 
-  const basePath = "/app"
-  const category = new URLSearchParams(location.search).get(
-    "type"
-  ) as keyof typeof categoryMap | null
-  const currentPath =
-    location.pathname.startsWith(basePath) && location.pathname !== basePath
-      ? decodeURIComponent(location.pathname.substring(basePath.length))
-      : ""
+  // Preview state
+  const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
+  const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
+
+  const searchParams = new URLSearchParams(location.search)
+  const category = searchParams.get("type") as keyof typeof categoryMap | null
+  const currentPath = searchParams.get("folder") ?? ""
 
   const currentFolderId = getFolderPathId(currentPath)
 
@@ -112,11 +125,21 @@ export function AppFiles() {
     )
   }, [category, currentPath, getCategoryNodes, getNodesInFolder, sortValue])
 
+  // Previewable media files for navigation in the preview modal
+  const mediaFiles = React.useMemo(
+    () => items.filter((item) => item.kind === "file" && getPreviewType(item) === "media"),
+    [items]
+  )
+
+  const mediaPreviewIndex = React.useMemo(() => {
+    if (!mediaPreviewFile) return 0
+    const idx = mediaFiles.findIndex((f) => f.id === mediaPreviewFile.id)
+    return idx >= 0 ? idx : 0
+  }, [mediaPreviewFile, mediaFiles])
+
   const pathParts = currentPath.split("/").filter(Boolean)
-  const propertyNode = propertyId ? getNodeById(propertyId) : undefined
   const folderOptions = React.useMemo(() => {
     const root = { id: activeBucket.rootNodeId, name: `${activeBucket.name} /` }
-
     return [
       root,
       ...getFoldersForBucket(undefined, false).map((node) => ({
@@ -126,20 +149,27 @@ export function AppFiles() {
     ]
   }, [activeBucket.name, activeBucket.rootNodeId, getFoldersForBucket])
 
-  // Reset selection on path or category change
   React.useEffect(() => {
     setSelectedIds([])
   }, [currentPath, category])
+
+
+
+  const openPropertiesById = React.useCallback(
+    (id: string) => {
+      const n = getNodeById(id)
+      if (n) propertiesPanel.open(n)
+    },
+    [getNodeById, propertiesPanel]
+  )
 
   const startFileAreaLoading = React.useCallback(
     (label = "正在载入内容", duration = 420) => {
       setFileAreaLoadingLabel(label)
       setFileAreaLoading(true)
-
       if (loadingTimerRef.current) {
         window.clearTimeout(loadingTimerRef.current)
       }
-
       loadingTimerRef.current = window.setTimeout(() => {
         setFileAreaLoading(false)
         loadingTimerRef.current = null
@@ -150,11 +180,9 @@ export function AppFiles() {
 
   React.useEffect(() => {
     const routeKey = `${location.pathname}${location.search}`
-
     if (routeKeyRef.current && routeKeyRef.current !== routeKey) {
       startFileAreaLoading("正在进入文件夹", 220)
     }
-
     routeKeyRef.current = routeKey
   }, [location.pathname, location.search, startFileAreaLoading])
 
@@ -218,10 +246,7 @@ export function AppFiles() {
 
   const handleRenameRequest = (ids: string[]) => {
     const node = getNodeById(ids[0])
-    if (!node || ids.length !== 1) {
-      return
-    }
-
+    if (!node || ids.length !== 1) return
     setRenameTargetId(node.id)
     setRenameValue(node.name)
   }
@@ -290,6 +315,31 @@ export function AppFiles() {
     setDeleteIds([])
   }
 
+  /** Open a file — route to the correct preview modal based on type */
+  const handleOpenFile = React.useCallback((node: FileNode) => {
+    const type = getPreviewType(node)
+    if (type === "media") {
+      setMediaPreviewFile(node)
+    } else if (type === "document") {
+      setDocPreviewFile(node)
+    } else {
+      // Fallback: show properties panel
+      propertiesPanel.open(node)
+    }
+  }, [propertiesPanel])
+
+  const handleMediaPrev = React.useCallback(() => {
+    if (mediaFiles.length <= 1) return
+    const idx = (mediaPreviewIndex - 1 + mediaFiles.length) % mediaFiles.length
+    setMediaPreviewFile(mediaFiles[idx])
+  }, [mediaFiles, mediaPreviewIndex])
+
+  const handleMediaNext = React.useCallback(() => {
+    if (mediaFiles.length <= 1) return
+    const idx = (mediaPreviewIndex + 1) % mediaFiles.length
+    setMediaPreviewFile(mediaFiles[idx])
+  }, [mediaFiles, mediaPreviewIndex])
+
   return (
     <>
       <Toolbar
@@ -301,6 +351,10 @@ export function AppFiles() {
         onViewModeChange={setViewMode}
         sortValue={sortValue}
         onSortChange={setSortValue}
+        thumbnailsEnabled={thumbnailsEnabled}
+        onThumbnailsChange={setThumbnailsEnabled}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
         onRefresh={handleRefresh}
         onCreateFolder={() => handleCreateFolder()}
         onPaste={handlePaste}
@@ -311,6 +365,13 @@ export function AppFiles() {
         onRename={() => handleRenameRequest(selectedIds)}
         onShare={() => handleShareRequest(selectedIds)}
         onDownload={() => handleDownloadRequest(selectedIds)}
+        onProperties={() => {
+          if (selectedIds.length === 1) openPropertiesById(selectedIds[0])
+          else if (selectedIds.length > 1) {
+            const nodes = selectedIds.map(getNodeById).filter(Boolean) as FileNode[]
+            if (nodes.length) propertiesPanel.openMulti(nodes)
+          }
+        }}
       />
       <AnimatePresence mode="wait">
         <motion.div
@@ -327,6 +388,7 @@ export function AppFiles() {
             selectedIds={selectedIds}
             viewMode={viewMode}
             sortValue={sortValue}
+            showThumbnail={thumbnailsEnabled}
             isLoading={fileAreaLoading}
             loadingLabel={fileAreaLoadingLabel}
             canPaste={Boolean(clipboard)}
@@ -340,7 +402,8 @@ export function AppFiles() {
             onDeleteRequest={handleDeleteRequest}
             onCopyRequest={handleCopyIds}
             onCutRequest={handleCutIds}
-            onPropertiesRequest={setPropertyId}
+            onPropertiesRequest={openPropertiesById}
+            onOpenFile={handleOpenFile}
             onCreateFolder={() => handleCreateFolder()}
             onCreateChildFolder={handleCreateFolder}
             onUploadMock={handleUploadMock}
@@ -351,6 +414,32 @@ export function AppFiles() {
           />
         </motion.div>
       </AnimatePresence>
+
+      {/* Media preview (image/video/audio) */}
+      <FilePreviewModal
+        open={Boolean(mediaPreviewFile)}
+        file={mediaPreviewFile}
+        currentIndex={mediaPreviewIndex}
+        totalCount={mediaFiles.length}
+        onClose={() => setMediaPreviewFile(null)}
+        onDownload={handleDownloadRequest}
+        onProperties={openPropertiesById}
+        onCopy={handleCopyIds}
+        onCut={handleCutIds}
+        onRename={handleRenameRequest}
+        onMove={handleMoveRequest}
+        onShare={handleShareRequest}
+        onDelete={handleDeleteRequest}
+        onPrev={handleMediaPrev}
+        onNext={handleMediaNext}
+      />
+
+      {/* Document preview (text/code/pdf/office) */}
+      <DocumentPreviewModal
+        open={Boolean(docPreviewFile)}
+        file={docPreviewFile}
+        onClose={() => setDocPreviewFile(null)}
+      />
 
       <RenameDialog
         open={Boolean(renameTargetId)}
@@ -365,13 +454,6 @@ export function AppFiles() {
         defaultTargetId={moveTargetId}
         onClose={() => setMoveIds([])}
         onSubmit={submitMove}
-      />
-
-      <PropertiesDialog
-        node={propertyNode}
-        bucketName={activeBucket.name}
-        formatBytes={formatBytes}
-        onClose={() => setPropertyId(null)}
       />
 
       <ShareDialog

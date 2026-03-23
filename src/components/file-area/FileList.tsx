@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react"
+import { IconCheck, IconCircle } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
@@ -51,8 +52,10 @@ export function FileList({
                 <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
                   <div
                     className={cn(
-                      "grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50",
-                      selected ? "bg-primary/[0.08] dark:bg-primary/[0.13]" : ""
+                      "group grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors",
+                      selected 
+                        ? "bg-primary/[0.08] dark:bg-primary/[0.13]" 
+                        : "bg-transparent hover:bg-muted/70 dark:hover:bg-[#2b2b2b]"
                     )}
                   >
                     <div className="flex items-center justify-center">
@@ -63,14 +66,25 @@ export function FileList({
                           onSelectNode(item.id, event)
                         }}
                         className={cn(
-                          "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+                          "flex h-8 w-8 items-center justify-center rounded-xl transition-colors",
                           selected
-                            ? "bg-primary/[0.12] text-primary dark:bg-primary/20"
-                            : "bg-muted text-muted-foreground hover:bg-muted/70 dark:bg-accent dark:hover:bg-accent/70"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
                         )}
                         aria-label={`选择 ${item.name}`}
                       >
-                        <FileGlyph item={item} />
+                        {selected ? (
+                          <IconCheck size={16} stroke={2.5} />
+                        ) : (
+                          <>
+                            <div className="hidden group-hover:flex items-center justify-center">
+                              <IconCircle size={20} stroke={2} className="text-muted-foreground/60 dark:text-white/70" />
+                            </div>
+                            <div className="flex group-hover:hidden items-center justify-center">
+                              <FileGlyph item={item} />
+                            </div>
+                          </>
+                        )}
                       </button>
                     </div>
                     <button

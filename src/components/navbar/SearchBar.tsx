@@ -56,7 +56,8 @@ export function SearchBar() {
         parts.unshift(current.name)
         current = nodes.find((n) => n.id === current.parentId) as typeof node
       }
-      navigate(`/app/${parts.map(encodeURIComponent).join("/")}`)
+      const folderPath = "/" + parts.join("/")
+      navigate(`/app?folder=${encodeURIComponent(folderPath)}`)
     } else {
       // Navigate to parent folder
       const parent = nodes.find((n) => n.id === node.parentId)
@@ -67,7 +68,8 @@ export function SearchBar() {
           parts.unshift(current.name)
           current = nodes.find((n) => n.id === current.parentId) as typeof node
         }
-        navigate(`/app/${parts.map(encodeURIComponent).join("/")}`)
+        const folderPath = "/" + parts.join("/")
+        navigate(`/app?folder=${encodeURIComponent(folderPath)}`)
       } else {
         navigate("/app")
       }

@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { IconFolder } from "@tabler/icons-react"
+import { IconFolder, IconLoader2 } from "@tabler/icons-react"
 
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -15,6 +15,8 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent } from "@/components/ui/card"
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
 
@@ -24,6 +26,7 @@ interface FileAreaProps {
   selectedIds: string[]
   viewMode: ViewMode
   sortValue: SortValue
+  showThumbnail?: boolean
   isLoading?: boolean
   loadingLabel?: string
   canPaste: boolean
@@ -38,6 +41,7 @@ interface FileAreaProps {
   onCopyRequest: (ids: string[]) => void
   onCutRequest: (ids: string[]) => void
   onPropertiesRequest: (id: string) => void
+  onOpenFile: (node: FileNode) => void
   onCreateFolder: () => void
   onCreateChildFolder: (parentId: string) => void
   onUploadMock: () => void
@@ -61,6 +65,7 @@ export function FileArea({
   selectedIds,
   viewMode,
   sortValue,
+  showThumbnail = false,
   isLoading = false,
   loadingLabel = "正在载入内容",
   canPaste,
@@ -75,6 +80,7 @@ export function FileArea({
   onCopyRequest,
   onCutRequest,
   onPropertiesRequest,
+  onOpenFile,
   onCreateFolder,
   onCreateChildFolder,
   onUploadMock,
@@ -88,18 +94,20 @@ export function FileArea({
   const files = items.filter((item) => item.kind === "file")
 
   const handleBackgroundClick = (event: MouseEvent) => {
-    if (event.target === event.currentTarget && onClearSelection) {
-      onClearSelection()
-    }
+    // Deselect when clicking any empty area (not on a file card)
+    const target = event.target as HTMLElement
+    if (target.closest("[data-file-card]")) return
+    if (onClearSelection) onClearSelection()
   }
 
   const openNode = (node: FileNode) => {
     if (node.kind === "folder") {
       const parentPath = currentPath === "/" ? "" : currentPath
-      navigate(`/app${parentPath}/${encodeURIComponent(node.name)}`)
+      const folderPath = `${parentPath}/${node.name}`
+      navigate(`/app?folder=${encodeURIComponent(folderPath)}`)
       return
     }
-    onPropertiesRequest(node.id)
+    onOpenFile(node)
   }
 
   const getContextIds = (nodeId: string) =>
@@ -114,7 +122,7 @@ export function FileArea({
           className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
-          <div className="custom-scrollbar flex-1 overflow-y-auto pr-2 md:pr-1">
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-2 md:pr-1" onClick={handleBackgroundClick}>
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
@@ -146,6 +154,7 @@ export function FileArea({
                     title="文件"
                     items={files}
                     selectedIds={selectedIds}
+                    showThumbnail={showThumbnail}
                     onSelectNode={onSelectNode}
                     onPrepareContext={onPrepareContext}
                     onOpenNode={openNode}
@@ -229,25 +238,8 @@ export function FileArea({
 
 function FileAreaLoading({ label }: { label: string }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/78 backdrop-blur-[2px]">
-      <div className="flex min-w-[220px] items-center gap-4 rounded-[18px] border border-border/70 bg-background/95 px-4 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.3)]">
-        <div className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <IconFolder size={18} />
-          <span className="absolute inset-0 rounded-full border border-primary/25 animate-ping" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-medium">{label}</div>
-          <div className="mt-1 flex items-center gap-1">
-            {[0, 150, 300].map((delay) => (
-              <span
-                key={delay}
-                className="size-1.5 rounded-full bg-primary/75 animate-bounce"
-                style={{ animationDelay: `${delay}ms`, animationDuration: "0.9s" }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
+      <IconLoader2 className="h-10 w-10 animate-spin text-primary" />
     </div>
   )
 }

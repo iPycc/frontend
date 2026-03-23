@@ -7,6 +7,7 @@ interface FileSectionProps extends ItemHandlers {
   emptyText?: string
   items: FileNode[]
   selectedIds: string[]
+  showThumbnail?: boolean
 }
 
 export function FileSection({
@@ -14,6 +15,7 @@ export function FileSection({
   emptyText,
   items,
   selectedIds,
+  showThumbnail = false,
   onSelectNode,
   onPrepareContext,
   onOpenNode,
@@ -42,6 +44,7 @@ export function FileSection({
               <FileCard
                 item={item}
                 selected={selectedIds.includes(item.id)}
+                showThumbnail={showThumbnail}
                 onSelectNode={onSelectNode}
                 onPrepareContext={onPrepareContext}
                 onOpenNode={onOpenNode}
