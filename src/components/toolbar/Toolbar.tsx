@@ -98,7 +98,7 @@ export function Toolbar({
   currentLabel,
 }: ToolbarProps) {
   return (
-    <div className="app-panel relative flex h-11.5 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
+    <div className="app-panel relative flex h-11.5 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] md:px-2 dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait">
         {selectedCount > 0 ? (
           <motion.div
@@ -107,7 +107,7 @@ export function Toolbar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="absolute inset-0 flex items-center justify-between bg-primary/10 px-2 md:px-4 dark:bg-primary/15"
+            className="absolute inset-0 flex items-center justify-between bg-primary/10 px-1.5 md:px-4 dark:bg-primary/15"
           >
             <div className="flex items-center gap-2 md:gap-4">
               <button
