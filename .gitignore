@@ -10,3 +10,4 @@ coverage/
 .figma
 src_old
 package-lock.json
+SKELETON.md

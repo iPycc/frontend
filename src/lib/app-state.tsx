@@ -1,6 +1,8 @@
 import * as React from "react"
 
 import {
+  buildLocalStoragePath,
+  createLocalStorageBucketForUser,
   createId,
   defaultAuth,
   defaultAppSnapshot,
@@ -16,6 +18,7 @@ import {
   type OfflineTask,
   type SecurityState,
   type ShareRecord,
+  type StorageStrategyKey,
   type ThemeMode,
   type UserProfile,
   type UserSettings,
@@ -28,6 +31,9 @@ type BucketWizardInput = {
   provider: string
   bucket: string
   region: string
+  storageType?: StorageStrategyKey
+  ownerId?: string
+  isLocal?: boolean
   endpoint?: string
   basePrefix: string
   secretId: string
@@ -42,6 +48,9 @@ type BucketWizardInput = {
   accelerate: boolean
   corsConfigured: boolean
   advancedMode: boolean
+  canEditConnection?: boolean
+  canDelete?: boolean
+  canRename?: boolean
 }
 
 type AuthRegisterInput = {
@@ -122,7 +131,7 @@ function loadSnapshot(): AppSnapshot {
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppSnapshot>
-    return {
+    const nextSnapshot = {
       ...defaultAppSnapshot,
       ...parsed,
       profile: { ...defaultAppSnapshot.profile, ...parsed.profile },
@@ -142,6 +151,11 @@ function loadSnapshot(): AppSnapshot {
       clipboard: parsed.clipboard ?? null,
       activeBucketId: parsed.activeBucketId ?? defaultAppSnapshot.activeBucketId,
     }
+    const currentUser = nextSnapshot.auth.users.find(
+      (user) => user.id === nextSnapshot.auth.currentUserId
+    )
+
+    return currentUser ? ensureLocalStorageBucket(nextSnapshot, currentUser) : nextSnapshot
   } catch {
     return defaultAppSnapshot
   }
@@ -173,6 +187,30 @@ function buildProfileFromAuthUser(user: MockAuthUser): UserProfile {
     registeredAt: user.registeredAt,
     group: user.group,
     homepage: createHomepage(user.username),
+  }
+}
+
+function isBucketVisibleToUser(bucket: BucketMount, user: MockAuthUser | null) {
+  return !bucket.ownerId || bucket.ownerId === user?.id
+}
+
+function ensureLocalStorageBucket(snapshot: AppSnapshot, user: MockAuthUser) {
+  const existingBucket = snapshot.buckets.find(
+    (bucket) => bucket.storageType === "local" && bucket.ownerId === user.id
+  )
+
+  if (existingBucket) {
+    return snapshot
+  }
+
+  const localStorage = createLocalStorageBucketForUser(user, {
+    basePrefix: buildLocalStoragePath(user.username),
+  })
+
+  return {
+    ...snapshot,
+    buckets: [...snapshot.buckets, localStorage.bucket],
+    nodes: [...snapshot.nodes, localStorage.rootNode],
   }
 }
 
@@ -233,21 +271,33 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", effectiveTheme === "dark")
   }, [effectiveTheme])
 
-  const activeBucket = React.useMemo(() => {
-    return snapshot.buckets.find((bucket) => bucket.id === snapshot.activeBucketId) ?? snapshot.buckets[0]
-  }, [snapshot.activeBucketId, snapshot.buckets])
-
   const currentUser = React.useMemo(() => {
     return snapshot.auth.users.find((user) => user.id === snapshot.auth.currentUserId) ?? null
   }, [snapshot.auth.currentUserId, snapshot.auth.users])
+
+  const buckets = React.useMemo(() => {
+    return snapshot.buckets.filter((bucket) => isBucketVisibleToUser(bucket, currentUser))
+  }, [currentUser, snapshot.buckets])
+
+  const activeBucket = React.useMemo(() => {
+    return buckets.find((bucket) => bucket.id === snapshot.activeBucketId) ?? buckets[0] ?? snapshot.buckets[0]
+  }, [buckets, snapshot.activeBucketId, snapshot.buckets])
+
+  const defaultBucketId = activeBucket?.id ?? snapshot.activeBucketId
 
   const updateSnapshot = React.useCallback((recipe: (current: AppSnapshot) => AppSnapshot) => {
     setSnapshot((current) => recipe(current))
   }, [])
 
+  React.useEffect(() => {
+    if (activeBucket && activeBucket.id !== snapshot.activeBucketId) {
+      updateSnapshot((current) => ({ ...current, activeBucketId: activeBucket.id }))
+    }
+  }, [activeBucket, snapshot.activeBucketId, updateSnapshot])
+
   const getNodeById = React.useCallback((nodeId: string) => snapshot.nodes.find((node) => node.id === nodeId), [snapshot.nodes])
 
-  const getFolderPathId = React.useCallback((path: string, bucketId = snapshot.activeBucketId) => {
+  const getFolderPathId = React.useCallback((path: string, bucketId = defaultBucketId) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     if (!rootId) {
       return null
@@ -274,9 +324,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     return parentId
-  }, [snapshot])
+  }, [defaultBucketId, snapshot])
 
-  const getNodesInFolder = React.useCallback((path: string, bucketId = snapshot.activeBucketId) => {
+  const getNodesInFolder = React.useCallback((path: string, bucketId = defaultBucketId) => {
     const folderId = getFolderPathId(path, bucketId)
     if (!folderId) {
       return []
@@ -285,9 +335,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return snapshot.nodes.filter(
       (node) => node.bucketId === bucketId && node.parentId === folderId && isVisibleNode(node)
     )
-  }, [getFolderPathId, snapshot.activeBucketId, snapshot.nodes])
+  }, [defaultBucketId, getFolderPathId, snapshot.nodes])
 
-  const getFoldersForBucket = React.useCallback((bucketId = snapshot.activeBucketId, includeRoot = false) => {
+  const getFoldersForBucket = React.useCallback((bucketId = defaultBucketId, includeRoot = false) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     return snapshot.nodes.filter((node) => {
       if (node.bucketId !== bucketId || node.kind !== "folder" || node.deletedAt) {
@@ -300,9 +350,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       return node.id !== rootId
     })
-  }, [snapshot])
+  }, [defaultBucketId, snapshot])
 
-  const getTreeNodes = React.useCallback((bucketId = snapshot.activeBucketId) => {
+  const getTreeNodes = React.useCallback((bucketId = defaultBucketId) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     if (!rootId) {
       return []
@@ -311,13 +361,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return snapshot.nodes.filter(
       (node) => node.bucketId === bucketId && node.parentId === rootId && node.kind === "folder" && !node.deletedAt
     )
-  }, [snapshot])
+  }, [defaultBucketId, snapshot])
 
-  const getCategoryNodes = React.useCallback((category: "image" | "video" | "audio" | "document", bucketId = snapshot.activeBucketId) => {
+  const getCategoryNodes = React.useCallback((category: "image" | "video" | "audio" | "document", bucketId = defaultBucketId) => {
     return snapshot.nodes.filter(
       (node) => node.bucketId === bucketId && node.kind === "file" && node.mediaType === category && isVisibleNode(node)
     )
-  }, [snapshot.activeBucketId, snapshot.nodes])
+  }, [defaultBucketId, snapshot.nodes])
 
   const getSharedWithMeNodes = React.useCallback(() => snapshot.nodes.filter((node) => node.sharedWithMe && isVisibleNode(node)), [snapshot.nodes])
   const getRecycleNodes = React.useCallback(() => snapshot.nodes.filter((node) => Boolean(node.deletedAt)), [snapshot.nodes])
@@ -381,7 +431,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    updateSnapshot((current) => ({
+    updateSnapshot((current) => ensureLocalStorageBucket({
       ...current,
       profile: buildProfileFromAuthUser(matchedUser),
       security: { ...current.security, passwordVerified: false },
@@ -399,7 +449,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         },
         ...current.loginActivity,
       ],
-    }))
+    }, matchedUser))
 
     return { success: true }
   }, [snapshot.auth.users, updateSnapshot])
@@ -433,7 +483,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       registeredAt: nowString(),
     }
 
-    updateSnapshot((current) => ({
+    updateSnapshot((current) => ensureLocalStorageBucket({
       ...current,
       profile: buildProfileFromAuthUser(nextUser),
       security: { ...current.security, passwordVerified: false },
@@ -451,7 +501,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         },
         ...current.loginActivity,
       ],
-    }))
+    }, nextUser))
 
     return { success: true }
   }, [snapshot.auth.users, updateSnapshot])
@@ -530,10 +580,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const addBucket = React.useCallback((input: BucketWizardInput) => {
     const bucketId = createId("bucket")
     const rootNodeId = createId("root")
+    const isLocal = input.isLocal ?? input.storageType === "local"
     const mount: BucketMount = {
       id: bucketId,
       name: input.name,
       provider: input.provider,
+      storageType: input.storageType,
+      ownerId: input.ownerId,
       bucket: input.bucket,
       region: input.region,
       endpoint: input.endpoint,
@@ -552,13 +605,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       },
       rootNodeId,
       createdAt: nowString(),
-      corsStatus: input.corsConfigured ? "healthy" : "warning",
-      corsMessage: input.corsConfigured ? "CORS 配置匹配当前挂载策略" : "发现未配置或不匹配项，建议一键修复",
+      corsStatus: isLocal || input.corsConfigured ? "healthy" : "warning",
+      corsMessage: isLocal
+        ? `本机目录已绑定：${input.basePrefix}`
+        : input.corsConfigured
+          ? "CORS 配置匹配当前挂载策略"
+          : "发现未配置或不匹配项，建议一键修复",
       advancedMode: input.advancedMode,
-      isLocal: false,
-      canEditConnection: true,
-      canDelete: true,
-      canRename: true,
+      isLocal,
+      canEditConnection: input.canEditConnection ?? true,
+      canDelete: input.canDelete ?? true,
+      canRename: input.canRename ?? true,
     }
 
     updateSnapshot((current) => ({
@@ -582,7 +639,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return mount
   }, [updateSnapshot])
 
-  const createFolder = React.useCallback((parentId: string | null, name: string, bucketId = snapshot.activeBucketId) => {
+  const createFolder = React.useCallback((parentId: string | null, name: string, bucketId = defaultBucketId) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     const node: FileNode = {
       id: createId("folder"),
@@ -599,9 +656,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
 
     return node
-  }, [snapshot, updateSnapshot])
+  }, [defaultBucketId, snapshot, updateSnapshot])
 
-  const createSampleFile = React.useCallback((parentId: string | null, bucketId = snapshot.activeBucketId) => {
+  const createSampleFile = React.useCallback((parentId: string | null, bucketId = defaultBucketId) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     const node: FileNode = {
       id: createId("file"),
@@ -621,7 +678,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
 
     return node
-  }, [snapshot, updateSnapshot])
+  }, [defaultBucketId, snapshot, updateSnapshot])
 
   const renameNode = React.useCallback((nodeId: string, name: string) => {
     updateSnapshot((current) => ({
@@ -630,7 +687,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [updateSnapshot])
 
-  const moveNodes = React.useCallback((nodeIds: string[], targetParentId: string | null, bucketId = snapshot.activeBucketId) => {
+  const moveNodes = React.useCallback((nodeIds: string[], targetParentId: string | null, bucketId = defaultBucketId) => {
     const rootId = getBucketRoot(snapshot, bucketId)
     updateSnapshot((current) => ({
       ...current,
@@ -640,7 +697,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           : node
       ),
     }))
-  }, [snapshot, updateSnapshot])
+  }, [defaultBucketId, snapshot, updateSnapshot])
 
   const duplicateNodes = React.useCallback((nodeIds: string[]) => {
     updateSnapshot((current) => {
@@ -723,7 +780,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [updateSnapshot])
 
-  const pasteNodes = React.useCallback((targetParentId: string | null, bucketId = snapshot.activeBucketId) => {
+  const pasteNodes = React.useCallback((targetParentId: string | null, bucketId = defaultBucketId) => {
     if (!snapshot.clipboard) {
       return
     }
@@ -735,7 +792,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     duplicateNodes(snapshot.clipboard.nodeIds)
-  }, [duplicateNodes, moveNodes, snapshot.activeBucketId, snapshot.clipboard, updateSnapshot])
+  }, [defaultBucketId, duplicateNodes, moveNodes, snapshot.clipboard, updateSnapshot])
 
   const addOfflineTask = React.useCallback((url: string) => {
     const task: OfflineTask = {
@@ -765,7 +822,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     settings: snapshot.settings,
     security: snapshot.security,
     loginActivity: snapshot.loginActivity,
-    buckets: snapshot.buckets,
+    buckets,
     activeBucket,
     nodes: snapshot.nodes,
     shares: snapshot.shares,
@@ -845,7 +902,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setThemeMode,
     shareNodes,
     snapshot.auth,
-    snapshot.buckets,
+    buckets,
     snapshot.clipboard,
     snapshot.loginActivity,
     snapshot.nodes,

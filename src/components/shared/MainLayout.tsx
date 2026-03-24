@@ -16,8 +16,8 @@ export function MainLayout() {
           <SidebarLayout />
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <NavbarLayout />
-            <main className="flex min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-3 md:px-4 md:pb-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+            <main className="flex min-h-0 flex-1 gap-1.5 overflow-hidden px-1 pb-2 sm:gap-2 sm:px-2 sm:pb-3 md:px-4 md:pb-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden sm:gap-2">
                 <Outlet />
               </div>
               <PropertiesPanel />

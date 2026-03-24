@@ -119,16 +119,16 @@ export function FileArea({
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
+          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-3 sm:p-3 md:p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
           onClick={handleBackgroundClick}
         >
-          <div className="custom-scrollbar flex-1 overflow-y-auto pr-2 md:pr-1" onClick={handleBackgroundClick}>
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 sm:pr-1 md:pr-2" onClick={handleBackgroundClick}>
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
               </div>
             ) : viewMode === "grid" ? (
-              <div className="flex flex-1 flex-col gap-8">
+              <div className="flex flex-1 flex-col gap-4 sm:gap-6 md:gap-8">
                 {folders.length > 0 ? (
                   <FileSection
                     title="文件夹"

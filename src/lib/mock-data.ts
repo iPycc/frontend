@@ -10,6 +10,8 @@ export type MediaType =
   | "code"
   | "other"
 
+export type StorageStrategyKey = "tencent" | "local" | "aliyun"
+
 export interface UserProfile {
   username: string
   avatar: string
@@ -80,6 +82,8 @@ export interface BucketMount {
   id: string
   name: string
   provider: string
+  storageType?: StorageStrategyKey
+  ownerId?: string
   region?: string
   endpoint?: string
   bucket?: string
@@ -223,6 +227,7 @@ export const defaultBuckets: BucketMount[] = [
     id: "bucket-local",
     name: "我的腾讯云存储",
     provider: "Tencent COS",
+    storageType: "tencent",
     region: "ap-guangzhou",
     endpoint: "cos.ap-guangzhou.myqcloud.com",
     bucket: "cloudrave-assets-prod-1250000000",
@@ -354,6 +359,112 @@ export const defaultAppSnapshot: AppSnapshot = {
 
 export function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+export function normalizeLocalStorageSegment(value: string) {
+  return value
+    .trim()
+    .replace(/[<>:"|?*]/g, "-")
+    .replace(/[\\/]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export function buildLocalStoragePath(value: string) {
+  const normalized = normalizeLocalStorageSegment(value) || "default"
+  return `/upload/${normalized}`
+}
+
+export function validateLocalStoragePath(path: string) {
+  const normalized = path.trim()
+
+  if (!normalized) {
+    return { isValid: false, message: "请输入本机存储目录。", normalized }
+  }
+
+  if (!normalized.startsWith("/upload")) {
+    return { isValid: false, message: "目录必须以 /upload 开头。", normalized }
+  }
+
+  if (normalized.includes("..")) {
+    return { isValid: false, message: "目录不能包含相对路径 .. 。", normalized }
+  }
+
+  if (/[<>:"|?*]/.test(normalized)) {
+    return { isValid: false, message: "目录包含非法字符 < > : \" | ? * 。", normalized }
+  }
+
+  if (/\/{2,}/.test(normalized)) {
+    return { isValid: false, message: "目录不能包含连续的 / 。", normalized }
+  }
+
+  return { isValid: true, message: "目录可用，保存后会作为本机存储根路径。", normalized }
+}
+
+export function getLocalStoragePathSuggestions(value: string) {
+  const raw = value.trim()
+  const base = raw.startsWith("/") ? raw : buildLocalStoragePath(raw || "workspace")
+  return Array.from(
+    new Set([
+      base,
+      `${base}/assets`,
+      `${base}/documents`,
+      `${base}/uploads`,
+    ])
+  )
+}
+
+export function createLocalStorageBucketForUser(
+  user: Pick<MockAuthUser, "id" | "username">,
+  overrides: Partial<BucketMount> = {}
+) {
+  const bucketId = overrides.id ?? createId("bucket")
+  const rootNodeId = overrides.rootNodeId ?? createId("root")
+  const path = overrides.basePrefix ?? buildLocalStoragePath(user.username)
+  const bucket: BucketMount = {
+    id: bucketId,
+    name: overrides.name ?? "本机存储",
+    provider: overrides.provider ?? "Local Storage",
+    storageType: "local",
+    ownerId: user.id,
+    bucket: overrides.bucket ?? path,
+    basePrefix: path,
+    strategy: overrides.strategy ?? {
+      multipartThreshold: "25 MB",
+      partSize: "25 MB",
+      presignTtl: "900",
+      concurrency: 1,
+      protocol: "https",
+      pathStyle: false,
+      accelerate: false,
+    },
+    rootNodeId,
+    createdAt: overrides.createdAt ?? new Date().toLocaleString("zh-CN", { hour12: false }),
+    corsStatus: overrides.corsStatus ?? "healthy",
+    corsMessage: overrides.corsMessage ?? `本机目录已绑定：${path}`,
+    advancedMode: overrides.advancedMode ?? false,
+    isLocal: true,
+    canEditConnection: overrides.canEditConnection ?? false,
+    canDelete: overrides.canDelete ?? false,
+    canRename: overrides.canRename ?? false,
+    region: overrides.region,
+    endpoint: overrides.endpoint,
+    secretId: overrides.secretId,
+    secretKey: overrides.secretKey,
+    sessionToken: overrides.sessionToken,
+    quota: overrides.quota,
+  }
+  const rootNode: FileNode = {
+    id: rootNodeId,
+    bucketId,
+    parentId: null,
+    kind: "folder",
+    name: bucket.name,
+    updatedAt: bucket.createdAt,
+    isSystemRoot: true,
+  }
+
+  return { bucket, rootNode }
 }
 
 export function formatBytes(size?: number) {

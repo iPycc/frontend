@@ -1,8 +1,9 @@
 import * as React from "react"
-import { IconPlus, IconRefresh, IconChevronDown } from "@tabler/icons-react"
+import { IconChevronDown, IconPlus, IconRefresh } from "@tabler/icons-react"
+
 import { Button } from "@/components/ui/button"
-import { StoragePolicyCard } from "./StoragePolicyCard"
 import type { BucketMount } from "@/lib/mock-data"
+import { StoragePolicyCard } from "@/components/storage/StoragePolicyCard"
 
 interface StoragePolicyListProps {
   buckets: BucketMount[]
@@ -19,7 +20,6 @@ export function StoragePolicyList({
 }: StoragePolicyListProps) {
   return (
     <div className="space-y-5">
-      {/* Toolbar */}
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" className="gap-1.5">
           <IconRefresh size={14} />
@@ -31,15 +31,13 @@ export function StoragePolicyList({
         </Button>
       </div>
 
-      {/* Grid */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {/* Add card */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <button
           type="button"
           onClick={onAddPolicy}
-          className="flex min-h-[100px] items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          className="flex min-h-[120px] items-center justify-center gap-2 rounded-2xl bg-muted/30 text-[15px] text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
         >
-          <IconPlus size={16} />
+          <IconPlus size={18} />
           添加存储策略
         </button>
 
@@ -54,22 +52,11 @@ export function StoragePolicyList({
         ))}
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div>共 {buckets.length} 项存储策略</div>
         <div className="flex items-center gap-2">
-          <button className="flex h-7 w-7 items-center justify-center rounded border border-border/60 hover:bg-muted">
-            &lt;
-          </button>
-          <span className="flex h-7 w-7 items-center justify-center rounded bg-primary text-xs text-primary-foreground">
-            1
-          </span>
-          <button className="flex h-7 w-7 items-center justify-center rounded border border-border/60 hover:bg-muted">
-            &gt;
-          </button>
-        </div>
-        <div className="flex items-center gap-1">
-          每页 11 条
-          <IconChevronDown size={14} />
+          <Button variant="ghost" size="sm" disabled>上一页</Button>
+          <Button variant="ghost" size="sm" disabled>下一页</Button>
         </div>
       </div>
     </div>

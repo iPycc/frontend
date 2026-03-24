@@ -102,7 +102,7 @@ export function SettingsLayout() {
         )}
       </div>
 
-      <div className={cn("custom-scrollbar mt-6 flex-1 overflow-y-auto", isMobile ? "pr-0" : "pr-1")}>
+      <div className={cn("custom-scrollbar mt-6 flex-1 overflow-y-auto", isMobile ? "pr-4" : "pr-6")}>
         <Outlet />
       </div>
     </div>

@@ -48,6 +48,17 @@ function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?:
     )
   }
 
+  if (p.includes("local") || p.includes("本机")) {
+    return (
+      <svg viewBox="0 0 64 64" fill="none" width={px} height={px} style={{ minWidth: px, minHeight: px }} aria-hidden="true">
+        <rect x="8" y="16" width="48" height="32" rx="5" fill="#4F46E5" />
+        <rect x="8" y="16" width="48" height="18" rx="5" fill="#6366F1" />
+        <circle cx="20" cy="38" r="3.5" fill="white" />
+        <circle cx="30" cy="38" r="3.5" fill="white" />
+      </svg>
+    )
+  }
+
   return (
     <svg viewBox="0 0 32 32" fill="none" width={px} height={px} style={{ minWidth: px, minHeight: px }} aria-hidden="true">
       <rect width="32" height="32" rx="8" fill="#1ea7ff" opacity="0.15" />

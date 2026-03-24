@@ -33,12 +33,12 @@ export function FileSection({
   return (
     <section>
       {title ? (
-        <h2 className="mb-4 text-sm font-medium text-foreground">{title}</h2>
+        <h2 className="mb-2 text-sm font-medium text-foreground sm:mb-3 md:mb-4">{title}</h2>
       ) : null}
       {items.length === 0 ? (
         emptyText ? <div className="text-sm text-muted-foreground">{emptyText}</div> : null
       ) : (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] md:gap-3">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] md:gap-3">
           {items.map((item) => (
             <div key={item.id}>
               <FileCard
