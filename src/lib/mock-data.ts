@@ -159,6 +159,8 @@ export interface AppSnapshot {
   shares: ShareRecord[]
   offlineTasks: OfflineTask[]
   clipboard: ClipboardState | null
+  /** Map of fileId -> text content for editable text files */
+  fileContents: Record<string, string>
 }
 
 const localRootId = "bucket-local-root"
@@ -284,6 +286,8 @@ export const defaultNodes: FileNode[] = ([
   { id: "file-sheet-xlsx", bucketId: "bucket-local", parentId: "folder-project", kind: "file", name: "roadmap.xlsx", ext: "xlsx", size: 1800000, updatedAt: "2026-03-11 12:40", mediaType: "document" },
   { id: "file-archive-zip", bucketId: "bucket-local", parentId: "folder-project", kind: "file", name: "design-handoff.zip", ext: "zip", size: 530000000, updatedAt: "2026-03-10 12:50", mediaType: "archive" },
   { id: "file-code-tsx", bucketId: "bucket-local", parentId: "folder-project", kind: "file", name: "settings-page.tsx", ext: "tsx", size: 124000, updatedAt: "2026-03-12 00:14", mediaType: "code" },
+  { id: "file-readme-txt", bucketId: "bucket-local", parentId: localRootId, kind: "file", name: "README.txt", ext: "txt", size: 1200, updatedAt: "2026-03-12 09:00" },
+  { id: "file-notes-txt", bucketId: "bucket-local", parentId: "folder-project", kind: "file", name: "开发笔记.txt", ext: "txt", size: 800, updatedAt: "2026-03-11 22:30" },
   { id: "file-share-pdf", bucketId: "bucket-local", parentId: "folder-shared", kind: "file", name: "合作提案.pdf", ext: "pdf", size: 3800000, updatedAt: "2026-03-08 17:42", mediaType: "document", sharedWithMe: true },
   { id: "file-share-png", bucketId: "bucket-local", parentId: "folder-shared", kind: "file", name: "渠道海报.png", ext: "png", size: 2200000, updatedAt: "2026-03-07 18:08", mediaType: "image", sharedWithMe: true },
   { id: "file-recycle-doc", bucketId: "bucket-local", parentId: "folder-docs", kind: "file", name: "旧版需求说明.docx", ext: "docx", size: 1600000, updatedAt: "2026-03-01 09:30", mediaType: "document", deletedAt: "2026-03-11 20:16" },
@@ -355,6 +359,10 @@ export const defaultAppSnapshot: AppSnapshot = {
   shares: defaultShares,
   offlineTasks: defaultOfflineTasks,
   clipboard: null,
+  fileContents: {
+    "file-readme-txt": "Cloudrave 项目说明\n\n这是一个云存储管理平台的前端项目。\n支持多种存储后端，包括腾讯云 COS、阿里云 OSS 等。\n\n功能特性\n- 文件上传与下载\n- 文件夹管理\n- 文件分享\n- 离线下载\n- 多存储桶切换\n\n技术栈\n- React + TypeScript\n- Tailwind CSS\n- shadcn/ui\n",
+    "file-notes-txt": "开发笔记\n\n2026-03-11\n- 完成文件列表组件重构\n- 修复缩略图加载闪烁问题\n- 新增 txt 文件内容预览功能\n\nTODO\n- [ ] 接入真实后端 API\n- [ ] 实现文件搜索\n- [ ] 优化移动端体验\n",
+  },
 }
 
 export function createId(prefix: string) {

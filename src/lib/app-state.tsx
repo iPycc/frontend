@@ -115,6 +115,8 @@ type AppStateValue = {
   pasteNodes: (targetParentId: string | null, bucketId?: string) => void
   addOfflineTask: (url: string) => OfflineTask
   formatBytes: (size?: number) => string
+  getFileContent: (fileId: string) => string
+  updateFileContent: (fileId: string, content: string) => void
 }
 
 const AppStateContext = React.createContext<AppStateValue | null>(null)
@@ -150,6 +152,7 @@ function loadSnapshot(): AppSnapshot {
       offlineTasks: parsed.offlineTasks ?? defaultAppSnapshot.offlineTasks,
       clipboard: parsed.clipboard ?? null,
       activeBucketId: parsed.activeBucketId ?? defaultAppSnapshot.activeBucketId,
+      fileContents: parsed.fileContents ?? defaultAppSnapshot.fileContents,
     }
     const currentUser = nextSnapshot.auth.users.find(
       (user) => user.id === nextSnapshot.auth.currentUserId
@@ -812,6 +815,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return task
   }, [updateSnapshot])
 
+  const getFileContent = React.useCallback((fileId: string): string => {
+    return snapshot.fileContents[fileId] ?? ""
+  }, [snapshot.fileContents])
+
+  const updateFileContent = React.useCallback((fileId: string, content: string) => {
+    updateSnapshot((current) => ({
+      ...current,
+      fileContents: { ...current.fileContents, [fileId]: content },
+      nodes: current.nodes.map((node) => node.id === fileId ? { ...node, updatedAt: nowString() } : node),
+    }))
+  }, [updateSnapshot])
+
   const isAuthenticated = Boolean(currentUser)
 
   const value = React.useMemo<AppStateValue>(() => ({
@@ -865,6 +880,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     pasteNodes,
     addOfflineTask,
     formatBytes,
+    getFileContent,
+    updateFileContent,
   }), [
     activeBucket,
     currentUser,
@@ -915,6 +932,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSecurity,
     updateSettings,
     verifyPassword,
+    getFileContent,
+    updateFileContent,
   ])
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>

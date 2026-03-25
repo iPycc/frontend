@@ -4,9 +4,11 @@ import {
   IconMinimize,
   IconSettings,
   IconX,
+  IconDeviceFloppy,
 } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/mock-data"
+import { useAppState } from "@/lib/app-state"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -20,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { FileGlyph } from "./FileGlyph"
+import { toast } from "sonner"
 
 interface DocumentPreviewModalProps {
   open: boolean
@@ -27,31 +30,30 @@ interface DocumentPreviewModalProps {
   onClose: () => void
 }
 
-/** Mock text content for text file preview */
-const MOCK_TEXT_LINES = [
-  "# Cloudrave 项目说明",
-  "",
-  "这是一个云存储管理平台的前端项目。",
-  "支持多种存储后端，包括腾讯云 COS、阿里云 OSS 等。",
-  "",
-  "## 功能特性",
-  "- 文件上传与下载",
-  "- 文件夹管理",
-  "- 文件分享",
-  "- 离线下载",
-]
-
 export function DocumentPreviewModal({
   open,
   file,
   onClose,
 }: DocumentPreviewModalProps) {
   const isMobile = useIsMobile()
+  const { getFileContent, updateFileContent } = useAppState()
   const [fullscreen, setFullscreen] = React.useState(isMobile)
+  const [content, setContent] = React.useState("")
+  const [isDirty, setIsDirty] = React.useState(false)
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const lineNumbersRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     setFullscreen(isMobile)
   }, [isMobile, open])
+
+  // Load content when file changes
+  React.useEffect(() => {
+    if (file) {
+      setContent(getFileContent(file.id))
+      setIsDirty(false)
+    }
+  }, [file?.id, open])
 
   if (!file) return null
 
@@ -62,6 +64,35 @@ export function DocumentPreviewModal({
     file.ext?.toLowerCase() ?? ""
   )
   const isPdf = file.ext?.toLowerCase() === "pdf"
+  const isEditable = isText || isCode
+
+  const handleSave = () => {
+    if (!file) return
+    updateFileContent(file.id, content)
+    setIsDirty(false)
+    toast.success("已保存")
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value)
+    setIsDirty(true)
+  }
+
+  const handleScroll = () => {
+    if (lineNumbersRef.current && textareaRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
+
+  // Ctrl+S / Cmd+S to save
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault()
+      handleSave()
+    }
+  }
+
+  const lineCount = (content || "").split("\n").length
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -76,9 +107,18 @@ export function DocumentPreviewModal({
         {/* Toolbar */}
         <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" className="gap-1.5 text-xs">
-              保存
-            </Button>
+            {isEditable && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={handleSave}
+                disabled={!isDirty}
+              >
+                <IconDeviceFloppy size={14} />
+                {isDirty ? "保存*" : "已保存"}
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm">
@@ -129,19 +169,35 @@ export function DocumentPreviewModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto bg-background p-0">
-          {(isText || isCode) ? (
-            <div className="font-mono text-sm leading-relaxed">
-              {MOCK_TEXT_LINES.map((line, i) => (
-                <div key={i} className="flex hover:bg-muted/50">
-                  <span className="inline-block w-12 shrink-0 select-none px-3 text-right text-muted-foreground/50">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 whitespace-pre-wrap px-2 text-foreground">
-                    {line || "\u00A0"}
-                  </span>
+        <div className="flex-1 overflow-hidden bg-background">
+          {isEditable ? (
+            <div className="flex h-full">
+              {/* Line numbers */}
+              <div
+                ref={lineNumbersRef}
+                className="select-none shrink-0 w-12 overflow-hidden bg-muted/30 border-r border-border text-right"
+                style={{ overflowY: "hidden" }}
+              >
+                <div className="font-mono text-sm pt-0">
+                  {Array.from({ length: lineCount }, (_, i) => (
+                    <div key={i} className="px-3 text-muted-foreground/50" style={{ lineHeight: "1.625rem" }}>
+                      {i + 1}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              {/* Editor */}
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onScroll={handleScroll}
+                spellCheck={false}
+                className="flex-1 resize-none bg-background font-mono text-sm text-foreground outline-none p-0 px-2 overflow-auto"
+                placeholder="空文件，开始输入..."
+                style={{ lineHeight: "1.625rem" }}
+              />
             </div>
           ) : isPdf ? (
             <div className="flex h-full items-center justify-center text-muted-foreground">

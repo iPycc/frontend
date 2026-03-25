@@ -229,17 +229,16 @@ export function PropertiesPanel() {
     <aside
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        // The Gap: handles flex layout pushing/pulling, exactly mimicking sidebar-gap
-        "group relative shrink-0 transition-all duration-200 ease-linear",
-        // When closed, w-0 and -ml-2 fully eliminates the lingering flex gap-2 from parent <main>
-        isOpen ? "w-[340px] ml-0" : "w-0 -ml-2"
+        // 始终保留 340px 宽度，避免 flex 布局宽度变化导致文件区域抖动
+        "relative shrink-0 overflow-hidden transition-[width,margin] duration-200 ease-linear",
+        isOpen ? "w-[340px] ml-1.5 md:ml-2" : "w-0 ml-0"
       )}
     >
-      <div 
+      {/* 内容固定 340px，通过 translate 滑入滑出，不影响外部布局 */}
+      <div
         className={cn(
-          // The Visual Panel: Absolutely positioned to animate independent of layout constraints
-          "absolute inset-y-0 right-0 z-10 w-[340px] transition-all duration-200 ease-linear",
-          isOpen ? "translate-x-0" : "translate-x-[380px]" // Completely slides out to the right edge
+          "absolute inset-y-0 left-0 w-[340px] transition-transform duration-200 ease-linear",
+          isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {display ? (

@@ -3,6 +3,7 @@ import type { MouseEvent } from "react"
 import { IconCheck, IconCircle } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/mock-data"
+import { useAppState } from "@/lib/app-state"
 import { cn, truncateFilename } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -20,7 +21,15 @@ interface FileCardProps extends ItemHandlers {
 function canShowThumbnail(item: FileNode): boolean {
   if (item.kind === "folder") return false
   const mt = item.mediaType
-  return mt === "image" || mt === "video" || mt === "document" || mt === "code"
+  if (mt === "image" || mt === "video" || mt === "document" || mt === "code") return true
+  const ext = item.ext?.toLowerCase() ?? ""
+  return ["txt", "md", "log", "csv", "json", "xml", "yaml", "yml", "ini", "conf"].includes(ext)
+}
+
+function isTextFile(item: FileNode): boolean {
+  const ext = item.ext?.toLowerCase() ?? ""
+  return ["txt", "md", "log", "csv", "json", "xml", "yaml", "yml", "ini", "conf"].includes(ext) ||
+    item.mediaType === "code"
 }
 
 export function FileCard({
@@ -41,10 +50,12 @@ export function FileCard({
   onCreateChildFolder,
   getContextIds,
 }: FileCardProps) {
+  const { getFileContent } = useAppState()
   const hasThumbnail = showThumbnail && canShowThumbnail(item)
   const isMedia = item.mediaType === "image" || item.mediaType === "video"
+  const isText = isTextFile(item)
   const previewUrl = item.preview || (isMedia ? `https://picsum.photos/seed/${item.id}/1920/1080` : null)
-  const hasPreviewImage = hasThumbnail && !!previewUrl
+  const hasPreviewImage = hasThumbnail && !!previewUrl && !isText
   const [imageLoaded, setImageLoaded] = useState(false)
 
   // Compact card (no thumbnail or folder)
@@ -157,6 +168,14 @@ export function FileCard({
                   onLoad={() => setImageLoaded(true)}
                 />
               </>
+            ) : hasThumbnail && isText ? (
+              <div className="absolute inset-0 overflow-hidden bg-white dark:bg-zinc-900 p-2">
+                <div className="w-full h-full overflow-hidden" style={{ transform: "scale(0.55)", transformOrigin: "top left", width: "182%", height: "182%" }}>
+                  <pre className="font-mono text-[11px] leading-[1.5] text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-all select-none pointer-events-none">
+                    {getFileContent(item.id) || <span className="text-zinc-400 dark:text-zinc-600 italic">空文件</span>}
+                  </pre>
+                </div>
+              </div>
             ) : (
               <FileGlyph item={item} size={64} />
             )}

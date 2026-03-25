@@ -38,7 +38,7 @@ export function FileSection({
       {items.length === 0 ? (
         emptyText ? <div className="text-sm text-muted-foreground">{emptyText}</div> : null
       ) : (
-        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 md:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] md:gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:gap-2 grid-cols-[repeat(auto-fill,minmax(220px,1fr))] md:gap-3">
           {items.map((item) => (
             <div key={item.id}>
               <FileCard
