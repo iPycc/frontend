@@ -1,6 +1,7 @@
-﻿import * as React from "react"
+import * as React from "react"
 
 import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, register as apiRegister } from "@/api/auth"
+import { configureAuthClient } from "@/api/client"
 import {
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
@@ -39,7 +40,7 @@ import {
   type UserProfile,
   type UserSettings,
 } from "@/lib/models"
-import { emitAuthEvent, isExpired, mergeSessionTokens, shouldRefreshSession, subscribeAuthEvents } from "@/lib/session"
+import { emitAuthEvent, isExpired, mergeSessionTokens, subscribeAuthEvents } from "@/lib/session"
 import { toast } from "sonner"
 
 const STORAGE_KEY = "cloudrave-app-state-v2"
@@ -171,10 +172,20 @@ function loadSnapshot(): AppSnapshot {
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppSnapshot>
+    const persistedSession = parsed.auth?.session
     return {
       ...defaultAppSnapshot,
       auth: {
-        session: parsed.auth?.session ?? null,
+        session: persistedSession
+          ? {
+              user: persistedSession.user,
+              tokens: {
+                accessToken: "",
+                accessExpiresAt: persistedSession.tokens?.accessExpiresAt ?? "",
+                refreshExpiresAt: persistedSession.tokens?.refreshExpiresAt ?? "",
+              },
+            }
+          : null,
       },
       settings: {
         ...defaultSettings,
@@ -324,12 +335,11 @@ function extractExtension(name: string) {
   return name.slice(index + 1).toLowerCase()
 }
 
-function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, accessToken?: string, timezone?: string): FileNode {
+function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, timezone?: string): FileNode {
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
-  // Generate preview URL for image/video/audio files via the preview endpoint with token auth
   let preview: string | undefined
-  if (node.type === "file" && node.blob_path && accessToken && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
-    preview = `/api/v1/explorer/preview/${node.id}?token=${encodeURIComponent(accessToken)}`
+  if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
+    preview = `/api/v1/explorer/preview/${node.id}`
   }
   return {
     id: String(node.id),
@@ -378,7 +388,7 @@ async function loadMountNodes(token: string, bucket: BucketMount, timezone?: str
 
     const children = await listNodes(token, bucket.backendId, current.backendParentId)
     for (const child of children) {
-      const mapped = mapNodeToFileNode(child, bucket.id, current.uiParentId, token, timezone)
+      const mapped = mapNodeToFileNode(child, bucket.id, current.uiParentId, timezone)
       nodes.push(mapped)
       if (mapped.kind === "folder" && mapped.backendId) {
         queue.push({ backendParentId: mapped.backendId, uiParentId: mapped.id })
@@ -414,7 +424,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        auth: snapshot.auth,
+        auth: {
+          session: snapshot.auth.session
+            ? {
+                user: snapshot.auth.session.user,
+                tokens: {
+                  accessToken: "",
+                  accessExpiresAt: snapshot.auth.session.tokens.accessExpiresAt,
+                  refreshExpiresAt: snapshot.auth.session.tokens.refreshExpiresAt,
+                },
+              }
+            : null,
+        },
         settings: snapshot.settings,
         security: {
           passwordUpdatedAt: snapshot.security.passwordUpdatedAt,
@@ -512,7 +533,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           recycledNode,
           String(recycledNode.mount_id),
           recycledNode.parent_id ? String(recycledNode.parent_id) : `root:${recycledNode.mount_id}`,
-          session.tokens.accessToken,
           tz
         )
         nodesMap.set(mapped.id, mapped)
@@ -565,31 +585,42 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [updateSnapshot])
 
+  const refreshAuthSession = React.useCallback(
+    async (hydrate = false) => {
+      const currentSession = snapshotRef.current.auth.session
+      const refreshedTokens = await apiRefreshToken()
+      let nextSession = currentSession ? mergeSessionTokens(currentSession, refreshedTokens) : null
+
+      if (!nextSession) {
+        const profilePayload = await getCurrentProfile(refreshedTokens.accessToken)
+        nextSession = {
+          user: profilePayload.account,
+          tokens: refreshedTokens,
+        }
+      }
+
+      if (hydrate) {
+        await hydrateWorkspace(nextSession)
+      } else {
+        updateSnapshot((current) => ({
+          ...current,
+          auth: {
+            session: nextSession,
+          },
+        }))
+      }
+
+      return nextSession
+    },
+    [hydrateWorkspace, updateSnapshot]
+  )
+
   React.useEffect(() => {
     let cancelled = false
 
     const bootstrapAuth = async () => {
-      const session = snapshot.auth.session
-
-      if (!session) {
-        if (!cancelled) {
-          setAuthReady(true)
-        }
-        return
-      }
-
       try {
-        let activeSession = session
-        if (shouldRefreshSession(session)) {
-          const refreshedTokens = await apiRefreshToken(session.tokens.refreshToken)
-          activeSession = mergeSessionTokens(session, refreshedTokens)
-        }
-
-        if (cancelled) {
-          return
-        }
-
-        await hydrateWorkspace(activeSession)
+        await refreshAuthSession(true)
       } catch {
         if (!cancelled) {
           clearWorkspace()
@@ -606,27 +637,43 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [
-    clearWorkspace,
-    hydrateWorkspace,
-    snapshot.auth.session?.tokens.accessToken,
-    snapshot.auth.session?.tokens.refreshToken,
-  ])
+  }, [clearWorkspace, refreshAuthSession])
 
   React.useEffect(() => {
     return subscribeAuthEvents((message) => {
       if (message.type === "session-updated") {
-        if (message.session) {
-          void hydrateWorkspace(message.session)
-        }
-        setAuthReady(true)
+        void refreshAuthSession(true)
         return
       }
 
       clearWorkspace()
       setAuthReady(true)
     })
-  }, [clearWorkspace, hydrateWorkspace])
+  }, [clearWorkspace, refreshAuthSession])
+
+  React.useEffect(() => {
+    configureAuthClient({
+      getAccessToken: () => snapshotRef.current.auth.session?.tokens.accessToken ?? null,
+      refreshAccessToken: async () => {
+        try {
+          const session = await refreshAuthSession(false)
+          return session.tokens.accessToken
+        } catch {
+          clearWorkspace()
+          emitAuthEvent({ type: "logout", reason: "session-expired" })
+          return null
+        }
+      },
+      onAuthFailure: () => {
+        clearWorkspace()
+        emitAuthEvent({ type: "logout", reason: "session-expired" })
+      },
+    })
+
+    return () => {
+      configureAuthClient({})
+    }
+  }, [clearWorkspace, refreshAuthSession])
 
   const reloadWorkspace = React.useCallback(async () => {
     const session = snapshotRef.current.auth.session
@@ -788,7 +835,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       try {
         const session = await apiLogin({ email: email.trim().toLowerCase(), password: password.trim() })
         await hydrateWorkspace(session)
-        emitAuthEvent({ type: "session-updated", session })
+        emitAuthEvent({ type: "session-updated" })
         return { success: true }
       } catch (error) {
         return {
@@ -809,7 +856,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           username: input.username.trim(),
         })
         await hydrateWorkspace(session)
-        emitAuthEvent({ type: "session-updated", session })
+        emitAuthEvent({ type: "session-updated" })
         return { success: true }
       } catch (error) {
         return {
@@ -822,15 +869,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   )
 
   const logout = React.useCallback(async () => {
-    const session = snapshotRef.current.auth.session
-
     try {
-      if (session) {
-        await apiLogout({
-          accessToken: session.tokens.accessToken,
-          refreshToken: session.tokens.refreshToken,
-        })
-      }
+      await apiLogout("current")
     } catch {
       // ignore transport failures
     } finally {
@@ -899,7 +939,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         name: trimmedName,
       })
       await reloadWorkspace()
-      return mapNodeToFileNode(created, bucket.id, parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId, session.tokens.accessToken, snapshotRef.current.settings.timezone)
+      return mapNodeToFileNode(created, bucket.id, parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId, snapshotRef.current.settings.timezone)
     },
     [defaultBucketId, reloadWorkspace]
   )
@@ -1386,4 +1426,3 @@ export function useAppState() {
 
   return context
 }
-

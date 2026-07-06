@@ -1,4 +1,4 @@
-﻿import { requestJson } from "./client"
+import { requestJson } from "./client"
 import type { AppUser, AuthSession, AuthTokens } from "@/lib/models"
 
 export type LoginRequest = {
@@ -15,8 +15,6 @@ export type RegisterRequest = {
 export type RawTokenPayload = {
   access_token?: string
   accessToken?: string
-  refresh_token?: string
-  refreshToken?: string
   access_expires?: string
   access_expires_at?: string
   accessExpiresAt?: string
@@ -117,7 +115,6 @@ function normalizeTokens(token: RawTokenPayload): AuthTokens {
 
   return {
     accessToken: token.access_token ?? token.accessToken ?? "",
-    refreshToken: token.refresh_token ?? token.refreshToken ?? "",
     accessExpiresAt,
     refreshExpiresAt,
   }
@@ -151,23 +148,18 @@ export async function register(request: RegisterRequest) {
   return normalizeAuthSession(response)
 }
 
-export async function refreshToken(refreshToken: string) {
+export async function refreshToken() {
   const response = await requestJson<RawTokenPayload>("/session/token/refresh", {
     method: "POST",
-    body: { refresh_token: refreshToken },
   })
 
   return normalizeTokens(response)
 }
 
-export async function logout(input?: { refreshToken?: string | null; accessToken?: string | null } | string | null) {
-  const refreshToken = typeof input === "string" || input === null || input === undefined ? input : input.refreshToken
-  const accessToken = typeof input === "object" && input !== null ? input.accessToken : null
-
+export async function logout(scope: "current" | "all" = "current") {
   await requestJson<void>("/session/token", {
     method: "DELETE",
-    token: accessToken ?? null,
-    body: refreshToken ? { refresh_token: refreshToken } : undefined,
+    body: { scope },
   })
 }
 

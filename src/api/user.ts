@@ -1,6 +1,6 @@
-﻿import { buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
+import { buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
 import { requestJson } from "@/api/client"
-import type { SecurityState, UserProfile } from "@/lib/models"
+import type { AppUser, SecurityState, UserProfile } from "@/lib/models"
 
 type RawUserResponse = {
   id?: number | string
@@ -25,6 +25,7 @@ type RawLoginActivityEntry = {
 }
 
 export type ProfilePayload = {
+  account: AppUser
   profile: UserProfile
   passwordUpdatedAt: string
 }
@@ -58,6 +59,15 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
     : `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(username)}`
 
   return {
+    account: {
+      id: uid,
+      email: String(raw.email ?? ""),
+      username,
+      avatar,
+      role,
+      group: buildGroupLabel(role, raw.group),
+      registeredAt: formatDateTimeToSeconds(raw.created_at),
+    },
     profile: {
       username,
       avatar,

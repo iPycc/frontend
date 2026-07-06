@@ -1,9 +1,8 @@
-﻿import type { AuthSession, AuthTokens } from "@/lib/models"
+import type { AuthSession, AuthTokens } from "@/lib/models"
 
 export type AuthEventMessage =
   | {
       type: "session-updated"
-      session: AuthSession
     }
   | {
       type: "logout"
@@ -88,14 +87,6 @@ export function isExpired(expiresAt?: string | null) {
   }
 
   return timestamp <= Date.now()
-}
-
-export function shouldRefreshSession(session: AuthSession | null) {
-  if (!session) {
-    return false
-  }
-
-  return isExpired(session.tokens.accessExpiresAt) && !isExpired(session.tokens.refreshExpiresAt)
 }
 
 export function mergeSessionTokens(session: AuthSession, tokens: AuthTokens): AuthSession {

@@ -1,4 +1,4 @@
-﻿import * as React from "react"
+import * as React from "react"
 import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
@@ -244,6 +244,7 @@ export function AppFiles() {
         }
 
         const response = await fetch(buildDownloadUrl(node.backendId), {
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${authSession.tokens.accessToken}`,
           },
@@ -531,4 +532,3 @@ function compareNodes(left: FileNode, right: FileNode, sortValue: SortValue) {
       return left.name.localeCompare(right.name, "zh-CN")
   }
 }
-

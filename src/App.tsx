@@ -28,16 +28,8 @@ import {
 } from "./pages/settings"
 
 export default function App() {
-  const { authReady, currentUser, isAuthenticated } = useAppState()
+  const { currentUser, isAuthenticated } = useAppState()
   const isAdmin = currentUser?.role === "admin"
-
-  if (!authReady) {
-    return (
-      <div className="bg-muted flex min-h-svh items-center justify-center">
-        <div className="text-sm text-muted-foreground">正在恢复会话...</div>
-      </div>
-    )
-  }
 
   return (
     <BrowserRouter>

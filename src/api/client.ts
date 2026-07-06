@@ -18,6 +18,20 @@ type RequestOptions = {
   token?: string | null
   headers?: HeadersInit
   signal?: AbortSignal
+  skipAuthRefresh?: boolean
+}
+
+type AuthRuntime = {
+  getAccessToken?: () => string | null
+  refreshAccessToken?: () => Promise<string | null>
+  onAuthFailure?: () => void
+}
+
+let authRuntime: AuthRuntime = {}
+let refreshInFlight: Promise<string | null> | null = null
+
+export function configureAuthClient(runtime: AuthRuntime) {
+  authRuntime = runtime
 }
 
 function getApiBaseUrl() {
@@ -55,6 +69,10 @@ function pickErrorMessage(payload: unknown, status: number) {
 }
 
 export async function requestJson<T>(path: string, options: RequestOptions = {}) {
+  return requestJsonInternal<T>(path, options, true)
+}
+
+async function requestJsonInternal<T>(path: string, options: RequestOptions, allowRefresh: boolean): Promise<T> {
   const headers = new Headers(options.headers)
 
   if (options.body !== undefined && !headers.has("Content-Type") && !(options.body instanceof FormData)) {
@@ -64,8 +82,9 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
   headers.set("Accept", "application/json")
   headers.set("X-Device-Fingerprint", getDeviceFingerprint())
 
-  if (options.token) {
-    headers.set("Authorization", `Bearer ${options.token}`)
+  const token = options.token ?? authRuntime.getAccessToken?.() ?? null
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
   }
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -73,7 +92,21 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
     headers,
     body: toRequestBody(options.body),
     signal: options.signal,
+    credentials: "include",
   })
+
+  if (
+    response.status === 401 &&
+    allowRefresh &&
+    !options.skipAuthRefresh &&
+    !isAuthRoute(path)
+  ) {
+    const refreshedToken = await refreshAccessToken()
+    if (refreshedToken) {
+      return requestJsonInternal<T>(path, { ...options, token: refreshedToken }, false)
+    }
+    authRuntime.onAuthFailure?.()
+  }
 
   const rawText = await response.text()
   const payload = rawText ? parseMaybeJson(rawText) : null
@@ -83,6 +116,26 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
   }
 
   return payload as T
+}
+
+async function refreshAccessToken() {
+  if (refreshInFlight) {
+    return refreshInFlight
+  }
+
+  refreshInFlight = (async () => {
+    try {
+      return await authRuntime.refreshAccessToken?.() ?? null
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+
+  return refreshInFlight
+}
+
+function isAuthRoute(path: string) {
+  return path.startsWith("/session/token")
 }
 
 function parseMaybeJson(rawText: string) {
