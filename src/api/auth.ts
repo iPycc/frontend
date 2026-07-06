@@ -1,6 +1,8 @@
 import { requestJson } from "./client"
 import type { AppUser, AuthSession, AuthTokens } from "@/lib/models"
 
+let refreshRequestInFlight: Promise<AuthTokens> | null = null
+
 export type LoginRequest = {
   email: string
   password: string
@@ -149,11 +151,23 @@ export async function register(request: RegisterRequest) {
 }
 
 export async function refreshToken() {
-  const response = await requestJson<RawTokenPayload>("/session/token/refresh", {
-    method: "POST",
-  })
+  if (refreshRequestInFlight) {
+    return refreshRequestInFlight
+  }
 
-  return normalizeTokens(response)
+  refreshRequestInFlight = (async () => {
+    try {
+      const response = await requestJson<RawTokenPayload>("/session/token/refresh", {
+        method: "POST",
+      })
+
+      return normalizeTokens(response)
+    } finally {
+      refreshRequestInFlight = null
+    }
+  })()
+
+  return refreshRequestInFlight
 }
 
 export async function logout(scope: "current" | "all" = "current") {

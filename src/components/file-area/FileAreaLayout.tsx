@@ -1,4 +1,4 @@
-﻿import type { MouseEvent } from "react"
+import type { MouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { IconChevronRight, IconFolder, IconLoader2 } from "@tabler/icons-react"
 
@@ -25,8 +25,6 @@ interface FileAreaProps {
   viewMode: ViewMode
   sortValue: SortValue
   showThumbnail?: boolean
-  isLoading?: boolean
-  loadingLabel?: string
   canPaste: boolean
   onSelectNode: (id: string, event: MouseEvent) => void
   onPrepareContext: (id: string) => void
@@ -64,8 +62,6 @@ export function FileArea({
   viewMode,
   sortValue,
   showThumbnail = false,
-  isLoading = false,
-  loadingLabel = "正在加载内容",
   canPaste,
   onSelectNode,
   onPrepareContext,
@@ -185,7 +181,6 @@ export function FileArea({
               />
             )}
           </div>
-          {isLoading ? <FileAreaLoading label={loadingLabel} /> : null}
         </div>
       </ContextMenuTrigger>
 
@@ -218,17 +213,6 @@ export function FileArea({
         </ContextMenuSub>
       </ContextMenuContent>
     </ContextMenu>
-  )
-}
-
-function FileAreaLoading({ label }: { label: string }) {
-  return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
-      <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card px-4 py-2 text-sm text-foreground shadow-lg">
-        <IconLoader2 className="h-4 w-4 animate-spin text-primary" />
-        <span>{label}</span>
-      </div>
-    </div>
   )
 }
 

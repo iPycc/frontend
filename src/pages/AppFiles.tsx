@@ -87,12 +87,8 @@ export function AppFiles() {
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderName, setCreateFolderName] = React.useState("新建文件夹")
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
-  const [fileAreaLoading, setFileAreaLoading] = React.useState(false)
-  const [fileAreaLoadingLabel, setFileAreaLoadingLabel] = React.useState("正在加载内容")
   const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
   const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
-  const loadingTimerRef = React.useRef<number | null>(null)
-  const routeKeyRef = React.useRef<string | null>(null)
 
   const searchParams = new URLSearchParams(location.search)
   const category = searchParams.get("type") as keyof typeof categoryMap | null
@@ -135,34 +131,6 @@ export function AppFiles() {
   }, [currentPath, category])
 
   // Properties panel is managed independently; do not auto-close on selection change.
-
-  const startFileAreaLoading = React.useCallback((label = "正在加载内容", duration = 320) => {
-    setFileAreaLoadingLabel(label)
-    setFileAreaLoading(true)
-    if (loadingTimerRef.current) {
-      window.clearTimeout(loadingTimerRef.current)
-    }
-    loadingTimerRef.current = window.setTimeout(() => {
-      setFileAreaLoading(false)
-      loadingTimerRef.current = null
-    }, duration)
-  }, [])
-
-  React.useEffect(() => {
-    const routeKey = `${location.pathname}${location.search}`
-    if (routeKeyRef.current && routeKeyRef.current !== routeKey) {
-      startFileAreaLoading("正在进入目录", 220)
-    }
-    routeKeyRef.current = routeKey
-  }, [location.pathname, location.search, startFileAreaLoading])
-
-  React.useEffect(() => {
-    return () => {
-      if (loadingTimerRef.current) {
-        window.clearTimeout(loadingTimerRef.current)
-      }
-    }
-  }, [])
 
   const handlePropertiesRequest = React.useCallback(
     (ids: string[]) => {
@@ -211,7 +179,7 @@ export function AppFiles() {
   }
 
   const handleRefresh = () => {
-    startFileAreaLoading("正在同步目录", 420)
+    // startFileAreaLoading("正在同步目录", 420)
   }
 
   const handleRenameRequest = (ids: string[]) => {
@@ -398,8 +366,6 @@ export function AppFiles() {
             viewMode={viewMode}
             sortValue={sortValue}
             showThumbnail={thumbnailsEnabled}
-            isLoading={fileAreaLoading}
-            loadingLabel={fileAreaLoadingLabel}
             canPaste={Boolean(clipboard)}
             onSelectNode={handleSelectNode}
             onPrepareContext={handlePrepareContext}
