@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import {
   IconMaximize,
   IconMinimize,
@@ -7,7 +7,7 @@ import {
   IconDeviceFloppy,
 } from "@tabler/icons-react"
 
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 import { useAppState } from "@/lib/app-state"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -221,3 +221,4 @@ export function DocumentPreviewModal({
     </Dialog>
   )
 }
+

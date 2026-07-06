@@ -1,43 +1,27 @@
-import * as React from "react"
+﻿import * as React from "react"
 import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea } from "@/components/file-area"
-import {
-  RenameDialog,
-  MoveDialog,
-  ShareDialog,
-  DeleteConfirmDialog,
-  FilePreviewModal,
-  DocumentPreviewModal,
-} from "@/components/file-area"
+import { FileArea, RenameDialog, MoveDialog, ShareDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
-import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { buildDownloadUrl } from "@/api/files"
 
 const categoryMap = {
   image: "图片",
   video: "视频",
-  audio: "音乐",
+  audio: "音频",
   document: "文档",
 } as const
 
-function getPageTitle(
-  category: keyof typeof categoryMap | null,
-  currentPath: string
-): string {
+function getPageTitle(category: keyof typeof categoryMap | null, currentPath: string) {
   if (category && category in categoryMap) {
     return categoryMap[category]
   }
@@ -50,7 +34,6 @@ function getPageTitle(
   return "我的文件"
 }
 
-/** Determine which preview type a file should use */
 function getPreviewType(file: FileNode): "media" | "document" | null {
   const mt = file.mediaType
   if (mt === "image" || mt === "video" || mt === "audio") return "media"
@@ -63,6 +46,7 @@ function getPreviewType(file: FileNode): "media" | "document" | null {
 export function AppFiles() {
   const location = useLocation()
   const {
+    authSession,
     clipboard,
     activeBucket,
     getCategoryNodes,
@@ -71,7 +55,6 @@ export function AppFiles() {
     getNodeById,
     getNodesInFolder,
     createFolder,
-    createSampleFile,
     renameNode,
     moveNodes,
     deleteNodes,
@@ -80,8 +63,16 @@ export function AppFiles() {
     cutNodes,
     pasteNodes,
     formatBytes,
+    requestUpload,
   } = useAppState()
-  const propertiesPanel = usePropertiesPanel()
+  const {
+    open: openPropertiesPanel,
+    openMulti: openMultiPropertiesPanel,
+    toggle: togglePropertiesPanel,
+    close: closePropertiesPanel,
+    node: panelNode,
+    nodes: panelNodes,
+  } = usePropertiesPanel()
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid")
   const [sortValue, setSortValue] = React.useState<SortValue>("name-asc")
@@ -97,35 +88,31 @@ export function AppFiles() {
   const [createFolderName, setCreateFolderName] = React.useState("新建文件夹")
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
   const [fileAreaLoading, setFileAreaLoading] = React.useState(false)
-  const [fileAreaLoadingLabel, setFileAreaLoadingLabel] = React.useState("正在载入内容")
-  const loadingTimerRef = React.useRef<number | null>(null)
-  const routeKeyRef = React.useRef<string | null>(null)
-
-  // Preview state
+  const [fileAreaLoadingLabel, setFileAreaLoadingLabel] = React.useState("正在加载内容")
   const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
   const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
+  const loadingTimerRef = React.useRef<number | null>(null)
+  const routeKeyRef = React.useRef<string | null>(null)
 
   const searchParams = new URLSearchParams(location.search)
   const category = searchParams.get("type") as keyof typeof categoryMap | null
   const currentPath = searchParams.get("folder") ?? ""
-
   const currentFolderId = getFolderPathId(currentPath)
 
-  const pageTitle = getPageTitle(category, currentPath)
-  usePageTitle(pageTitle)
+  usePageTitle(getPageTitle(category, currentPath))
 
   const items = React.useMemo(() => {
-    const source =
-      category && category in categoryMap
-        ? getCategoryNodes(category)
-        : getNodesInFolder(currentPath)
-
-    return [...source].sort((left, right) =>
-      compareNodes(left, right, sortValue)
-    )
+    const source = category && category in categoryMap ? getCategoryNodes(category) : getNodesInFolder(currentPath)
+    return [...source].sort((left, right) => compareNodes(left, right, sortValue))
   }, [category, currentPath, getCategoryNodes, getNodesInFolder, sortValue])
 
-  // Previewable media files for navigation in the preview modal
+  const selectedNodes = React.useMemo(
+    () => selectedIds.map(getNodeById).filter(Boolean) as FileNode[],
+    [getNodeById, selectedIds]
+  )
+  const selectedNodeIdsSignature = React.useMemo(() => selectedNodes.map((node) => node.id).join("|"), [selectedNodes])
+  const panelNodeIdsSignature = React.useMemo(() => panelNodes.map((node) => node.id).join("|"), [panelNodes])
+
   const mediaFiles = React.useMemo(
     () => items.filter((item) => item.kind === "file" && getPreviewType(item) === "media"),
     [items]
@@ -140,48 +127,31 @@ export function AppFiles() {
   const pathParts = currentPath.split("/").filter(Boolean)
   const folderOptions = React.useMemo(() => {
     const root = { id: activeBucket.rootNodeId, name: `${activeBucket.name} /` }
-    return [
-      root,
-      ...getFoldersForBucket(undefined, false).map((node) => ({
-        id: node.id,
-        name: node.name,
-      })),
-    ]
+    return [root, ...getFoldersForBucket(undefined, false).map((node) => ({ id: node.id, name: node.name }))]
   }, [activeBucket.name, activeBucket.rootNodeId, getFoldersForBucket])
 
   React.useEffect(() => {
     setSelectedIds([])
   }, [currentPath, category])
 
+  // Properties panel is managed independently; do not auto-close on selection change.
 
-
-  const openPropertiesById = React.useCallback(
-    (id: string) => {
-      const n = getNodeById(id)
-      if (n) propertiesPanel.open(n)
-    },
-    [getNodeById, propertiesPanel]
-  )
-
-  const startFileAreaLoading = React.useCallback(
-    (label = "正在载入内容", duration = 420) => {
-      setFileAreaLoadingLabel(label)
-      setFileAreaLoading(true)
-      if (loadingTimerRef.current) {
-        window.clearTimeout(loadingTimerRef.current)
-      }
-      loadingTimerRef.current = window.setTimeout(() => {
-        setFileAreaLoading(false)
-        loadingTimerRef.current = null
-      }, duration)
-    },
-    []
-  )
+  const startFileAreaLoading = React.useCallback((label = "正在加载内容", duration = 320) => {
+    setFileAreaLoadingLabel(label)
+    setFileAreaLoading(true)
+    if (loadingTimerRef.current) {
+      window.clearTimeout(loadingTimerRef.current)
+    }
+    loadingTimerRef.current = window.setTimeout(() => {
+      setFileAreaLoading(false)
+      loadingTimerRef.current = null
+    }, duration)
+  }, [])
 
   React.useEffect(() => {
     const routeKey = `${location.pathname}${location.search}`
     if (routeKeyRef.current && routeKeyRef.current !== routeKey) {
-      startFileAreaLoading("正在进入文件夹", 220)
+      startFileAreaLoading("正在进入目录", 220)
     }
     routeKeyRef.current = routeKey
   }, [location.pathname, location.search, startFileAreaLoading])
@@ -194,26 +164,28 @@ export function AppFiles() {
     }
   }, [])
 
-  const flash = React.useCallback((message: string) => {
-    const toastMap: Record<string, string> = {
-      "create-folder": "文件夹已创建",
-      "upload-mock": "文件已上传",
-      "refresh": "内容已刷新",
-      "copy": "已复制到剪贴板",
-      "cut": "已剪切",
-      "paste": "已粘贴",
-    }
-    const text = toastMap[message] || (message.startsWith("download-") ? "开始下载" : null)
-    if (text) toast.success(text)
-  }, [])
+  const handlePropertiesRequest = React.useCallback(
+    (ids: string[]) => {
+      if (ids.length === 1) {
+        const node = getNodeById(ids[0])
+        if (node) togglePropertiesPanel(node)
+      } else if (ids.length > 1) {
+        const nodes = ids.map(getNodeById).filter(Boolean) as FileNode[]
+        if (nodes.length > 0) {
+          if (panelNode && ids.join("|") === panelNodes.map((n) => n.id).join("|")) {
+            closePropertiesPanel()
+          } else {
+            openMultiPropertiesPanel(nodes)
+          }
+        }
+      }
+    },
+    [getNodeById, togglePropertiesPanel, openMultiPropertiesPanel, closePropertiesPanel, panelNode, panelNodes]
+  )
 
   const handleSelectNode = (id: string, event: React.MouseEvent) => {
     event.stopPropagation()
-    setSelectedIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    )
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
   }
 
   const handlePrepareContext = (id: string) => {
@@ -226,22 +198,20 @@ export function AppFiles() {
     setCreateFolderOpen(true)
   }
 
-  const submitCreateFolder = () => {
+  const submitCreateFolder = async () => {
     const name = createFolderName.trim()
     if (!name) return
-    createFolder(createFolderParentId, name)
+    await createFolder(createFolderParentId, name)
     setCreateFolderOpen(false)
-    flash("create-folder")
+    toast.success("文件夹已创建")
   }
 
-  const handleUploadMock = () => {
-    createSampleFile(currentFolderId)
-    flash("upload-mock")
+  const handleUpload = () => {
+    requestUpload(currentFolderId)
   }
 
   const handleRefresh = () => {
-    startFileAreaLoading("正在同步目录", 560)
-    flash("refresh")
+    startFileAreaLoading("正在同步目录", 420)
   }
 
   const handleRenameRequest = (ids: string[]) => {
@@ -256,15 +226,47 @@ export function AppFiles() {
     setMoveTargetId(currentFolderId || activeBucket.rootNodeId)
   }
 
-  const handleShareRequest = (ids: string[]) => {
-    const records = shareNodes(ids)
-    setShareLinks(
-      records.map((record) => `https://share.cloudrave.app/${record.id}`)
-    )
+  const handleShareRequest = async (ids: string[]) => {
+    const records = await shareNodes(ids)
+    setShareLinks(records.map((record) => `https://share.cloudrave.app/${record.id}`))
   }
 
-  const handleDownloadRequest = (ids: string[]) => {
-    flash(`download-${ids.join(",")}`)
+  const handleDownloadRequest = async (ids: string[]) => {
+    if (!authSession) {
+      return
+    }
+
+    try {
+      for (const id of ids) {
+        const node = getNodeById(id)
+        if (!node?.backendId) {
+          continue
+        }
+
+        const response = await fetch(buildDownloadUrl(node.backendId), {
+          headers: {
+            Authorization: `Bearer ${authSession.tokens.accessToken}`,
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`下载 ${node.name} 失败`)
+        }
+
+        const blob = await response.blob()
+        const objectUrl = window.URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = objectUrl
+        anchor.download = node.name
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        window.URL.revokeObjectURL(objectUrl)
+      }
+
+      toast.success("开始下载")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "下载失败")
+    }
   }
 
   const handleDeleteRequest = (ids: string[]) => {
@@ -273,60 +275,62 @@ export function AppFiles() {
 
   const handleCopy = () => {
     copyNodes(selectedIds)
-    flash("copy")
+    toast.success("已复制到剪贴板")
   }
 
   const handleCut = () => {
     cutNodes(selectedIds)
-    flash("cut")
+    toast.success("已剪切")
   }
 
   const handleCopyIds = (ids: string[]) => {
     copyNodes(ids)
-    flash("copy-ids")
+    toast.success("已复制到剪贴板")
   }
 
   const handleCutIds = (ids: string[]) => {
     cutNodes(ids)
-    flash("cut-ids")
+    toast.success("已剪切")
   }
 
-  const handlePaste = () => {
-    pasteNodes(currentFolderId)
-    flash("paste")
+  const handlePaste = async () => {
+    await pasteNodes(currentFolderId)
   }
 
-  const submitRename = (name: string) => {
+  const submitRename = async (name: string) => {
     if (!renameTargetId) return
-    renameNode(renameTargetId, name)
+    await renameNode(renameTargetId, name)
     setRenameTargetId(null)
     setRenameValue("")
+    toast.success("已重命名")
   }
 
-  const submitMove = (targetId: string) => {
+  const submitMove = async (targetId: string) => {
     if (!moveIds.length) return
-    moveNodes(moveIds, targetId)
+    await moveNodes(moveIds, targetId)
     setMoveIds([])
   }
 
-  const submitDelete = () => {
-    deleteNodes(deleteIds)
+  const submitDelete = async () => {
+    await deleteNodes(deleteIds)
     setSelectedIds([])
     setDeleteIds([])
+    toast.success("已移入回收站")
   }
 
-  /** Open a file — route to the correct preview modal based on type */
-  const handleOpenFile = React.useCallback((node: FileNode) => {
-    const type = getPreviewType(node)
-    if (type === "media") {
-      setMediaPreviewFile(node)
-    } else if (type === "document") {
-      setDocPreviewFile(node)
-    } else {
-      // Fallback: show properties panel
-      propertiesPanel.open(node)
-    }
-  }, [propertiesPanel])
+  const handleOpenFile = React.useCallback(
+    (node: FileNode) => {
+      const type = getPreviewType(node)
+      if (type === "media") {
+        setMediaPreviewFile(node)
+      } else if (type === "document") {
+        setDocPreviewFile(node)
+      } else {
+        openPropertiesPanel(node)
+      }
+    },
+    [openPropertiesPanel]
+  )
 
   const handleMediaPrev = React.useCallback(() => {
     if (mediaFiles.length <= 1) return
@@ -357,19 +361,23 @@ export function AppFiles() {
         onPageSizeChange={setPageSize}
         onRefresh={handleRefresh}
         onCreateFolder={() => handleCreateFolder()}
-        onPaste={handlePaste}
+        onPaste={() => void handlePaste()}
         canPaste={Boolean(clipboard)}
         onCopy={handleCopy}
         onCut={handleCut}
         onDelete={() => handleDeleteRequest(selectedIds)}
         onRename={() => handleRenameRequest(selectedIds)}
-        onShare={() => handleShareRequest(selectedIds)}
-        onDownload={() => handleDownloadRequest(selectedIds)}
+        onShare={() => void handleShareRequest(selectedIds)}
+        onDownload={() => void handleDownloadRequest(selectedIds)}
         onProperties={() => {
-          if (selectedIds.length === 1) openPropertiesById(selectedIds[0])
-          else if (selectedIds.length > 1) {
-            const nodes = selectedIds.map(getNodeById).filter(Boolean) as FileNode[]
-            if (nodes.length) propertiesPanel.openMulti(nodes)
+          if (selectedNodes.length === 1) {
+            handlePropertiesRequest([selectedNodes[0].id])
+          } else if (selectedNodes.length > 1) {
+            if (panelNode && selectedNodeIdsSignature === panelNodeIdsSignature) {
+              closePropertiesPanel()
+            } else {
+              openMultiPropertiesPanel(selectedNodes)
+            }
           }
         }}
       />
@@ -397,44 +405,44 @@ export function AppFiles() {
             onClearSelection={() => setSelectedIds([])}
             onRenameRequest={handleRenameRequest}
             onMoveRequest={handleMoveRequest}
-            onShareRequest={handleShareRequest}
-            onDownloadRequest={handleDownloadRequest}
+            onShareRequest={(ids) => void handleShareRequest(ids)}
+            onDownloadRequest={(ids) => void handleDownloadRequest(ids)}
             onDeleteRequest={handleDeleteRequest}
             onCopyRequest={handleCopyIds}
             onCutRequest={handleCutIds}
-            onPropertiesRequest={openPropertiesById}
+            onPropertiesRequest={handlePropertiesRequest}
             onOpenFile={handleOpenFile}
             onCreateFolder={() => handleCreateFolder()}
             onCreateChildFolder={handleCreateFolder}
-            onUploadMock={handleUploadMock}
+            onUploadRequest={handleUpload}
             onRefresh={handleRefresh}
-            onPaste={handlePaste}
+            onPaste={() => void handlePaste()}
             onViewModeChange={setViewMode}
             onSortChange={setSortValue}
           />
         </motion.div>
       </AnimatePresence>
 
-      {/* Media preview (image/video/audio) */}
+      <UploadQueueDock parentId={currentFolderId} />
+
       <FilePreviewModal
         open={Boolean(mediaPreviewFile)}
         file={mediaPreviewFile}
         currentIndex={mediaPreviewIndex}
         totalCount={mediaFiles.length}
         onClose={() => setMediaPreviewFile(null)}
-        onDownload={handleDownloadRequest}
-        onProperties={openPropertiesById}
+        onDownload={(ids) => void handleDownloadRequest(ids)}
+        onProperties={(id) => handlePropertiesRequest([id])}
         onCopy={handleCopyIds}
         onCut={handleCutIds}
         onRename={handleRenameRequest}
         onMove={handleMoveRequest}
-        onShare={handleShareRequest}
+        onShare={(ids) => void handleShareRequest(ids)}
         onDelete={handleDeleteRequest}
         onPrev={handleMediaPrev}
         onNext={handleMediaNext}
       />
 
-      {/* Document preview (text/code/pdf/office) */}
       <DocumentPreviewModal
         open={Boolean(docPreviewFile)}
         file={docPreviewFile}
@@ -443,59 +451,61 @@ export function AppFiles() {
 
       <RenameDialog
         open={Boolean(renameTargetId)}
-        defaultValue={renameValue}
-        onClose={() => setRenameTargetId(null)}
-        onSubmit={submitRename}
+        title="重命名"
+        value={renameValue}
+        onValueChange={setRenameValue}
+        onCancel={() => {
+          setRenameTargetId(null)
+          setRenameValue("")
+        }}
+        onSubmit={(value) => void submitRename(value)}
       />
 
       <MoveDialog
         open={moveIds.length > 0}
-        folderOptions={folderOptions}
-        defaultTargetId={moveTargetId}
-        onClose={() => setMoveIds([])}
-        onSubmit={submitMove}
+        folders={folderOptions}
+        value={moveTargetId}
+        onValueChange={setMoveTargetId}
+        onCancel={() => setMoveIds([])}
+        onSubmit={(value) => void submitMove(value)}
       />
 
       <ShareDialog
+        open={shareLinks.length > 0}
         links={shareLinks}
-        onClose={() => setShareLinks([])}
+        onOpenChange={(open) => !open && setShareLinks([])}
       />
 
       <DeleteConfirmDialog
         open={deleteIds.length > 0}
         count={deleteIds.length}
-        onClose={() => setDeleteIds([])}
-        onConfirm={submitDelete}
+        onCancel={() => setDeleteIds([])}
+        onConfirm={() => void submitDelete()}
       />
 
       <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-        <DialogContent className="sm:max-w-[360px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>新建文件夹</DialogTitle>
           </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              submitCreateFolder()
-            }}
-          >
+          <div className="space-y-2">
+            <label className="text-sm text-muted-foreground">请输入文件夹名称</label>
             <Input
-              autoFocus
               value={createFolderName}
-              onChange={(e) => setCreateFolderName(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              placeholder="文件夹名称"
-              className="mt-2"
+              onChange={(event) => setCreateFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submitCreateFolder()
+              }}
+              autoFocus
+              onFocus={(event) => event.target.select()}
             />
-            <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={() => setCreateFolderOpen(false)}>
-                取消
-              </Button>
-              <Button type="submit" disabled={!createFolderName.trim()}>
-                创建
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void submitCreateFolder()}>创建</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -508,16 +518,17 @@ function compareNodes(left: FileNode, right: FileNode, sortValue: SortValue) {
   }
 
   switch (sortValue) {
+    case "updated-desc":
+      return right.updatedAt.localeCompare(left.updatedAt)
     case "updated-asc":
       return left.updatedAt.localeCompare(right.updatedAt)
-    case "name-asc":
-      return left.name.localeCompare(right.name, "zh-CN")
     case "name-desc":
       return right.name.localeCompare(left.name, "zh-CN")
     case "size-desc":
-      return (right.size || 0) - (left.size || 0)
-    case "updated-desc":
+      return (right.size ?? 0) - (left.size ?? 0)
+    case "name-asc":
     default:
-      return right.updatedAt.localeCompare(left.updatedAt)
+      return left.name.localeCompare(right.name, "zh-CN")
   }
 }
+

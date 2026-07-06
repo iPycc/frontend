@@ -28,7 +28,16 @@ import {
 } from "./pages/settings"
 
 export default function App() {
-  const { isAuthenticated } = useAppState()
+  const { authReady, currentUser, isAuthenticated } = useAppState()
+  const isAdmin = currentUser?.role === "admin"
+
+  if (!authReady) {
+    return (
+      <div className="bg-muted flex min-h-svh items-center justify-center">
+        <div className="text-sm text-muted-foreground">正在恢复会话...</div>
+      </div>
+    )
+  }
 
   return (
     <BrowserRouter>
@@ -68,9 +77,9 @@ export default function App() {
 
           <Route path="/images" element={<AppFiles />} />
 
-          <Route path="/admin/users" element={<Users />} />
-          <Route path="/admin/guests" element={<Guests />} />
-          <Route path="/admin/system" element={<System />} />
+          <Route path="/admin/users" element={isAdmin ? <Users /> : <Navigate to="/app" replace />} />
+          <Route path="/admin/guests" element={isAdmin ? <Guests /> : <Navigate to="/app" replace />} />
+          <Route path="/admin/system" element={isAdmin ? <System /> : <Navigate to="/app" replace />} />
         </Route>
 
         <Route

@@ -1,10 +1,10 @@
-import { useEffect, useState, type MouseEvent } from "react"
+﻿import { useEffect, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router-dom"
 import { IconChevronDown, IconChevronRight, IconFolderFilled } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
 import { useAppState } from "@/lib/app-state"
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { SidebarTreeItem } from "./SidebarTreeItem"
 
@@ -157,3 +157,4 @@ export function SidebarFolderTree({
     </div>
   )
 }
+

@@ -1,15 +1,15 @@
-import * as React from "react"
+﻿import * as React from "react"
 import {
   IconBucket,
+  IconEyeOff,
   IconMoon,
   IconPalette,
   IconShieldLock,
   IconSun,
-  IconUserCircle,
   IconTree,
-  IconEyeOff,
+  IconUserCircle,
 } from "@tabler/icons-react"
-import type { ThemeMode } from "@/lib/mock-data"
+
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import {
@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import type { ThemeMode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
 export type SettingsTabId =
@@ -48,7 +49,7 @@ export const settingsTabs: Array<{
   {
     id: "security",
     label: "密码和安全",
-    description: "密码、二步验证与登录记录",
+    description: "密码、两步验证与登录记录",
     icon: IconShieldLock,
   },
   {
@@ -66,16 +67,24 @@ export const languageOptions = [
 ]
 
 export const timezoneOptions = [
-  { label: "Asia/Shanghai", value: "Asia/Shanghai" },
-  { label: "Asia/Tokyo", value: "Asia/Tokyo" },
-  { label: "Europe/Berlin", value: "Europe/Berlin" },
-  { label: "America/Los_Angeles", value: "America/Los_Angeles" },
+  { label: "北京时间 (UTC+8)", value: "Asia/Shanghai" },
+  { label: "东京时间 (UTC+9)", value: "Asia/Tokyo" },
+  { label: "首尔时间 (UTC+9)", value: "Asia/Seoul" },
+  { label: "新加坡时间 (UTC+8)", value: "Asia/Singapore" },
+  { label: "香港时间 (UTC+8)", value: "Asia/Hong_Kong" },
+  { label: "台北时间 (UTC+8)", value: "Asia/Taipei" },
+  { label: "柏林时间 (UTC+1)", value: "Europe/Berlin" },
+  { label: "伦敦时间 (UTC+0)", value: "Europe/London" },
+  { label: "纽约时间 (UTC-5)", value: "America/New_York" },
+  { label: "洛杉矶时间 (UTC-8)", value: "America/Los_Angeles" },
+  { label: "悉尼时间 (UTC+11)", value: "Australia/Sydney" },
+  { label: "UTC", value: "UTC" },
 ]
 
 export const themeOptions: Array<{ label: string; value: ThemeMode }> = [
   { label: "浅色", value: "light" },
   { label: "系统", value: "system" },
-  { label: "黑暗", value: "dark" },
+  { label: "深色", value: "dark" },
 ]
 
 export function SettingsRow({
@@ -201,7 +210,7 @@ export function OptionGroup<T extends string>({
             size="sm"
             className={cn(
               "gap-1.5",
-              isActive && "!bg-primary !text-primary-foreground hover:!bg-primary/90 hover:!text-primary-foreground !border-primary"
+              isActive && "!border-primary !bg-primary !text-primary-foreground hover:!bg-primary/90 hover:!text-primary-foreground"
             )}
             onClick={() => onChange(item.value)}
           >
@@ -287,3 +296,4 @@ export function BucketMeta({
     </div>
   )
 }
+

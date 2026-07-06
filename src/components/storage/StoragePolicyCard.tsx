@@ -1,9 +1,9 @@
-import * as React from "react"
+﻿﻿import * as React from "react"
 import { IconPencil, IconTrash } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { BucketMount } from "@/lib/mock-data"
+import type { BucketMount } from "@/lib/models"
 
 interface StoragePolicyCardProps {
   bucket: BucketMount
@@ -70,3 +70,4 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete }: StoragePolicyCar
     </div>
   )
 }
+

@@ -1,4 +1,4 @@
-import type { BucketMount } from "@/lib/mock-data"
+﻿﻿import type { BucketMount } from "@/lib/models"
 
 import { AliyunStorageForm } from "@/components/storage/aliyun/AliyunStorageForm"
 import { LocalStorageForm } from "@/components/storage/local/LocalStorageForm"
@@ -74,3 +74,4 @@ export function resolveStorageStrategy(bucket: BucketMount): StorageStrategyKey 
 
   return "tencent"
 }
+

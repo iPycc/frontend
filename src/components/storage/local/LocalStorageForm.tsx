@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿﻿import * as React from "react"
 import { IconCheck, IconX } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -15,7 +15,7 @@ import {
   buildLocalStoragePath,
   getLocalStoragePathSuggestions,
   validateLocalStoragePath,
-} from "@/lib/mock-data"
+} from "@/lib/models"
 import { FormCard, FormRow, PathValidator, StorageFormHeader } from "@/components/storage/shared"
 import type { LocalStorageDraft, StorageFormMode } from "@/components/storage/types"
 import { cn } from "@/lib/utils"
@@ -244,3 +244,4 @@ export function LocalStorageForm({
     </div>
   )
 }
+

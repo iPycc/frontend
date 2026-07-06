@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import {
   IconDownload,
   IconInfoCircle,
@@ -13,7 +13,7 @@ import {
 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -175,28 +175,50 @@ export function FilePreviewModal({
             )}
 
             {isVideo ? (
-              <div className="flex flex-col items-center gap-4 text-white/50">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
-                  <span className="text-3xl">▶</span>
+              file.preview ? (
+                <video
+                  src={file.preview}
+                  controls
+                  autoPlay
+                  className="max-h-full max-w-full rounded outline-none focus:outline-none focus-visible:outline-none"
+                >
+                  <track kind="captions" />
+                </video>
+              ) : (
+                <div className="flex flex-col items-center gap-4 text-white/50">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
+                    <span className="text-3xl">▶</span>
+                  </div>
+                  <span className="text-sm">{file.name}</span>
+                  <span className="text-xs text-white/30">无法预览此视频</span>
                 </div>
-                <span className="text-sm">{file.name}</span>
-                <span className="text-xs text-white/30">视频预览（模拟）</span>
-              </div>
+              )
             ) : isAudio ? (
               <div className="flex flex-col items-center gap-4 text-white/50">
                 <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
                   <span className="text-3xl">♪</span>
                 </div>
                 <span className="text-sm">{file.name}</span>
-                <span className="text-xs text-white/30">音频预览（模拟）</span>
+                {file.preview ? (
+                  <audio src={file.preview} controls autoPlay className="mt-2 w-80">
+                    <track kind="captions" />
+                  </audio>
+                ) : (
+                  <span className="text-xs text-white/30">无法预览此音频</span>
+                )}
               </div>
-            ) : (
+            ) : file.preview ? (
               <img
-                src={file.preview || `https://picsum.photos/seed/${file.id}/1920/1080`}
+                src={file.preview}
                 alt={file.name}
                 className="max-h-full max-w-full rounded object-contain outline-none focus:outline-none focus-visible:outline-none"
                 draggable={false}
               />
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-white/50">
+                <span className="text-sm">{file.name}</span>
+                <span className="text-xs text-white/30">暂无预览</span>
+              </div>
             )}
           </div>
         </div>
@@ -251,3 +273,4 @@ export function FilePreviewModal({
     </Dialog>
   )
 }
+

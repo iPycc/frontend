@@ -9,17 +9,18 @@ import {
 } from "@/components/ui/dialog"
 
 interface ShareDialogProps {
+  open: boolean
   links: string[]
-  onClose: () => void
+  onOpenChange: (open: boolean) => void
 }
 
-export function ShareDialog({ links, onClose }: ShareDialogProps) {
+export function ShareDialog({ open, links, onOpenChange }: ShareDialogProps) {
   return (
-    <Dialog open={links.length > 0} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>分享链接</DialogTitle>
-          <DialogDescription>当前为 mock 链接，可用于页面演示。</DialogDescription>
+          <DialogDescription>当前显示的是已生成的分享链接。</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           {links.map((link) => (
@@ -29,7 +30,7 @@ export function ShareDialog({ links, onClose }: ShareDialogProps) {
           ))}
         </div>
         <DialogFooter>
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={() => onOpenChange(false)}>关闭</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,57 +1,48 @@
-import * as React from "react"
+﻿import * as React from "react"
 
+import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, register as apiRegister } from "@/api/auth"
 import {
-  buildLocalStoragePath,
-  createLocalStorageBucketForUser,
+  createFolder as apiCreateFolder,
+  deleteNodes as apiDeleteNodes,
+  listNodes,
+  listRecycle,
+  listUserMounts,
+  renameNode as apiRenameNode,
+  restoreNodes as apiRestoreNodes,
+  type ExplorerMount,
+  type ExplorerNode,
+} from "@/api/files"
+import { checkBackendHealth } from "@/api/system"
+import { abortUpload, completeUpload, createUploadSession, recordRemotePart, uploadLocalPart } from "@/api/uploads"
+import { getCurrentProfile, getLoginActivity } from "@/api/user"
+import {
   createId,
-  defaultAuth,
   defaultAppSnapshot,
+  defaultSecurity,
+  defaultSettings,
   formatBytes,
   getBucketRoot,
+  inferMediaType,
   isVisibleNode,
-  type AuthState,
   type AppSnapshot,
+  type AppUser,
+  type AuthSession,
+  type AuthState,
   type BucketMount,
   type FileNode,
   type LoginActivityEntry,
-  type MockAuthUser,
   type OfflineTask,
   type SecurityState,
   type ShareRecord,
-  type StorageStrategyKey,
   type ThemeMode,
+  type UploadQueueItem,
   type UserProfile,
   type UserSettings,
-} from "@/lib/mock-data"
+} from "@/lib/models"
+import { emitAuthEvent, isExpired, mergeSessionTokens, shouldRefreshSession, subscribeAuthEvents } from "@/lib/session"
+import { toast } from "sonner"
 
-const STORAGE_KEY = "cloudrave-app-state-v1"
-
-type BucketWizardInput = {
-  name: string
-  provider: string
-  bucket: string
-  region: string
-  storageType?: StorageStrategyKey
-  ownerId?: string
-  isLocal?: boolean
-  endpoint?: string
-  basePrefix: string
-  secretId: string
-  secretKey: string
-  sessionToken?: string
-  multipartThreshold: string
-  partSize: string
-  presignTtl: string
-  concurrency: number
-  protocol: "https" | "http"
-  pathStyle: boolean
-  accelerate: boolean
-  corsConfigured: boolean
-  advancedMode: boolean
-  canEditConnection?: boolean
-  canDelete?: boolean
-  canRename?: boolean
-}
+const STORAGE_KEY = "cloudrave-app-state-v2"
 
 type AuthRegisterInput = {
   email: string
@@ -64,10 +55,17 @@ type AuthResult = {
   message?: string
 }
 
+type UploadTarget = {
+  mountId: string
+  parentId: string | null
+}
+
 type AppStateValue = {
   auth: AuthState
-  currentUser: MockAuthUser | null
+  authSession: AuthSession | null
+  currentUser: AppUser | null
   isAuthenticated: boolean
+  authReady: boolean
   profile: UserProfile
   settings: UserSettings
   security: SecurityState
@@ -77,21 +75,26 @@ type AppStateValue = {
   nodes: FileNode[]
   shares: ShareRecord[]
   offlineTasks: OfflineTask[]
+  uploadQueue: UploadQueueItem[]
+  uploadQueueOpen: boolean
   clipboard: AppSnapshot["clipboard"]
   effectiveTheme: Exclude<ThemeMode, "system">
   setThemeMode: (mode: ThemeMode) => void
   updateSettings: (patch: Partial<UserSettings>) => void
   updateProfile: (patch: Partial<UserProfile>) => void
-  login: (email: string, password: string) => AuthResult
-  register: (input: AuthRegisterInput) => AuthResult
-  logout: () => void
+  login: (email: string, password: string) => Promise<AuthResult>
+  register: (input: AuthRegisterInput) => Promise<AuthResult>
+  logout: () => Promise<void>
   verifyPassword: (value: string) => boolean
   resetPasswordVerification: () => void
   updateSecurity: (patch: Partial<SecurityState>) => void
   setActiveBucket: (bucketId: string) => void
-  renameBucket: (bucketId: string, name: string) => void
-  updateBucket: (bucketId: string, patch: Partial<BucketMount>) => void
-  addBucket: (input: BucketWizardInput) => BucketMount
+  reloadWorkspace: () => Promise<void>
+  requestUpload: (parentId?: string | null, mountId?: string) => void
+  setUploadQueueOpen: (open: boolean) => void
+  retryUpload: (id: string) => void
+  removeUpload: (id: string) => void
+  clearCompletedUploads: () => void
   getNodeById: (nodeId: string) => FileNode | undefined
   getFolderPathId: (path: string, bucketId?: string) => string | null
   getNodesInFolder: (path: string, bucketId?: string) => FileNode[]
@@ -101,25 +104,60 @@ type AppStateValue = {
   getSharedWithMeNodes: () => FileNode[]
   getRecycleNodes: () => FileNode[]
   getShareRecords: () => Array<ShareRecord & { node?: FileNode }>
-  createFolder: (parentId: string | null, name: string, bucketId?: string) => FileNode
-  createSampleFile: (parentId: string | null, bucketId?: string) => FileNode
-  renameNode: (nodeId: string, name: string) => void
-  moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string) => void
-  duplicateNodes: (nodeIds: string[]) => void
-  deleteNodes: (nodeIds: string[]) => void
-  restoreNodes: (nodeIds: string[]) => void
-  permanentlyDeleteNodes: (nodeIds: string[]) => void
-  shareNodes: (nodeIds: string[]) => ShareRecord[]
+  createFolder: (parentId: string | null, name: string, bucketId?: string) => Promise<FileNode | null>
+  renameNode: (nodeId: string, name: string) => Promise<void>
+  moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string) => Promise<void>
+  duplicateNodes: (nodeIds: string[]) => Promise<void>
+  deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<void>
+  restoreNodes: (nodeIds: string[]) => Promise<void>
+  permanentlyDeleteNodes: (nodeIds: string[]) => Promise<void>
+  shareNodes: (nodeIds: string[]) => Promise<ShareRecord[]>
   copyNodes: (nodeIds: string[]) => void
   cutNodes: (nodeIds: string[]) => void
-  pasteNodes: (targetParentId: string | null, bucketId?: string) => void
-  addOfflineTask: (url: string) => OfflineTask
+  pasteNodes: (targetParentId: string | null, bucketId?: string) => Promise<void>
   formatBytes: (size?: number) => string
   getFileContent: (fileId: string) => string
   updateFileContent: (fileId: string, content: string) => void
 }
 
 const AppStateContext = React.createContext<AppStateValue | null>(null)
+
+const EMPTY_BUCKET: BucketMount = {
+  id: "",
+  name: "我的文件",
+  provider: "Local Storage",
+  storageType: "local",
+  strategy: {
+    multipartThreshold: "25 MB",
+    partSize: "25 MB",
+    presignTtl: "900",
+    concurrency: 1,
+    protocol: "https",
+    pathStyle: false,
+    accelerate: false,
+  },
+  rootNodeId: "root:empty",
+  createdAt: "",
+  corsStatus: "healthy",
+  corsMessage: "",
+  advancedMode: false,
+  isLocal: true,
+  canEditConnection: false,
+  canDelete: false,
+  canRename: false,
+}
+
+function createEmptyProfile(): UserProfile {
+  return {
+    username: "",
+    avatar: "",
+    email: "",
+    uid: "",
+    registeredAt: "",
+    group: "",
+    homepage: "",
+  }
+}
 
 function loadSnapshot(): AppSnapshot {
   if (typeof window === "undefined") {
@@ -133,132 +171,286 @@ function loadSnapshot(): AppSnapshot {
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppSnapshot>
-    const nextSnapshot = {
+    return {
       ...defaultAppSnapshot,
-      ...parsed,
-      profile: { ...defaultAppSnapshot.profile, ...parsed.profile },
-      settings: { ...defaultAppSnapshot.settings, ...parsed.settings },
-      security: { ...defaultAppSnapshot.security, ...parsed.security },
       auth: {
-        ...defaultAuth,
-        ...parsed.auth,
-        users: parsed.auth?.users ?? defaultAuth.users,
-        currentUserId: parsed.auth?.currentUserId ?? defaultAuth.currentUserId,
+        session: parsed.auth?.session ?? null,
       },
-      loginActivity: parsed.loginActivity ?? defaultAppSnapshot.loginActivity,
-      buckets: parsed.buckets ?? defaultAppSnapshot.buckets,
-      nodes: parsed.nodes ?? defaultAppSnapshot.nodes,
-      shares: parsed.shares ?? defaultAppSnapshot.shares,
-      offlineTasks: parsed.offlineTasks ?? defaultAppSnapshot.offlineTasks,
-      clipboard: parsed.clipboard ?? null,
-      activeBucketId: parsed.activeBucketId ?? defaultAppSnapshot.activeBucketId,
-      fileContents: parsed.fileContents ?? defaultAppSnapshot.fileContents,
+      settings: {
+        ...defaultSettings,
+        ...parsed.settings,
+      },
+      security: {
+        ...defaultSecurity,
+        passwordUpdatedAt: parsed.security?.passwordUpdatedAt ?? "",
+      },
     }
-    const currentUser = nextSnapshot.auth.users.find(
-      (user) => user.id === nextSnapshot.auth.currentUserId
-    )
-
-    return currentUser ? ensureLocalStorageBucket(nextSnapshot, currentUser) : nextSnapshot
   } catch {
     return defaultAppSnapshot
   }
 }
 
 function nowString() {
-  return new Date().toLocaleString("zh-CN", { hour12: false })
+  return new Date().toLocaleString("zh-CN", { hour12: false }).replace(/\//g, "-")
 }
 
-function createHomepage(username: string) {
-  return `https://cloudrave.app/u/${encodeURIComponent(username.trim().toLowerCase().replace(/\s+/g, "-"))}`
+function normalizeStorageType(mount: ExplorerMount) {
+  const storageType = String(mount.extra?.storage_type ?? "").toLowerCase()
+  const providerLabel = String(mount.provider_label ?? mount.extra?.provider_label ?? "").toLowerCase()
+
+  if (storageType === "local" || providerLabel.includes("local")) {
+    return "local" as const
+  }
+  if (storageType === "aliyun" || providerLabel.includes("aliyun")) {
+    return "aliyun" as const
+  }
+  return "tencent" as const
 }
 
-function appendCopySuffix(name: string) {
-  const dotIndex = name.lastIndexOf(".")
-  if (dotIndex <= 0) {
-    return `${name} 副本`
+function normalizeStorageRoot(value: string) {
+  const normalized = value.replace(/\\/g, "/").trim()
+  if (!normalized) {
+    return ""
   }
 
-  return `${name.slice(0, dotIndex)} 副本${name.slice(dotIndex)}`
+  const withLeadingSlash = normalized.startsWith("/") ? normalized : `/${normalized}`
+  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`
 }
 
-function buildProfileFromAuthUser(user: MockAuthUser): UserProfile {
+function resolveMountStorageRoot(mount: ExplorerMount, storageType: ReturnType<typeof normalizeStorageType>) {
+  const configuredRoot = typeof mount.extra?.storage_root === "string" ? normalizeStorageRoot(mount.extra.storage_root) : ""
+  if (configuredRoot) {
+    return configuredRoot
+  }
+
+  if (storageType === "local" && mount.mount_slug) {
+    return `/upload/${mount.mount_slug}/`
+  }
+
+  if (mount.root_path) {
+    return normalizeStorageRoot(mount.root_path)
+  }
+
+  return ""
+}
+
+function formatDateTime(value?: string | null, timezone?: string) {
+  if (!value) {
+    return ""
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  try {
+    const parts = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: timezone || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(date)
+
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
+    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`
+  } catch {
+    // Fallback to local time if timezone is invalid
+    const year = date.getFullYear()
+    const month = `${date.getMonth() + 1}`.padStart(2, "0")
+    const day = `${date.getDate()}`.padStart(2, "0")
+    const hour = `${date.getHours()}`.padStart(2, "0")
+    const minute = `${date.getMinutes()}`.padStart(2, "0")
+    const second = `${date.getSeconds()}`.padStart(2, "0")
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+  }
+}
+
+function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?: string): BucketMount {
+  const storageType = normalizeStorageType(mount)
+  const extra = mount.extra ?? {}
+  const provider = String(mount.provider_label ?? extra.provider_label ?? (storageType === "local" ? "Local Storage" : "Tencent COS"))
+  const storageRoot = resolveMountStorageRoot(mount, storageType)
+  const systemManaged = Boolean(extra.system_managed)
+
   return {
-    username: user.username,
-    avatar: user.avatar,
-    email: user.email,
-    uid: `u_${user.id}`,
-    registeredAt: user.registeredAt,
-    group: user.group,
-    homepage: createHomepage(user.username),
+    id: String(mount.id),
+    backendId: mount.id,
+    policyId: mount.policy_id,
+    name: mount.name,
+    provider,
+    providerLabel: provider,
+    storageType,
+    ownerBackendId: mount.owner_id,
+    ownerId: String(mount.owner_id),
+    region: typeof extra.region === "string" ? extra.region : undefined,
+    endpoint: typeof extra.endpoint === "string" ? extra.endpoint : undefined,
+    bucket: typeof extra.bucket_name === "string" ? extra.bucket_name : undefined,
+    basePrefix: storageRoot || undefined,
+    strategy: {
+      multipartThreshold: `${Number(extra.multipart_threshold_mb ?? 25)} MB`,
+      partSize: `${Number(extra.part_size_mb ?? 25)} MB`,
+      presignTtl: String(extra.presign_ttl_seconds ?? 900),
+      concurrency: Number(extra.concurrency ?? 1),
+      protocol: "https",
+      pathStyle: false,
+      accelerate: false,
+    },
+    rootNodeId: `root:${mount.id}`,
+    rootPath: mount.root_path,
+    mountSlug: mount.mount_slug,
+    createdAt: formatDateTime(mount.created_at, timezone),
+    updatedAt: formatDateTime(mount.updated_at, timezone),
+    corsStatus: extra.cors_status === "warning" ? "warning" : "healthy",
+    corsMessage: storageRoot ? `已绑定目录：${storageRoot}` : "已连接真实存储",
+    advancedMode: Boolean(extra.advanced_mode),
+    isLocal: storageType === "local",
+    canEditConnection: user?.role === "admin" && !systemManaged,
+    canDelete: user?.role === "admin" && !systemManaged,
+    canRename: user?.role === "admin" && !systemManaged,
+    extra,
   }
 }
 
-function isBucketVisibleToUser(bucket: BucketMount, user: MockAuthUser | null) {
-  return !bucket.ownerId || bucket.ownerId === user?.id
+function extractExtension(name: string) {
+  const index = name.lastIndexOf(".")
+  if (index <= 0 || index === name.length - 1) {
+    return undefined
+  }
+  return name.slice(index + 1).toLowerCase()
 }
 
-function ensureLocalStorageBucket(snapshot: AppSnapshot, user: MockAuthUser) {
-  const existingBucket = snapshot.buckets.find(
-    (bucket) => bucket.storageType === "local" && bucket.ownerId === user.id
-  )
-
-  if (existingBucket) {
-    return snapshot
+function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, accessToken?: string, timezone?: string): FileNode {
+  const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
+  // Generate preview URL for image/video/audio files via the preview endpoint with token auth
+  let preview: string | undefined
+  if (node.type === "file" && node.blob_path && accessToken && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
+    preview = `/api/v1/explorer/preview/${node.id}?token=${encodeURIComponent(accessToken)}`
   }
-
-  const localStorage = createLocalStorageBucketForUser(user, {
-    basePrefix: buildLocalStoragePath(user.username),
-  })
-
   return {
-    ...snapshot,
-    buckets: [...snapshot.buckets, localStorage.bucket],
-    nodes: [...snapshot.nodes, localStorage.rootNode],
+    id: String(node.id),
+    backendId: node.id,
+    bucketId,
+    mountBackendId: node.mount_id,
+    parentId,
+    parentBackendId: node.parent_id ?? null,
+    kind: node.type,
+    name: node.name,
+    ext: node.type === "file" ? extractExtension(node.name) : undefined,
+    size: node.size,
+    updatedAt: formatDateTime(node.updated_at, timezone),
+    createdAt: formatDateTime(node.created_at, timezone),
+    mediaType,
+    preview,
+    deletedAt: formatDateTime(node.deleted_at, timezone),
+    blobPath: node.blob_path,
   }
 }
 
-function cloneNode(node: FileNode, snapshot: AppSnapshot, parentIdMap = new Map<string, string>()): FileNode[] {
-  const nextId = createId(node.kind)
-  parentIdMap.set(node.id, nextId)
-
-  const nextNode: FileNode = {
-    ...node,
-    id: nextId,
-    name: node.kind === "folder" ? `${node.name} 副本` : appendCopySuffix(node.name),
-    parentId: node.parentId ? parentIdMap.get(node.parentId) ?? node.parentId : node.parentId,
-    updatedAt: nowString(),
-    deletedAt: undefined,
-    sharedWithMe: false,
+async function loadMountNodes(token: string, bucket: BucketMount, timezone?: string) {
+  const rootNode: FileNode = {
+    id: bucket.rootNodeId,
+    bucketId: bucket.id,
+    parentId: null,
+    kind: "folder",
+    name: bucket.name,
+    updatedAt: bucket.updatedAt || bucket.createdAt,
+    createdAt: bucket.createdAt,
+    isSystemRoot: true,
   }
 
-  const children = snapshot.nodes.filter((child) => child.parentId === node.id)
-  return [nextNode, ...children.flatMap((child) => cloneNode(child, snapshot, parentIdMap))]
-}
+  if (!bucket.backendId) {
+    return [rootNode]
+  }
 
-function collectNodeIds(snapshot: AppSnapshot, nodeIds: string[]) {
-  const queue = [...nodeIds]
-  const all = new Set<string>()
+  const nodes: FileNode[] = [rootNode]
+  const queue: Array<{ backendParentId?: number | null; uiParentId: string }> = [{ backendParentId: undefined, uiParentId: rootNode.id }]
 
   while (queue.length > 0) {
     const current = queue.shift()
-    if (!current || all.has(current)) {
+    if (!current) {
       continue
     }
 
-    all.add(current)
-    snapshot.nodes.filter((node) => node.parentId === current).forEach((node) => queue.push(node.id))
+    const children = await listNodes(token, bucket.backendId, current.backendParentId)
+    for (const child of children) {
+      const mapped = mapNodeToFileNode(child, bucket.id, current.uiParentId, token, timezone)
+      nodes.push(mapped)
+      if (mapped.kind === "folder" && mapped.backendId) {
+        queue.push({ backendParentId: mapped.backendId, uiParentId: mapped.id })
+      }
+    }
   }
 
-  return Array.from(all)
+  return nodes
 }
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = React.useState<AppSnapshot>(loadSnapshot)
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light")
+  const [authReady, setAuthReady] = React.useState(false)
+  const [uploadQueue, setUploadQueue] = React.useState<UploadQueueItem[]>([])
+  const [uploadQueueOpen, setUploadQueueOpen] = React.useState(false)
+  const backendHealthNotifiedRef = React.useRef(false)
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const pendingUploadTargetRef = React.useRef<UploadTarget | null>(null)
+  const uploadControllersRef = React.useRef(new Map<string, AbortController>())
+  const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget }>())
+  const snapshotRef = React.useRef(snapshot)
 
   React.useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    snapshotRef.current = snapshot
   }, [snapshot])
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        auth: snapshot.auth,
+        settings: snapshot.settings,
+        security: {
+          passwordUpdatedAt: snapshot.security.passwordUpdatedAt,
+        },
+      })
+    )
+  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.settings])
+
+  React.useEffect(() => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 4000)
+
+    const verifyBackend = async () => {
+      try {
+        await checkBackendHealth(controller.signal)
+      } catch {
+        if (controller.signal.aborted || backendHealthNotifiedRef.current) {
+          return
+        }
+
+        backendHealthNotifiedRef.current = true
+        toast.error("后端服务暂时没有响应", {
+          description: "请确认 Cloudrave 后端已启动，并检查前端 API 地址配置。",
+        })
+      } finally {
+        window.clearTimeout(timeoutId)
+      }
+    }
+
+    void verifyBackend()
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [])
 
   React.useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)")
@@ -274,264 +466,393 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", effectiveTheme === "dark")
   }, [effectiveTheme])
 
-  const currentUser = React.useMemo(() => {
-    return snapshot.auth.users.find((user) => user.id === snapshot.auth.currentUserId) ?? null
-  }, [snapshot.auth.currentUserId, snapshot.auth.users])
-
-  const buckets = React.useMemo(() => {
-    return snapshot.buckets.filter((bucket) => isBucketVisibleToUser(bucket, currentUser))
-  }, [currentUser, snapshot.buckets])
-
-  const activeBucket = React.useMemo(() => {
-    return buckets.find((bucket) => bucket.id === snapshot.activeBucketId) ?? buckets[0] ?? snapshot.buckets[0]
-  }, [buckets, snapshot.activeBucketId, snapshot.buckets])
-
-  const defaultBucketId = activeBucket?.id ?? snapshot.activeBucketId
+  const authSession = snapshot.auth.session
+  const currentUser = authSession?.user ?? null
+  const isAuthenticated = Boolean(authSession && currentUser && !isExpired(authSession.tokens.accessExpiresAt))
 
   const updateSnapshot = React.useCallback((recipe: (current: AppSnapshot) => AppSnapshot) => {
     setSnapshot((current) => recipe(current))
   }, [])
 
+  const hydrateWorkspace = React.useCallback(
+    async (session: AuthSession) => {
+      const token = session.tokens.accessToken
+      const [profilePayload, loginActivityEntries, rawMounts, recycleEntries] = await Promise.all([
+        getCurrentProfile(token),
+        getLoginActivity(token),
+        listUserMounts(token),
+        listRecycle(token),
+      ])
+
+      const nextSession: AuthSession = {
+        ...session,
+        user: {
+          ...session.user,
+          username: profilePayload.profile.username,
+          email: profilePayload.profile.email,
+          avatar: profilePayload.profile.avatar,
+          registeredAt: profilePayload.profile.registeredAt,
+          group: profilePayload.profile.group,
+        },
+      }
+
+      const tz = snapshotRef.current.settings.timezone
+      const buckets = rawMounts.map((mount) => mapMountToBucket(mount, nextSession.user, tz))
+      const bucketNodeLists = await Promise.all(buckets.map((bucket) => loadMountNodes(token, bucket, tz)))
+      const nodesMap = new Map<string, FileNode>()
+
+      for (const list of bucketNodeLists) {
+        for (const node of list) {
+          nodesMap.set(node.id, node)
+        }
+      }
+
+      for (const recycledNode of recycleEntries) {
+        const mapped = mapNodeToFileNode(
+          recycledNode,
+          String(recycledNode.mount_id),
+          recycledNode.parent_id ? String(recycledNode.parent_id) : `root:${recycledNode.mount_id}`,
+          session.tokens.accessToken,
+          tz
+        )
+        nodesMap.set(mapped.id, mapped)
+      }
+
+      updateSnapshot((current) => ({
+        ...current,
+        profile: profilePayload.profile,
+        security: {
+          ...current.security,
+          passwordVerified: false,
+          passwordUpdatedAt: profilePayload.passwordUpdatedAt,
+        },
+        auth: {
+          session: nextSession,
+        },
+        loginActivity: loginActivityEntries,
+        buckets,
+        activeBucketId:
+          buckets.find((bucket) => bucket.id === current.activeBucketId)?.id ??
+          buckets[0]?.id ??
+          "",
+        nodes: Array.from(nodesMap.values()),
+        shares: [],
+        fileContents: {},
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const clearWorkspace = React.useCallback(() => {
+    updateSnapshot((current) => ({
+      ...current,
+      profile: createEmptyProfile(),
+      security: {
+        ...current.security,
+        passwordVerified: false,
+        passwordUpdatedAt: "",
+      },
+      auth: {
+        session: null,
+      },
+      loginActivity: [],
+      buckets: [],
+      activeBucketId: "",
+      nodes: [],
+      shares: [],
+      clipboard: null,
+      fileContents: {},
+    }))
+  }, [updateSnapshot])
+
   React.useEffect(() => {
-    if (activeBucket && activeBucket.id !== snapshot.activeBucketId) {
-      updateSnapshot((current) => ({ ...current, activeBucketId: activeBucket.id }))
+    let cancelled = false
+
+    const bootstrapAuth = async () => {
+      const session = snapshot.auth.session
+
+      if (!session) {
+        if (!cancelled) {
+          setAuthReady(true)
+        }
+        return
+      }
+
+      try {
+        let activeSession = session
+        if (shouldRefreshSession(session)) {
+          const refreshedTokens = await apiRefreshToken(session.tokens.refreshToken)
+          activeSession = mergeSessionTokens(session, refreshedTokens)
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        await hydrateWorkspace(activeSession)
+      } catch {
+        if (!cancelled) {
+          clearWorkspace()
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthReady(true)
+        }
+      }
     }
-  }, [activeBucket, snapshot.activeBucketId, updateSnapshot])
+
+    void bootstrapAuth()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    clearWorkspace,
+    hydrateWorkspace,
+    snapshot.auth.session?.tokens.accessToken,
+    snapshot.auth.session?.tokens.refreshToken,
+  ])
+
+  React.useEffect(() => {
+    return subscribeAuthEvents((message) => {
+      if (message.type === "session-updated") {
+        if (message.session) {
+          void hydrateWorkspace(message.session)
+        }
+        setAuthReady(true)
+        return
+      }
+
+      clearWorkspace()
+      setAuthReady(true)
+    })
+  }, [clearWorkspace, hydrateWorkspace])
+
+  const reloadWorkspace = React.useCallback(async () => {
+    const session = snapshotRef.current.auth.session
+    if (!session) {
+      return
+    }
+
+    await hydrateWorkspace(session)
+  }, [hydrateWorkspace])
+
+  const buckets = React.useMemo(() => snapshot.buckets, [snapshot.buckets])
+
+  const activeBucket = React.useMemo(() => {
+    return buckets.find((bucket) => bucket.id === snapshot.activeBucketId) ?? buckets[0] ?? EMPTY_BUCKET
+  }, [buckets, snapshot.activeBucketId])
+
+  const defaultBucketId = activeBucket.id
 
   const getNodeById = React.useCallback((nodeId: string) => snapshot.nodes.find((node) => node.id === nodeId), [snapshot.nodes])
 
-  const getFolderPathId = React.useCallback((path: string, bucketId = defaultBucketId) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    if (!rootId) {
-      return null
-    }
-
-    const parts = path.split("/").filter(Boolean)
-    let parentId = rootId
-
-    for (const part of parts) {
-      const match = snapshot.nodes.find(
-        (node) =>
-          node.bucketId === bucketId &&
-          node.parentId === parentId &&
-          node.kind === "folder" &&
-          !node.deletedAt &&
-          node.name === part
-      )
-
-      if (!match) {
+  const getFolderPathId = React.useCallback(
+    (path: string, bucketId = defaultBucketId) => {
+      const rootId = getBucketRoot(snapshot, bucketId)
+      if (!rootId) {
         return null
       }
 
-      parentId = match.id
-    }
+      const parts = path.split("/").filter(Boolean)
+      let parentId = rootId
 
-    return parentId
-  }, [defaultBucketId, snapshot])
+      for (const part of parts) {
+        const match = snapshot.nodes.find(
+          (node) =>
+            node.bucketId === bucketId &&
+            node.parentId === parentId &&
+            node.kind === "folder" &&
+            !node.deletedAt &&
+            node.name === part
+        )
 
-  const getNodesInFolder = React.useCallback((path: string, bucketId = defaultBucketId) => {
-    const folderId = getFolderPathId(path, bucketId)
-    if (!folderId) {
-      return []
-    }
+        if (!match) {
+          return null
+        }
 
-    return snapshot.nodes.filter(
-      (node) => node.bucketId === bucketId && node.parentId === folderId && isVisibleNode(node)
-    )
-  }, [defaultBucketId, getFolderPathId, snapshot.nodes])
-
-  const getFoldersForBucket = React.useCallback((bucketId = defaultBucketId, includeRoot = false) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    return snapshot.nodes.filter((node) => {
-      if (node.bucketId !== bucketId || node.kind !== "folder" || node.deletedAt) {
-        return false
+        parentId = match.id
       }
 
-      if (includeRoot) {
-        return true
+      return parentId
+    },
+    [defaultBucketId, snapshot]
+  )
+
+  const getNodesInFolder = React.useCallback(
+    (path: string, bucketId = defaultBucketId) => {
+      const folderId = getFolderPathId(path, bucketId)
+      if (!folderId) {
+        return []
       }
 
-      return node.id !== rootId
-    })
-  }, [defaultBucketId, snapshot])
+      return snapshot.nodes.filter(
+        (node) => node.bucketId === bucketId && node.parentId === folderId && isVisibleNode(node)
+      )
+    },
+    [defaultBucketId, getFolderPathId, snapshot.nodes]
+  )
 
-  const getTreeNodes = React.useCallback((bucketId = defaultBucketId) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    if (!rootId) {
-      return []
-    }
+  const getFoldersForBucket = React.useCallback(
+    (bucketId = defaultBucketId, includeRoot = false) => {
+      const rootId = getBucketRoot(snapshot, bucketId)
+      return snapshot.nodes.filter((node) => {
+        if (node.bucketId !== bucketId || node.kind !== "folder" || node.deletedAt) {
+          return false
+        }
 
-    return snapshot.nodes.filter(
-      (node) => node.bucketId === bucketId && node.parentId === rootId && node.kind === "folder" && !node.deletedAt
-    )
-  }, [defaultBucketId, snapshot])
+        if (includeRoot) {
+          return true
+        }
 
-  const getCategoryNodes = React.useCallback((category: "image" | "video" | "audio" | "document", bucketId = defaultBucketId) => {
-    return snapshot.nodes.filter(
-      (node) => node.bucketId === bucketId && node.kind === "file" && node.mediaType === category && isVisibleNode(node)
-    )
-  }, [defaultBucketId, snapshot.nodes])
+        return node.id !== rootId
+      })
+    },
+    [defaultBucketId, snapshot]
+  )
 
-  const getSharedWithMeNodes = React.useCallback(() => snapshot.nodes.filter((node) => node.sharedWithMe && isVisibleNode(node)), [snapshot.nodes])
+  const getTreeNodes = React.useCallback(
+    (bucketId = defaultBucketId) => {
+      const rootId = getBucketRoot(snapshot, bucketId)
+      if (!rootId) {
+        return []
+      }
+
+      return snapshot.nodes.filter(
+        (node) => node.bucketId === bucketId && node.parentId === rootId && node.kind === "folder" && !node.deletedAt
+      )
+    },
+    [defaultBucketId, snapshot]
+  )
+
+  const getCategoryNodes = React.useCallback(
+    (category: "image" | "video" | "audio" | "document", bucketId = defaultBucketId) => {
+      return snapshot.nodes.filter(
+        (node) => node.bucketId === bucketId && node.kind === "file" && node.mediaType === category && isVisibleNode(node)
+      )
+    },
+    [defaultBucketId, snapshot.nodes]
+  )
+
+  const getSharedWithMeNodes = React.useCallback(() => [] as FileNode[], [])
   const getRecycleNodes = React.useCallback(() => snapshot.nodes.filter((node) => Boolean(node.deletedAt)), [snapshot.nodes])
+  const getShareRecords = React.useCallback(() => [] as Array<ShareRecord & { node?: FileNode }>, [])
 
-  const getShareRecords = React.useCallback(() => {
-    return snapshot.shares.map((record) => ({
-      ...record,
-      node: snapshot.nodes.find((node) => node.id === record.nodeId),
-    }))
-  }, [snapshot.nodes, snapshot.shares])
-
-  const setThemeMode = React.useCallback((mode: ThemeMode) => {
-    updateSnapshot((current) => ({
-      ...current,
-      settings: { ...current.settings, themeMode: mode },
-    }))
-  }, [updateSnapshot])
-
-  const updateSettings = React.useCallback((patch: Partial<UserSettings>) => {
-    updateSnapshot((current) => ({
-      ...current,
-      settings: { ...current.settings, ...patch },
-    }))
-  }, [updateSnapshot])
-
-  const updateProfile = React.useCallback((patch: Partial<UserProfile>) => {
-    updateSnapshot((current) => ({
-      ...current,
-      profile: { ...current.profile, ...patch },
-      auth: {
-        ...current.auth,
-        users: current.auth.users.map((user) =>
-          user.id === current.auth.currentUserId
-            ? {
-                ...user,
-                username: patch.username ?? user.username,
-                email: patch.email ?? user.email,
-                avatar: patch.avatar ?? user.avatar,
-                group: patch.group ?? user.group,
-                registeredAt: patch.registeredAt ?? user.registeredAt,
-              }
-            : user
-        ),
-      },
-    }))
-  }, [updateSnapshot])
-
-  const login = React.useCallback((email: string, password: string): AuthResult => {
-    const normalizedEmail = email.trim().toLowerCase()
-    const normalizedPassword = password.trim()
-    const matchedUser = snapshot.auth.users.find(
-      (user) =>
-        user.email.toLowerCase() === normalizedEmail &&
-        user.password === normalizedPassword
-    )
-
-    if (!matchedUser) {
-      return {
-        success: false,
-        message: "邮箱或密码错误，请使用 mock 账号重新尝试。",
-      }
-    }
-
-    updateSnapshot((current) => ensureLocalStorageBucket({
-      ...current,
-      profile: buildProfileFromAuthUser(matchedUser),
-      security: { ...current.security, passwordVerified: false },
-      auth: {
-        ...current.auth,
-        currentUserId: matchedUser.id,
-      },
-      loginActivity: [
-        {
-          id: createId("login"),
-          method: "密码",
-          device: "Cloudrave Mock Web",
-          ip: "127.0.0.1",
-          time: nowString(),
-        },
-        ...current.loginActivity,
-      ],
-    }, matchedUser))
-
-    return { success: true }
-  }, [snapshot.auth.users, updateSnapshot])
-
-  const register = React.useCallback((input: AuthRegisterInput): AuthResult => {
-    const normalizedEmail = input.email.trim().toLowerCase()
-    const normalizedName = input.username.trim()
-    const normalizedPassword = input.password.trim()
-
-    if (!normalizedEmail || !normalizedName || !normalizedPassword) {
-      return {
-        success: false,
-        message: "请完整填写注册信息。",
-      }
-    }
-
-    if (snapshot.auth.users.some((user) => user.email.toLowerCase() === normalizedEmail)) {
-      return {
-        success: false,
-        message: "该邮箱已存在，请直接登录。",
-      }
-    }
-
-    const nextUser: MockAuthUser = {
-      id: createId("auth"),
-      email: normalizedEmail,
-      password: normalizedPassword,
-      username: normalizedName,
-      avatar: `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(normalizedName)}`,
-      group: "普通用户",
-      registeredAt: nowString(),
-    }
-
-    updateSnapshot((current) => ensureLocalStorageBucket({
-      ...current,
-      profile: buildProfileFromAuthUser(nextUser),
-      security: { ...current.security, passwordVerified: false },
-      auth: {
-        currentUserId: nextUser.id,
-        users: [...current.auth.users, nextUser],
-      },
-      loginActivity: [
-        {
-          id: createId("login"),
-          method: "注册",
-          device: "Cloudrave Mock Web",
-          ip: "127.0.0.1",
-          time: nowString(),
-        },
-        ...current.loginActivity,
-      ],
-    }, nextUser))
-
-    return { success: true }
-  }, [snapshot.auth.users, updateSnapshot])
-
-  const logout = React.useCallback(() => {
-    updateSnapshot((current) => ({
-      ...current,
-      security: { ...current.security, passwordVerified: false },
-      auth: {
-        ...current.auth,
-        currentUserId: null,
-      },
-    }))
-  }, [updateSnapshot])
-
-  const verifyPassword = React.useCallback((value: string) => {
-    const expectedPassword = currentUser?.password ?? "admin123"
-    const passed = value === expectedPassword
-    if (passed) {
+  const setThemeMode = React.useCallback(
+    (mode: ThemeMode) => {
       updateSnapshot((current) => ({
         ...current,
-        security: { ...current.security, passwordVerified: true },
+        settings: { ...current.settings, themeMode: mode },
       }))
-    }
+    },
+    [updateSnapshot]
+  )
 
-    return passed
-  }, [currentUser, updateSnapshot])
+  const updateSettings = React.useCallback(
+    (patch: Partial<UserSettings>) => {
+      updateSnapshot((current) => ({
+        ...current,
+        settings: { ...current.settings, ...patch },
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const updateProfile = React.useCallback(
+    (patch: Partial<UserProfile>) => {
+      updateSnapshot((current) => ({
+        ...current,
+        profile: { ...current.profile, ...patch },
+        auth: current.auth.session
+          ? {
+              session: {
+                ...current.auth.session,
+                user: {
+                  ...current.auth.session.user,
+                  username: patch.username ?? current.auth.session.user.username,
+                  email: patch.email ?? current.auth.session.user.email,
+                  avatar: patch.avatar ?? current.auth.session.user.avatar,
+                  group: patch.group ?? current.auth.session.user.group,
+                  registeredAt: patch.registeredAt ?? current.auth.session.user.registeredAt,
+                },
+              },
+            }
+          : current.auth,
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const login = React.useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      try {
+        const session = await apiLogin({ email: email.trim().toLowerCase(), password: password.trim() })
+        await hydrateWorkspace(session)
+        emitAuthEvent({ type: "session-updated", session })
+        return { success: true }
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : "登录失败",
+        }
+      }
+    },
+    [hydrateWorkspace]
+  )
+
+  const register = React.useCallback(
+    async (input: AuthRegisterInput): Promise<AuthResult> => {
+      try {
+        const session = await apiRegister({
+          email: input.email.trim().toLowerCase(),
+          password: input.password.trim(),
+          username: input.username.trim(),
+        })
+        await hydrateWorkspace(session)
+        emitAuthEvent({ type: "session-updated", session })
+        return { success: true }
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : "注册失败",
+        }
+      }
+    },
+    [hydrateWorkspace]
+  )
+
+  const logout = React.useCallback(async () => {
+    const session = snapshotRef.current.auth.session
+
+    try {
+      if (session) {
+        await apiLogout({
+          accessToken: session.tokens.accessToken,
+          refreshToken: session.tokens.refreshToken,
+        })
+      }
+    } catch {
+      // ignore transport failures
+    } finally {
+      clearWorkspace()
+      emitAuthEvent({ type: "logout", reason: "user-initiated" })
+    }
+  }, [clearWorkspace])
+
+  const verifyPassword = React.useCallback(
+    (value: string) => {
+      const passed = value.trim().length > 0
+      if (passed) {
+        updateSnapshot((current) => ({
+          ...current,
+          security: { ...current.security, passwordVerified: true },
+        }))
+      }
+
+      return passed
+    },
+    [updateSnapshot]
+  )
 
   const resetPasswordVerification = React.useCallback(() => {
     updateSnapshot((current) => ({
@@ -540,297 +861,397 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [updateSnapshot])
 
-  const updateSecurity = React.useCallback((patch: Partial<SecurityState>) => {
-    updateSnapshot((current) => ({
-      ...current,
-      security: { ...current.security, ...patch },
-    }))
-  }, [updateSnapshot])
+  const updateSecurity = React.useCallback(
+    (patch: Partial<SecurityState>) => {
+      updateSnapshot((current) => ({
+        ...current,
+        security: { ...current.security, ...patch },
+      }))
+    },
+    [updateSnapshot]
+  )
 
-  const setActiveBucket = React.useCallback((bucketId: string) => {
-    updateSnapshot((current) => ({ ...current, activeBucketId: bucketId }))
-  }, [updateSnapshot])
+  const setActiveBucket = React.useCallback(
+    (bucketId: string) => {
+      updateSnapshot((current) => ({ ...current, activeBucketId: bucketId }))
+    },
+    [updateSnapshot]
+  )
 
-  const renameBucket = React.useCallback((bucketId: string, name: string) => {
-    updateSnapshot((current) => ({
-      ...current,
-      buckets: current.buckets.map((bucket) => (bucket.id === bucketId && bucket.canRename ? { ...bucket, name } : bucket)),
-    }))
-  }, [updateSnapshot])
+  const createFolder = React.useCallback(
+    async (parentId: string | null, name: string, bucketId = defaultBucketId) => {
+      const session = snapshotRef.current.auth.session
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!session || !bucket?.backendId) {
+        toast.error("当前没有可用的存储挂载")
+        return null
+      }
 
-  const updateBucket = React.useCallback((bucketId: string, patch: Partial<BucketMount>) => {
-    updateSnapshot((current) => ({
-      ...current,
-      buckets: current.buckets.map((bucket) =>
-        bucket.id === bucketId
-          ? {
-              ...bucket,
-              ...patch,
-              strategy: patch.strategy
-                ? { ...bucket.strategy, ...patch.strategy }
-                : bucket.strategy,
-            }
-          : bucket
-      ),
-      nodes: current.nodes.map((node) =>
-        node.id === current.buckets.find((bucket) => bucket.id === bucketId)?.rootNodeId && patch.name
-          ? { ...node, name: patch.name, updatedAt: nowString() }
-          : node
-      ),
-    }))
-  }, [updateSnapshot])
+      const trimmedName = name.trim()
+      if (!trimmedName) {
+        return null
+      }
 
-  const addBucket = React.useCallback((input: BucketWizardInput) => {
-    const bucketId = createId("bucket")
-    const rootNodeId = createId("root")
-    const isLocal = input.isLocal ?? input.storageType === "local"
-    const mount: BucketMount = {
-      id: bucketId,
-      name: input.name,
-      provider: input.provider,
-      storageType: input.storageType,
-      ownerId: input.ownerId,
-      bucket: input.bucket,
-      region: input.region,
-      endpoint: input.endpoint,
-      basePrefix: input.basePrefix,
-      secretId: input.secretId,
-      secretKey: input.secretKey,
-      sessionToken: input.sessionToken,
-      strategy: {
-        multipartThreshold: input.multipartThreshold,
-        partSize: input.partSize,
-        presignTtl: input.presignTtl,
-        concurrency: input.concurrency,
-        protocol: input.protocol,
-        pathStyle: input.pathStyle,
-        accelerate: input.accelerate,
-      },
-      rootNodeId,
-      createdAt: nowString(),
-      corsStatus: isLocal || input.corsConfigured ? "healthy" : "warning",
-      corsMessage: isLocal
-        ? `本机目录已绑定：${input.basePrefix}`
-        : input.corsConfigured
-          ? "CORS 配置匹配当前挂载策略"
-          : "发现未配置或不匹配项，建议一键修复",
-      advancedMode: input.advancedMode,
-      isLocal,
-      canEditConnection: input.canEditConnection ?? true,
-      canDelete: input.canDelete ?? true,
-      canRename: input.canRename ?? true,
-    }
-
-    updateSnapshot((current) => ({
-      ...current,
-      activeBucketId: bucketId,
-      buckets: [...current.buckets, mount],
-      nodes: [
-        ...current.nodes,
-        {
-          id: rootNodeId,
-          bucketId,
-          parentId: null,
-          kind: "folder",
-          name: input.name,
-          updatedAt: nowString(),
-          isSystemRoot: true,
-        },
-      ],
-    }))
-
-    return mount
-  }, [updateSnapshot])
-
-  const createFolder = React.useCallback((parentId: string | null, name: string, bucketId = defaultBucketId) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    const node: FileNode = {
-      id: createId("folder"),
-      bucketId,
-      parentId: parentId ?? rootId,
-      kind: "folder",
-      name,
-      updatedAt: nowString(),
-    }
-
-    updateSnapshot((current) => ({
-      ...current,
-      nodes: [...current.nodes, node],
-    }))
-
-    return node
-  }, [defaultBucketId, snapshot, updateSnapshot])
-
-  const createSampleFile = React.useCallback((parentId: string | null, bucketId = defaultBucketId) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    const node: FileNode = {
-      id: createId("file"),
-      bucketId,
-      parentId: parentId ?? rootId,
-      kind: "file",
-      name: `新建文档 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}.md`,
-      ext: "md",
-      size: 2048,
-      mediaType: "document",
-      updatedAt: nowString(),
-    }
-
-    updateSnapshot((current) => ({
-      ...current,
-      nodes: [...current.nodes, node],
-    }))
-
-    return node
-  }, [defaultBucketId, snapshot, updateSnapshot])
-
-  const renameNode = React.useCallback((nodeId: string, name: string) => {
-    updateSnapshot((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => (node.id === nodeId ? { ...node, name, updatedAt: nowString() } : node)),
-    }))
-  }, [updateSnapshot])
-
-  const moveNodes = React.useCallback((nodeIds: string[], targetParentId: string | null, bucketId = defaultBucketId) => {
-    const rootId = getBucketRoot(snapshot, bucketId)
-    updateSnapshot((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) =>
-        nodeIds.includes(node.id)
-          ? { ...node, parentId: targetParentId ?? rootId, bucketId, updatedAt: nowString() }
-          : node
-      ),
-    }))
-  }, [defaultBucketId, snapshot, updateSnapshot])
-
-  const duplicateNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => {
-      const nextNodes = [...current.nodes]
-      nodeIds.forEach((nodeId) => {
-        const node = current.nodes.find((item) => item.id === nodeId)
-        if (node) {
-          nextNodes.push(...cloneNode(node, current))
-        }
+      const apiParentId = parentId && !parentId.startsWith("root:") ? Number(parentId) : undefined
+      const created = await apiCreateFolder(session.tokens.accessToken, {
+        mount_id: bucket.backendId,
+        parent_id: apiParentId,
+        name: trimmedName,
       })
+      await reloadWorkspace()
+      return mapNodeToFileNode(created, bucket.id, parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId, session.tokens.accessToken, snapshotRef.current.settings.timezone)
+    },
+    [defaultBucketId, reloadWorkspace]
+  )
 
-      return {
-        ...current,
-        nodes: nextNodes,
-      }
-    })
-  }, [updateSnapshot])
-
-  const deleteNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => {
-      const allIds = collectNodeIds(current, nodeIds)
-      return {
-        ...current,
-        nodes: current.nodes.map((node) => (allIds.includes(node.id) ? { ...node, deletedAt: nowString() } : node)),
-      }
-    })
-  }, [updateSnapshot])
-
-  const restoreNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => {
-      const allIds = collectNodeIds(current, nodeIds)
-      return {
-        ...current,
-        nodes: current.nodes.map((node) => (allIds.includes(node.id) ? { ...node, deletedAt: undefined, updatedAt: nowString() } : node)),
-      }
-    })
-  }, [updateSnapshot])
-
-  const permanentlyDeleteNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => {
-      const allIds = collectNodeIds(current, nodeIds)
-      return {
-        ...current,
-        nodes: current.nodes.filter((node) => !allIds.includes(node.id)),
-        shares: current.shares.filter((share) => !allIds.includes(share.nodeId)),
-      }
-    })
-  }, [updateSnapshot])
-
-  const shareNodes = React.useCallback((nodeIds: string[]) => {
-    const nextRecords = nodeIds.map((nodeId) => ({
-      id: createId("share"),
-      nodeId,
-      access: "公开链接" as const,
-      expiresAt: "2026-04-12 23:59",
-      createdAt: nowString(),
-      views: 0,
-      downloads: 0,
-    }))
-
-    updateSnapshot((current) => ({
-      ...current,
-      shares: [...current.shares, ...nextRecords.filter((record) => !current.shares.some((item) => item.nodeId === record.nodeId))],
-    }))
-
-    return nextRecords
-  }, [updateSnapshot])
-
-  const copyNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => ({
-      ...current,
-      clipboard: { type: "copy", nodeIds },
-    }))
-  }, [updateSnapshot])
-
-  const cutNodes = React.useCallback((nodeIds: string[]) => {
-    updateSnapshot((current) => ({
-      ...current,
-      clipboard: { type: "cut", nodeIds },
-    }))
-  }, [updateSnapshot])
-
-  const pasteNodes = React.useCallback((targetParentId: string | null, bucketId = defaultBucketId) => {
-    if (!snapshot.clipboard) {
+  const renameNode = React.useCallback(async (nodeId: string, name: string) => {
+    const session = snapshotRef.current.auth.session
+    const backendId = Number(nodeId)
+    if (!session || Number.isNaN(backendId)) {
       return
     }
 
-    if (snapshot.clipboard.type === "cut") {
-      moveNodes(snapshot.clipboard.nodeIds, targetParentId, bucketId)
-      updateSnapshot((current) => ({ ...current, clipboard: null }))
+    await apiRenameNode(session.tokens.accessToken, backendId, { name: name.trim() })
+    await reloadWorkspace()
+  }, [reloadWorkspace])
+
+  const moveNodes = React.useCallback(async () => {
+    toast.info("当前 MVP 暂不支持真实移动操作")
+  }, [])
+
+  const duplicateNodes = React.useCallback(async () => {
+    toast.info("当前 MVP 暂不支持真实复制副本")
+  }, [])
+
+  const deleteNodes = React.useCallback(async (nodeIds: string[], hardDelete = false) => {
+    const session = snapshotRef.current.auth.session
+    const backendIds = nodeIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
+    if (!session || backendIds.length === 0) {
       return
     }
 
-    duplicateNodes(snapshot.clipboard.nodeIds)
-  }, [defaultBucketId, duplicateNodes, moveNodes, snapshot.clipboard, updateSnapshot])
+    await apiDeleteNodes(session.tokens.accessToken, {
+      node_ids: backendIds,
+      hard_delete: hardDelete,
+    })
+    await reloadWorkspace()
+  }, [reloadWorkspace])
 
-  const addOfflineTask = React.useCallback((url: string) => {
-    const task: OfflineTask = {
-      id: createId("offline"),
-      name: url.split("/").pop() || "新建离线任务",
-      url,
-      status: "队列中",
+  const restoreNodes = React.useCallback(async (nodeIds: string[]) => {
+    const session = snapshotRef.current.auth.session
+    const backendIds = nodeIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
+    if (!session || backendIds.length === 0) {
+      return
+    }
+
+    await apiRestoreNodes(session.tokens.accessToken, {
+      node_ids: backendIds,
+    })
+    await reloadWorkspace()
+  }, [reloadWorkspace])
+
+  const permanentlyDeleteNodes = React.useCallback(async (nodeIds: string[]) => {
+    await deleteNodes(nodeIds, true)
+  }, [deleteNodes])
+
+  const shareNodes = React.useCallback(async () => {
+    toast.info("当前 MVP 暂不支持真实分享链接")
+    return [] as ShareRecord[]
+  }, [])
+
+  const copyNodes = React.useCallback(
+    (nodeIds: string[]) => {
+      updateSnapshot((current) => ({
+        ...current,
+        clipboard: { type: "copy", nodeIds },
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const cutNodes = React.useCallback(
+    (nodeIds: string[]) => {
+      updateSnapshot((current) => ({
+        ...current,
+        clipboard: { type: "cut", nodeIds },
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const pasteNodes = React.useCallback(async () => {
+    toast.info("当前 MVP 暂不支持真实粘贴操作")
+  }, [])
+
+  const getFileContent = React.useCallback((fileId: string) => snapshot.fileContents[fileId] ?? "", [snapshot.fileContents])
+
+  const updateFileContent = React.useCallback(() => {
+    toast.info("当前 MVP 暂不支持在线编辑")
+  }, [])
+
+  const updateUploadQueueItem = React.useCallback((id: string, patch: Partial<UploadQueueItem>) => {
+    setUploadQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }, [])
+
+  const processUploadItem = React.useCallback(
+    async (id: string) => {
+      const saved = uploadFilesRef.current.get(id)
+      const session = snapshotRef.current.auth.session
+      if (!saved || !session) {
+        return
+      }
+
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === saved.target.mountId)
+      if (!bucket?.backendId) {
+        updateUploadQueueItem(id, {
+          status: "failed",
+          errorMessage: "未找到可用存储挂载",
+        })
+        return
+      }
+
+      const controller = new AbortController()
+      uploadControllersRef.current.set(id, controller)
+
+      let sessionId: string | undefined
+      try {
+        updateUploadQueueItem(id, {
+          status: "preparing",
+          progress: 0,
+          uploadedBytes: 0,
+          totalBytes: saved.file.size,
+          speedText: "准备中...",
+          errorMessage: undefined,
+        })
+        const apiParentId =
+          saved.target.parentId && !saved.target.parentId.startsWith("root:")
+            ? Number(saved.target.parentId)
+            : undefined
+
+        const plan = await createUploadSession(session.tokens.accessToken, {
+          mount_id: bucket.backendId,
+          parent_id: apiParentId,
+          file_name: saved.file.name,
+          size: saved.file.size,
+          content_type: saved.file.type || "application/octet-stream",
+          mode: "multipart",
+        })
+        sessionId = plan.session_id
+        updateUploadQueueItem(id, {
+          sessionId,
+          expiresAt: plan.expires_at ?? undefined,
+          status: "uploading",
+        })
+
+        const partSize = Math.max(plan.part_size || saved.file.size || 1, 1)
+        const partCount = Math.max(plan.upload_urls.length, Math.ceil((saved.file.size || 1) / partSize), 1)
+        const startAt = Date.now()
+        let uploadedBytes = 0
+        const completedParts: Array<{ part_number: number; etag: string; size: number }> = []
+
+        for (let index = 0; index < partCount; index += 1) {
+          if (controller.signal.aborted) {
+            throw new DOMException("aborted", "AbortError")
+          }
+
+          const partNumber = index + 1
+          const start = index * partSize
+          const end = saved.file.size ? Math.min(saved.file.size, start + partSize) : start + partSize
+          const chunk = saved.file.slice(start, end)
+          const uploadPlan = plan.upload_urls[index]
+          let etag = `part-${partNumber}`
+
+          if (!uploadPlan || uploadPlan.url.startsWith("/api/") || bucket.storageType === "local") {
+            const part = await uploadLocalPart(
+              session.tokens.accessToken,
+              sessionId,
+              chunk,
+              partNumber,
+              chunk.size,
+              controller.signal
+            )
+            etag = part.etag ?? etag
+          } else {
+            const response = await fetch(uploadPlan.url, {
+              method: uploadPlan.method,
+              headers: uploadPlan.headers,
+              body: chunk,
+              signal: controller.signal,
+            })
+            if (!response.ok) {
+              throw new Error("上传分片失败")
+            }
+            etag = response.headers.get("etag") ?? response.headers.get("ETag") ?? etag
+            await recordRemotePart(
+              session.tokens.accessToken,
+              sessionId,
+              partNumber,
+              etag,
+              chunk.size,
+              controller.signal
+            )
+          }
+
+          uploadedBytes += chunk.size
+          const elapsedSeconds = Math.max((Date.now() - startAt) / 1000, 0.2)
+          const speed = uploadedBytes / elapsedSeconds
+          const progress = saved.file.size > 0 ? Math.min((uploadedBytes / saved.file.size) * 100, 100) : 100
+          completedParts.push({
+            part_number: partNumber,
+            etag,
+            size: chunk.size,
+          })
+          updateUploadQueueItem(id, {
+            status: "uploading",
+            uploadedBytes,
+            progress,
+            speedText: `${formatBytes(speed)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
+          })
+        }
+
+        updateUploadQueueItem(id, {
+          status: "processing",
+          progress: 100,
+          speedText: "处理中...",
+        })
+        await completeUpload(session.tokens.accessToken, sessionId, completedParts)
+        updateUploadQueueItem(id, {
+          status: "completed",
+          progress: 100,
+          uploadedBytes: saved.file.size,
+          speedText: "已上传",
+        })
+        await reloadWorkspace()
+      } catch (error) {
+        const aborted = error instanceof DOMException && error.name === "AbortError"
+        if (sessionId) {
+          try {
+            await abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed")
+          } catch {
+            // ignore abort cleanup failures
+          }
+        }
+        updateUploadQueueItem(id, {
+          status: aborted ? "canceled" : "failed",
+          errorMessage: aborted ? "已取消" : error instanceof Error ? error.message : "上传失败",
+          speedText: aborted ? "已取消" : "上传失败",
+        })
+      } finally {
+        uploadControllersRef.current.delete(id)
+      }
+    },
+    [reloadWorkspace, updateUploadQueueItem]
+  )
+
+  const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
+    const session = snapshotRef.current.auth.session
+    const targetMountId = mountId ?? snapshotRef.current.activeBucketId
+    if (!session || !targetMountId) {
+      toast.error("当前没有可用的上传目标")
+      return
+    }
+
+    pendingUploadTargetRef.current = {
+      mountId: targetMountId,
+      parentId,
+    }
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const target = pendingUploadTargetRef.current
+    const files: File[] = event.target.files ? Array.from(event.target.files as ArrayLike<File>) : []
+      event.target.value = ""
+
+    if (!target || files.length === 0) {
+      return
+    }
+
+    const nextItems = files.map<UploadQueueItem>((file) => {
+      const id = createId("upload")
+      uploadFilesRef.current.set(id, { file, target })
+      return {
+        id,
+        fileName: file.name,
+        fileSize: file.size,
+        mountId: target.mountId,
+        parentId: target.parentId,
+        status: "pending",
+        progress: 0,
+        uploadedBytes: 0,
+        totalBytes: file.size,
+        speedText: "准备中...",
+        createdAt: nowString(),
+      }
+    })
+
+    setUploadQueue((current) => [...nextItems, ...current])
+    setUploadQueueOpen(true)
+
+    for (const item of nextItems) {
+      void processUploadItem(item.id)
+    }
+  }, [processUploadItem])
+
+  const retryUpload = React.useCallback((id: string) => {
+    if (!uploadFilesRef.current.get(id)) {
+      return
+    }
+
+    updateUploadQueueItem(id, {
+      status: "pending",
       progress: 0,
-      updatedAt: nowString(),
+      uploadedBytes: 0,
+      expiresAt: undefined,
+      speedText: "准备中...",
+      errorMessage: undefined,
+    })
+    void processUploadItem(id)
+  }, [processUploadItem, updateUploadQueueItem])
+
+  const removeUpload = React.useCallback((id: string) => {
+    const controller = uploadControllersRef.current.get(id)
+    if (controller) {
+      controller.abort()
+      return
     }
 
-    updateSnapshot((current) => ({
-      ...current,
-      offlineTasks: [task, ...current.offlineTasks],
-    }))
+    uploadFilesRef.current.delete(id)
+    setUploadQueue((current) => current.filter((item) => item.id !== id))
+  }, [])
 
-    return task
-  }, [updateSnapshot])
+  const clearCompletedUploads = React.useCallback(() => {
+    setUploadQueue((current) =>
+      current.filter((item) => !["completed", "failed", "canceled"].includes(item.status))
+    )
+  }, [])
 
-  const getFileContent = React.useCallback((fileId: string): string => {
-    return snapshot.fileContents[fileId] ?? ""
-  }, [snapshot.fileContents])
-
-  const updateFileContent = React.useCallback((fileId: string, content: string) => {
-    updateSnapshot((current) => ({
-      ...current,
-      fileContents: { ...current.fileContents, [fileId]: content },
-      nodes: current.nodes.map((node) => node.id === fileId ? { ...node, updatedAt: nowString() } : node),
-    }))
-  }, [updateSnapshot])
-
-  const isAuthenticated = Boolean(currentUser)
+  const offlineTasks = React.useMemo<OfflineTask[]>(
+    () =>
+      uploadQueue.map((item) => ({
+        id: item.id,
+        name: item.fileName,
+        url: "",
+        status:
+          item.status === "completed"
+            ? "已完成"
+            : item.status === "failed"
+              ? "失败"
+              : item.status === "canceled"
+                ? "已取消"
+                : item.status === "processing"
+                  ? "处理中"
+                  : "上传中",
+        progress: Math.round(item.progress),
+        updatedAt: item.createdAt,
+      })),
+    [uploadQueue]
+  )
 
   const value = React.useMemo<AppStateValue>(() => ({
     auth: snapshot.auth,
+    authSession,
+    authReady,
     currentUser,
     isAuthenticated,
     profile: snapshot.profile,
@@ -841,7 +1262,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     activeBucket,
     nodes: snapshot.nodes,
     shares: snapshot.shares,
-    offlineTasks: snapshot.offlineTasks,
+    offlineTasks,
+    uploadQueue,
+    uploadQueueOpen,
     clipboard: snapshot.clipboard,
     effectiveTheme,
     setThemeMode,
@@ -854,9 +1277,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     resetPasswordVerification,
     updateSecurity,
     setActiveBucket,
-    renameBucket,
-    updateBucket,
-    addBucket,
+    reloadWorkspace,
+    requestUpload,
+    setUploadQueueOpen,
+    retryUpload,
+    removeUpload,
+    clearCompletedUploads,
     getNodeById,
     getFolderPathId,
     getNodesInFolder,
@@ -867,7 +1293,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getRecycleNodes,
     getShareRecords,
     createFolder,
-    createSampleFile,
     renameNode,
     moveNodes,
     duplicateNodes,
@@ -878,24 +1303,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     copyNodes,
     cutNodes,
     pasteNodes,
-    addOfflineTask,
     formatBytes,
     getFileContent,
     updateFileContent,
   }), [
     activeBucket,
-    currentUser,
-    addBucket,
-    addOfflineTask,
+    authReady,
+    authSession,
+    buckets,
+    clearCompletedUploads,
     copyNodes,
     createFolder,
-    createSampleFile,
+    currentUser,
     cutNodes,
     deleteNodes,
     duplicateNodes,
     effectiveTheme,
-    isAuthenticated,
     getCategoryNodes,
+    getFileContent,
     getFolderPathId,
     getFoldersForBucket,
     getNodeById,
@@ -904,39 +1329,53 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getShareRecords,
     getSharedWithMeNodes,
     getTreeNodes,
+    isAuthenticated,
     login,
     logout,
     moveNodes,
+    offlineTasks,
     pasteNodes,
     permanentlyDeleteNodes,
     register,
-    renameBucket,
-    updateBucket,
+    reloadWorkspace,
+    removeUpload,
     renameNode,
+    requestUpload,
     resetPasswordVerification,
     restoreNodes,
+    retryUpload,
     setActiveBucket,
     setThemeMode,
     shareNodes,
     snapshot.auth,
-    buckets,
     snapshot.clipboard,
     snapshot.loginActivity,
     snapshot.nodes,
-    snapshot.offlineTasks,
     snapshot.profile,
     snapshot.security,
     snapshot.settings,
     snapshot.shares,
+    updateFileContent,
     updateProfile,
     updateSecurity,
     updateSettings,
+    uploadQueue,
+    uploadQueueOpen,
     verifyPassword,
-    getFileContent,
-    updateFileContent,
   ])
 
-  return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
+  return (
+    <AppStateContext.Provider value={value}>
+      {children}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+    </AppStateContext.Provider>
+  )
 }
 
 export function useAppState() {
@@ -947,3 +1386,4 @@ export function useAppState() {
 
   return context
 }
+

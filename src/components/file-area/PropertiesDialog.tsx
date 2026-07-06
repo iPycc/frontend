@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+﻿import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 
 interface PropertiesDialogProps {
   node: FileNode | undefined
@@ -22,7 +22,7 @@ export function PropertiesDialog({ node, bucketName, formatBytes, onClose }: Pro
       <DialogContent>
         <DialogHeader>
           <DialogTitle>属性</DialogTitle>
-          <DialogDescription>查看当前对象的 mock 元信息。</DialogDescription>
+        <DialogDescription>查看当前对象的详细信息。</DialogDescription>
         </DialogHeader>
         {node ? (
           <div className="grid gap-3 rounded-lg border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -40,3 +40,4 @@ export function PropertiesDialog({ node, bucketName, formatBytes, onClose }: Pro
     </Dialog>
   )
 }
+

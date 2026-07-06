@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import { createPortal } from "react-dom"
 import {
   IconX,
@@ -7,11 +7,11 @@ import {
   IconClock,
   IconPhoto,
   IconLock,
-  IconFiles,
 } from "@tabler/icons-react"
+import { Files } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,7 @@ interface PropertiesPanelCtx {
   formatBytes: (size?: number) => string
   open: (node: FileNode) => void
   openMulti: (nodes: FileNode[]) => void
+  toggle: (node: FileNode) => void
   close: () => void
 }
 
@@ -39,6 +40,7 @@ const PropertiesPanelContext = React.createContext<PropertiesPanelCtx>({
   formatBytes: () => "-",
   open: () => {},
   openMulti: () => {},
+  toggle: () => {},
   close: () => {},
 })
 
@@ -57,22 +59,30 @@ export function PropertiesPanelProvider({
 }) {
   const [node, setNode] = React.useState<FileNode | null>(null)
   const [nodes, setNodes] = React.useState<FileNode[]>([])
+  const sameNodeIds = React.useCallback((left: FileNode[], right: FileNode[]) => {
+    return left.length === right.length && left.every((item, index) => item.id === right[index]?.id)
+  }, [])
   const openPanel = React.useCallback((n: FileNode) => {
-    setNode(n)
-    setNodes([n])
+    setNode((current) => (current?.id === n.id ? current : n))
+    setNodes((current) => (current.length === 1 && current[0]?.id === n.id ? current : [n]))
   }, [])
   const openMulti = React.useCallback((ns: FileNode[]) => {
-    setNode(ns[0] ?? null)
-    setNodes(ns)
+    const nextNode = ns[0] ?? null
+    setNode((current) => (current?.id === nextNode?.id ? current : nextNode))
+    setNodes((current) => (sameNodeIds(current, ns) ? current : ns))
+  }, [sameNodeIds])
+  const togglePanel = React.useCallback((n: FileNode) => {
+    setNode((current) => (current?.id === n.id ? null : n))
+    setNodes((current) => (current.length === 1 && current[0]?.id === n.id ? [] : [n]))
   }, [])
   const closePanel = React.useCallback(() => {
-    setNode(null)
-    setNodes([])
+    setNode((current) => (current === null ? current : null))
+    setNodes((current) => (current.length === 0 ? current : []))
   }, [])
 
   const value = React.useMemo<PropertiesPanelCtx>(
-    () => ({ node, nodes, bucketName, formatBytes, open: openPanel, openMulti, close: closePanel }),
-    [node, nodes, bucketName, formatBytes, openPanel, openMulti, closePanel]
+    () => ({ node, nodes, bucketName, formatBytes, open: openPanel, openMulti, toggle: togglePanel, close: closePanel }),
+    [node, nodes, bucketName, formatBytes, openPanel, openMulti, togglePanel, closePanel]
   )
 
   return (
@@ -126,9 +136,9 @@ export function PropertiesPanelContent({
         <div className="flex items-center gap-2 md:gap-3">
           {multiNodes ? (
             <>
-              <IconFiles size={20} className={cn("shrink-0 md:size-6", dark ? "text-white/70" : "text-muted-foreground")} />
+              <Files size={20} className={cn("shrink-0 md:size-6", dark ? "text-white/70" : "text-muted-foreground")} />
               <p className={cn("flex-1 truncate text-sm font-medium md:text-base", dark ? "text-white/90" : "text-foreground")}>
-                已选择 {multiNodes[0].name} 等 {multiNodes.length} 个文件
+                已选择 &ldquo;{multiNodes[0].name} 等{multiNodes.length}个{multiNodes[0].kind === "folder" ? "文件夹" : "文件"}&rdquo;
               </p>
             </>
           ) : (
@@ -493,3 +503,4 @@ function InfoRow({
     </div>
   )
 }
+

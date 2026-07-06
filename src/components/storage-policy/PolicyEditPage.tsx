@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import { IconArrowLeft, IconExternalLink } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { BucketMount } from "@/lib/mock-data"
+import type { BucketMount } from "@/lib/models"
 
 interface PolicyEditPageProps {
   bucket: BucketMount
@@ -301,3 +301,4 @@ export function PolicyEditPage({ bucket, onBack, onSave }: PolicyEditPageProps) 
     </div>
   )
 }
+

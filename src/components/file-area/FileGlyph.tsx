@@ -1,41 +1,139 @@
-import { 
-  IconFolderFilled, 
-  IconFileTypePdf, 
-  IconFileTypeDoc, 
-  IconFileTypeDocx, 
-  IconFileTypeXls, 
-  IconFileTypePpt, 
-  IconFileTypeZip, 
-  IconFileCode, 
-  IconPhoto, 
-  IconVideo, 
-  IconMusic, 
-  IconFile,
-  IconFileTypeTxt,
-  IconFileTypeCsv
-} from "@tabler/icons-react"
+import {
+  File,
+  FileArchive,
+  FileAudio,
+  FileBadge2,
+  FileChartColumnIncreasing,
+  FileCode2,
+  FileDigit,
+  FileImage,
+  FileJson2,
+  FileMusic,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  FileVideoCamera,
+  FolderClosed,
+  Presentation,
+  type LucideIcon,
+} from "lucide-react"
 
-import { type FileNode } from "@/lib/mock-data"
+import { type FileNode } from "@/lib/models"
 
-export function FileGlyph({ item, size = 20 }: { item: FileNode, size?: number }) {
+type GlyphConfig = {
+  icon: LucideIcon
+  className: string
+}
+
+const GROUPS = {
+  presentation: ["ppt", "pptx", "key"],
+  spreadsheet: ["xls", "xlsx", "csv", "numbers"],
+  word: ["doc", "docx", "rtf", "pages"],
+  pdf: ["pdf"],
+  archive: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz"],
+  json: ["json"],
+  markdown: ["md", "mdx"],
+  text: ["txt", "log", "ini", "conf"],
+  image: ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp", "avif", "ico", "heic"],
+  video: ["mp4", "mov", "avi", "mkv", "webm", "flv", "m4v", "wmv"],
+  audio: ["mp3", "wav", "flac", "ogg", "m4a", "aac"],
+  code: [
+    "ts",
+    "tsx",
+    "js",
+    "jsx",
+    "html",
+    "css",
+    "scss",
+    "less",
+    "py",
+    "go",
+    "rs",
+    "java",
+    "c",
+    "cpp",
+    "h",
+    "hpp",
+    "sql",
+    "sh",
+    "ps1",
+    "php",
+    "rb",
+    "yaml",
+    "yml",
+    "xml",
+    "toml",
+  ],
+  data: ["db", "sqlite", "sqlite3", "parquet"],
+  font: ["ttf", "otf", "woff", "woff2"],
+} as const
+
+function resolveGlyph(item: FileNode): GlyphConfig {
   if (item.kind === "folder") {
-    return <IconFolderFilled size={size} className="text-[#8d8d8d]" />
+    return {
+      icon: FolderClosed,
+      className: "text-amber-500 dark:text-amber-400",
+    }
   }
 
   const ext = item.ext?.toLowerCase() ?? ""
   const mediaType = item.mediaType
 
-  if (["ppt", "pptx"].includes(ext)) return <IconFileTypePpt size={size} className="text-[#ff5b12]" />
-  if (["doc", "docx"].includes(ext)) return <IconFileTypeDocx size={size} className="text-[#2563eb]" />
-  if (["xls", "xlsx"].includes(ext)) return <IconFileTypeXls size={size} className="text-[#16a34a]" />
-  if (ext === "pdf") return <IconFileTypePdf size={size} className="text-[#ef4444]" />
-  if (ext === "csv") return <IconFileTypeCsv size={size} className="text-[#16a34a]" />
-  if (ext === "txt") return <IconFileTypeTxt size={size} className="text-[#6b7280]" />
-  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return <IconFileTypeZip size={size} className="text-[#f59e0b]" />
-  if (["ts", "tsx", "js", "jsx", "json", "html", "css"].includes(ext) || mediaType === "code") return <IconFileCode size={size} className="text-[#0f9e8a]" />
-  if (mediaType === "image") return <IconPhoto size={size} className="text-[#0ea5e9]" />
-  if (mediaType === "video") return <IconVideo size={size} className="text-[#8b5cf6]" />
-  if (mediaType === "audio") return <IconMusic size={size} className="text-[#ec4899]" />
-  
-  return <IconFile size={size} className="text-[#7c7c7c]" />
+  if (GROUPS.presentation.includes(ext as never)) {
+    return { icon: Presentation, className: "text-orange-500 dark:text-orange-400" }
+  }
+  if (GROUPS.spreadsheet.includes(ext as never)) {
+    return { icon: FileSpreadsheet, className: "text-emerald-500 dark:text-emerald-400" }
+  }
+  if (GROUPS.word.includes(ext as never)) {
+    return { icon: FileBadge2, className: "text-sky-500 dark:text-sky-400" }
+  }
+  if (GROUPS.pdf.includes(ext as never)) {
+    return { icon: FileText, className: "text-rose-500 dark:text-rose-400" }
+  }
+  if (GROUPS.archive.includes(ext as never)) {
+    return { icon: FileArchive, className: "text-amber-500 dark:text-amber-400" }
+  }
+  if (GROUPS.json.includes(ext as never)) {
+    return { icon: FileJson2, className: "text-yellow-500 dark:text-yellow-400" }
+  }
+  if (GROUPS.data.includes(ext as never)) {
+    return { icon: FileChartColumnIncreasing, className: "text-teal-500 dark:text-teal-400" }
+  }
+  if (GROUPS.font.includes(ext as never)) {
+    return { icon: FileType2, className: "text-violet-500 dark:text-violet-400" }
+  }
+  if (GROUPS.code.includes(ext as never) || mediaType === "code") {
+    return { icon: FileCode2, className: "text-cyan-500 dark:text-cyan-400" }
+  }
+  if (GROUPS.markdown.includes(ext as never)) {
+    return { icon: FileText, className: "text-slate-500 dark:text-slate-300" }
+  }
+  if (GROUPS.text.includes(ext as never) || mediaType === "document") {
+    return { icon: FileText, className: "text-slate-500 dark:text-slate-300" }
+  }
+  if (mediaType === "image" || GROUPS.image.includes(ext as never)) {
+    return { icon: FileImage, className: "text-fuchsia-500 dark:text-fuchsia-400" }
+  }
+  if (mediaType === "video" || GROUPS.video.includes(ext as never)) {
+    return { icon: FileVideoCamera, className: "text-violet-500 dark:text-violet-400" }
+  }
+  if (mediaType === "audio" || GROUPS.audio.includes(ext as never)) {
+    return { icon: ext === "mp3" || ext === "wav" ? FileMusic : FileAudio, className: "text-pink-500 dark:text-pink-400" }
+  }
+  if (/^\d+$/.test(ext)) {
+    return { icon: FileDigit, className: "text-blue-500 dark:text-blue-400" }
+  }
+
+  return {
+    icon: File,
+    className: "text-slate-400 dark:text-slate-300",
+  }
+}
+
+export function FileGlyph({ item, size = 20 }: { item: FileNode; size?: number }) {
+  const glyph = resolveGlyph(item)
+  const Icon = glyph.icon
+
+  return <Icon size={size} className={glyph.className} strokeWidth={1.9} />
 }

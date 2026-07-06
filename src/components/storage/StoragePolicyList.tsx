@@ -1,8 +1,8 @@
-import * as React from "react"
+﻿﻿import * as React from "react"
 import { IconChevronDown, IconPlus, IconRefresh } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
-import type { BucketMount } from "@/lib/mock-data"
+import type { BucketMount } from "@/lib/models"
 import { StoragePolicyCard } from "@/components/storage/StoragePolicyCard"
 
 interface StoragePolicyListProps {
@@ -62,3 +62,4 @@ export function StoragePolicyList({
     </div>
   )
 }
+

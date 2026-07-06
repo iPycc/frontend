@@ -1,4 +1,4 @@
-import { type ReactNode } from "react"
+﻿import { type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
   IconArrowsSort,
@@ -35,7 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ButtonGroup } from "@/components/ui/button-group"
-import { type SortValue, type ViewMode } from "@/lib/mock-data"
+import { type SortValue, type ViewMode } from "@/lib/models"
 import { ViewSettingsPopover } from "./ViewSettingsPopover"
 
 interface ToolbarProps {
@@ -334,3 +334,4 @@ function ActionButton({
     </button>
   )
 }
+

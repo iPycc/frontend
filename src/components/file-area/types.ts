@@ -1,5 +1,5 @@
-import type { MouseEvent } from "react"
-import { type FileNode } from "@/lib/mock-data"
+﻿import type { MouseEvent } from "react"
+import { type FileNode } from "@/lib/models"
 
 export interface ItemHandlers {
   onSelectNode: (id: string, event: MouseEvent) => void
@@ -12,7 +12,8 @@ export interface ItemHandlers {
   onDeleteRequest: (ids: string[]) => void
   onCopyRequest: (ids: string[]) => void
   onCutRequest: (ids: string[]) => void
-  onPropertiesRequest: (id: string) => void
+  onPropertiesRequest: (ids: string[]) => void
   onCreateChildFolder: (parentId: string) => void
   getContextIds: (nodeId: string) => string[]
 }
+

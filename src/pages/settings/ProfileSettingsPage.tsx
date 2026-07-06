@@ -1,26 +1,21 @@
 import * as React from "react"
 import {
-  IconChevronDown,
   IconPencil,
   IconZoomIn,
   IconZoomOut,
 } from "@tabler/icons-react"
+import { toast } from "sonner"
 
+import { getCurrentProfile, updateCurrentProfile, uploadCurrentAvatar } from "@/api/user"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { useAppState } from "@/lib/app-state"
@@ -61,7 +56,6 @@ function clampCropOffset(offset: CropOffset, imageSize: CropImageSize | null, zo
   }
 
   const metrics = getCropMetrics(imageSize, PREVIEW_SIZE, zoom)
-
   return {
     x: Math.min(metrics.maxOffsetX, Math.max(-metrics.maxOffsetX, offset.x)),
     y: Math.min(metrics.maxOffsetY, Math.max(-metrics.maxOffsetY, offset.y)),
@@ -85,18 +79,36 @@ function getPreviewImageStyle(
   }
 }
 
+async function canvasToFile(canvas: HTMLCanvasElement, filename: string) {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/png")
+  })
+
+  if (!blob) {
+    throw new Error("无法生成头像文件。")
+  }
+
+  return new File([blob], filename, { type: "image/png" })
+}
+
 export function ProfileSettingsPage() {
-  const { profile, updateProfile } = useAppState()
+  const { authSession, profile, updateProfile, updateSecurity } = useAppState()
+  const token = authSession?.tokens.accessToken ?? null
+
+  const [email, setEmail] = React.useState(profile.email)
   const [username, setUsername] = React.useState(profile.username)
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = React.useState(false)
 
   const [cropOpen, setCropOpen] = React.useState(false)
-  const [rawImage, setRawImage] = React.useState<string>("")
+  const [rawImage, setRawImage] = React.useState("")
   const [zoom, setZoom] = React.useState(1)
   const [offset, setOffset] = React.useState<CropOffset>({ x: 0, y: 0 })
   const [imageSize, setImageSize] = React.useState<CropImageSize | null>(null)
   const [isImageReady, setIsImageReady] = React.useState(false)
+
   const imageRef = React.useRef<HTMLImageElement | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
   const dragStateRef = React.useRef<{
     pointerId: number
     startX: number
@@ -106,29 +118,30 @@ export function ProfileSettingsPage() {
   } | null>(null)
 
   React.useEffect(() => {
+    setEmail(profile.email)
     setUsername(profile.username)
-  }, [profile.username])
+  }, [profile.email, profile.username])
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const result = e.target?.result as string
-      if (result) {
-        setRawImage(result)
-        setZoom(1)
-        setOffset({ x: 0, y: 0 })
-        setCropOpen(true)
-      }
+  const loadProfile = React.useCallback(async () => {
+    if (!token) {
+      return
     }
-    reader.readAsDataURL(file)
-    event.target.value = ""
-  }
 
-  const triggerUpload = () => {
-    fileInputRef.current?.click()
-  }
+    try {
+      const payload = await getCurrentProfile(token)
+      updateProfile(payload.profile)
+      updateSecurity({ passwordUpdatedAt: payload.passwordUpdatedAt })
+    } catch (error) {
+      console.error("加载用户资料失败:", error)
+      toast.error("加载资料失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    }
+  }, [token, updateProfile, updateSecurity])
+
+  React.useEffect(() => {
+    void loadProfile()
+  }, [loadProfile])
 
   React.useEffect(() => {
     if (!rawImage) {
@@ -139,35 +152,103 @@ export function ProfileSettingsPage() {
     }
 
     setIsImageReady(false)
-    const img = new window.Image()
-
-    img.onload = () => {
-      imageRef.current = img
+    const image = new window.Image()
+    image.onload = () => {
+      imageRef.current = image
       setImageSize({
-        width: img.naturalWidth,
-        height: img.naturalHeight,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
       })
       setIsImageReady(true)
     }
-
-    img.src = rawImage
+    image.src = rawImage
 
     return () => {
-      img.onload = null
+      image.onload = null
     }
   }, [rawImage])
 
   React.useEffect(() => {
     setOffset((current) => {
       const next = clampCropOffset(current, imageSize, zoom)
-
       if (next.x === current.x && next.y === current.y) {
         return current
       }
-
       return next
     })
   }, [imageSize, zoom])
+
+  const isDirty = React.useMemo(() => {
+    return (
+      email.trim().toLowerCase() !== profile.email.trim().toLowerCase() ||
+      username.trim() !== profile.username.trim()
+    )
+  }, [email, profile.email, profile.username, username])
+
+  const handleReset = () => {
+    setEmail(profile.email)
+    setUsername(profile.username)
+  }
+
+  const handleSave = async () => {
+    if (!token) {
+      return
+    }
+
+    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedUsername = username.trim()
+
+    if (!normalizedEmail || !normalizedUsername) {
+      toast.error("保存失败", {
+        description: "邮箱和昵称不能为空。",
+      })
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const payload = await updateCurrentProfile(token, {
+        email: normalizedEmail,
+        username: normalizedUsername,
+      })
+      updateProfile(payload.profile)
+      updateSecurity({ passwordUpdatedAt: payload.passwordUpdatedAt })
+      toast.success("个人资料已保存")
+    } catch (error) {
+      console.error("更新用户资料失败:", error)
+      toast.error("保存失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (readerEvent) => {
+      const result = readerEvent.target?.result as string
+      if (!result) {
+        return
+      }
+
+      setRawImage(result)
+      setZoom(1)
+      setOffset({ x: 0, y: 0 })
+      setCropOpen(true)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ""
+  }
+
+  const triggerUpload = () => {
+    fileInputRef.current?.click()
+  }
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isImageReady) {
@@ -187,21 +268,20 @@ export function ProfileSettingsPage() {
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const dragState = dragStateRef.current
-
     if (!dragState || dragState.pointerId !== event.pointerId) {
       return
     }
 
-    const nextOffset = clampCropOffset(
-      {
-        x: dragState.startX + event.clientX - dragState.originX,
-        y: dragState.startY + event.clientY - dragState.originY,
-      },
-      imageSize,
-      zoom
+    setOffset(
+      clampCropOffset(
+        {
+          x: dragState.startX + event.clientX - dragState.originX,
+          y: dragState.startY + event.clientY - dragState.originY,
+        },
+        imageSize,
+        zoom
+      )
     )
-
-    setOffset(nextOffset)
   }
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -214,70 +294,77 @@ export function ProfileSettingsPage() {
   const renderPreviewToCanvas = React.useCallback(
     (canvas: HTMLCanvasElement, size: number) => {
       const image = imageRef.current
-
       if (!image || !imageSize) {
         return false
       }
 
       const metrics = getCropMetrics(imageSize, size, zoom)
       const ratio = size / PREVIEW_SIZE
-      const ctx = canvas.getContext("2d")
-
-      if (!ctx) {
+      const context = canvas.getContext("2d")
+      if (!context) {
         return false
       }
 
       canvas.width = size
       canvas.height = size
-      ctx.clearRect(0, 0, size, size)
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
-      ctx.closePath()
-      ctx.clip()
-      ctx.drawImage(
+      context.clearRect(0, 0, size, size)
+      context.save()
+      context.beginPath()
+      context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2)
+      context.closePath()
+      context.clip()
+      context.drawImage(
         image,
         metrics.left + offset.x * ratio,
         metrics.top + offset.y * ratio,
         metrics.width,
         metrics.height
       )
-      ctx.restore()
+      context.restore()
 
       return true
     },
     [imageSize, offset.x, offset.y, zoom]
   )
 
-  const handleConfirmCrop = () => {
-    const canvas = document.createElement("canvas")
+  const handleConfirmCrop = async () => {
+    if (!token) {
+      return
+    }
 
+    const canvas = document.createElement("canvas")
     if (!renderPreviewToCanvas(canvas, 256)) {
       return
     }
 
-    updateProfile({ avatar: canvas.toDataURL("image/png") })
-    setCropOpen(false)
-  }
-
-  const commitUsername = () => {
-    const nextValue = username.trim()
-    if (nextValue && nextValue !== profile.username) {
-      updateProfile({ username: nextValue })
+    setIsUploadingAvatar(true)
+    try {
+      const file = await canvasToFile(canvas, `${profile.uid || "avatar"}.png`)
+      const payload = await uploadCurrentAvatar(token, file)
+      updateProfile(payload.profile)
+      updateSecurity({ passwordUpdatedAt: payload.passwordUpdatedAt })
+      setCropOpen(false)
+      toast.success("头像已更新")
+    } catch (error) {
+      console.error("上传头像失败:", error)
+      toast.error("头像上传失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setIsUploadingAvatar(false)
     }
   }
 
   return (
     <div className="space-y-10">
       <input
-        type="file"
         ref={fileInputRef}
+        type="file"
         className="hidden"
         accept="image/*"
         onChange={handleFileChange}
       />
 
-      {/* Avatar Crop Dialog */}
       <Dialog
         open={cropOpen}
         onOpenChange={(open) => {
@@ -358,17 +445,17 @@ export function ProfileSettingsPage() {
                 />
               </div>
               <p className="flex-1 pb-1 text-xs text-muted-foreground">
-                拖动图片调整位置，滑动缩放大小
+                拖动图片调整位置，滑动缩放头像区域。
               </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCropOpen(false)}>
+            <Button variant="outline" onClick={() => setCropOpen(false)} disabled={isUploadingAvatar}>
               取消
             </Button>
-            <Button onClick={handleConfirmCrop} disabled={!isImageReady}>
-              确认
+            <Button onClick={handleConfirmCrop} disabled={!isImageReady || isUploadingAvatar}>
+              {isUploadingAvatar ? "上传中..." : "确认"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -376,16 +463,21 @@ export function ProfileSettingsPage() {
 
       <div className="flex flex-col-reverse gap-y-8 lg:grid lg:max-w-[920px] lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start lg:gap-x-8">
         <div className="space-y-8">
-          <FieldBlock label="电子邮箱">
-            <Input value={profile.email} className="w-full" readOnly />
+          <FieldBlock label="电子邮箱" hint="用于登录、通知以及安全验证。">
+            <Input
+              value={email}
+              className="w-full"
+              type="email"
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </FieldBlock>
 
-          <FieldBlock label="昵称" hint="用于公开展示的名字，可使用真实姓名或昵称">
+          <FieldBlock label="昵称" hint="用于公开展示的名字，可以使用真实姓名或昵称。">
             <Input
               className="w-full"
               value={username}
+              maxLength={64}
               onChange={(event) => setUsername(event.target.value)}
-              onBlur={commitUsername}
             />
           </FieldBlock>
 
@@ -393,27 +485,7 @@ export function ProfileSettingsPage() {
             <MetaItem label="UID" value={profile.uid} />
             <MetaItem label="注册时间" value={profile.registeredAt} />
             <MetaItem label="用户组" value={profile.group} />
-            <MetaItem
-              label="个人主页"
-              value={
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-left text-foreground transition-colors hover:text-primary outline-none"
-                    >
-                      <span>仅展示无密码分享链接</span>
-                      <IconChevronDown size={14} />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem>仅展示无密码分享链接</DropdownMenuItem>
-                    <DropdownMenuItem>展示所有链接</DropdownMenuItem>
-                    <DropdownMenuItem>不展示</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              }
-            />
+            <MetaItem label="个人主页" value={profile.homepage} />
           </div>
         </div>
 
@@ -437,6 +509,20 @@ export function ProfileSettingsPage() {
           </Button>
         </div>
       </div>
+
+      {isDirty ? (
+        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-3 rounded-2xl bg-background/95 p-3 shadow-[0_8px_30px_rgba(0,0,0,0.12)] backdrop-blur-md ring-1 ring-border/50 animate-in slide-in-from-bottom-8 fade-in dark:bg-background/80 md:left-8">
+          <div className="hidden px-2 text-sm font-medium text-muted-foreground sm:block">
+            您有未保存的更改
+          </div>
+          <Button variant="outline" size="sm" className="h-9 px-5" onClick={handleReset} disabled={isSaving}>
+            重置
+          </Button>
+          <Button size="sm" className="h-9 px-6" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -469,7 +555,7 @@ function MetaItem({
   return (
     <div className="space-y-1.5">
       <div className="text-sm font-medium">{label}</div>
-      <div className="text-sm text-foreground">{value}</div>
+      <div className="break-all text-sm text-foreground">{value}</div>
     </div>
   )
 }

@@ -1,12 +1,11 @@
 import * as React from "react"
-import { useState, useRef, useEffect } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { useEffect, useRef, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
+import { ArrowLeft, Loader2, Mail, RectangleEllipsis } from "lucide-react"
+import { toast } from "sonner"
+
 import { ModeToggle } from "@/components/shared/ModeToggle"
-import { Logo } from "@/components/ui/logo"
-import { Mail, RectangleEllipsis, ArrowLeft, Loader2 } from "lucide-react"
-import { useAppState } from "@/lib/app-state"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -21,7 +20,10 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field"
+import { Logo } from "@/components/ui/logo"
 import { Input } from "@/components/ui/input"
+import { useAppState } from "@/lib/app-state"
+import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
 
 type LoginPhase = "initial" | "email" | "password"
@@ -46,87 +48,96 @@ export function LoginForm({
     state?.fromRegister && state?.initialHeight ? state.initialHeight : "auto"
   )
   const contentRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const hasAnimatedRef = useRef(false)
 
   useEffect(() => {
-    if (contentRef.current) {
-      const height = contentRef.current.offsetHeight
-      if (state?.fromRegister) {
-        requestAnimationFrame(() => {
-          setContainerHeight(height)
-          hasAnimatedRef.current = true
-          window.history.replaceState({}, document.title)
-        })
-      } else {
-        setContainerHeight(height)
-      }
+    if (!contentRef.current) {
+      return
     }
+
+    const height = contentRef.current.offsetHeight
+    if (state?.fromRegister) {
+      requestAnimationFrame(() => {
+        setContainerHeight(height)
+        window.history.replaceState({}, document.title)
+      })
+      return
+    }
+
+    setContainerHeight(height)
   }, [phase, state?.fromRegister])
 
-  const handlePhaseChange = (newPhase: LoginPhase, goingBack = false) => {
-    if (phase === newPhase) return
+  const handlePhaseChange = (nextPhase: LoginPhase, goingBack = false) => {
+    if (phase === nextPhase) {
+      return
+    }
+
     setIsGoingBack(goingBack)
     setIsAnimating(true)
     setTimeout(() => {
-      setPhase(newPhase)
+      setPhase(nextPhase)
       setTimeout(() => setIsAnimating(false), 50)
     }, 300)
   }
 
-  const handleEnterEmailPhase = () => {
-    handlePhaseChange("email", false)
-  }
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (email && !isLoading) {
-      setIsLoading(true)
-      await new Promise(resolve => setTimeout(resolve, 800))
-      setIsLoading(false)
-      handlePhaseChange("password", false)
+  const handleEmailSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (email.trim() && !isLoading) {
+      handlePhaseChange("password")
     }
   }
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isLoading && !isEnteringApp) {
-      setIsLoading(true)
-      try {
-        const result = login(email, password)
-        if (result.success) {
-          setIsEnteringApp(true)
-          await new Promise((resolve) => setTimeout(resolve, 700))
-          navigate("/app")
-        } else {
-          alert(result.message || "登录失败，请检查邮箱和密码")
-        }
-      } catch (error) {
-        console.error("登录错误:", error)
-        alert("登录出错，请稍后重试")
-        setIsEnteringApp(false)
-      } finally {
-        setIsLoading(false)
+  const handlePasswordSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (isLoading || isEnteringApp) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const result = await login(email, password)
+      if (result.success) {
+        setIsEnteringApp(true)
+        navigate("/app")
+        return
       }
+
+      toast.error("登录失败", {
+        description: result.message || "请检查邮箱和密码后重试。",
+      })
+    } catch (error) {
+      console.error("登录错误:", error)
+      toast.error("登录异常", {
+        description: "当前无法完成登录，请稍后再试。",
+      })
+      setIsEnteringApp(false)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleBack = () => {
     if (phase === "password") {
       handlePhaseChange("email", true)
-    } else if (phase === "email") {
+      return
+    }
+
+    if (phase === "email") {
       handlePhaseChange("initial", true)
     }
   }
 
-  const handleGoToRegister = (e: React.MouseEvent) => {
-    e.preventDefault()
+  const handleGoToRegister = (event: React.MouseEvent) => {
+    event.preventDefault()
     navigate("/register", { state: { fromLogin: true, initialHeight: containerHeight } })
   }
 
   const getTitle = () => {
-    if (phase === "initial") return "选择一个登录方式"
-    if (phase === "email") return "登录你的账号"
+    if (phase === "initial") {
+      return "选择一种登录方式"
+    }
+    if (phase === "email") {
+      return "登录你的账号"
+    }
     return "请输入密码"
   }
 
@@ -146,8 +157,9 @@ export function LoginForm({
             </div>
           </div>
         ) : null}
+
         <div className="flex flex-row items-center justify-between pr-5">
-          <div className="flex items-center gap-2 font-semibold flex-row justify-start px-6">
+          <div className="flex flex-row justify-start gap-2 px-6 font-semibold">
             <Logo showText className="text-foreground" />
           </div>
           <ModeToggle />
@@ -155,15 +167,15 @@ export function LoginForm({
 
         <CardHeader className="text-left">
           <CardTitle className="text-xl">{getTitle()}</CardTitle>
-          {phase === "password" && (
+          {phase === "password" ? (
             <CardDescription>
               请输入账号 <span className="font-medium text-foreground">{email}</span> 对应的密码
             </CardDescription>
-          )}
+          ) : null}
         </CardHeader>
+
         <CardContent>
           <div
-            ref={containerRef}
             className={state?.fromRegister ? "slide-container" : ""}
             style={{
               height: containerHeight === "auto" ? "auto" : `${containerHeight + 10}px`,
@@ -171,7 +183,7 @@ export function LoginForm({
               overflow: "hidden",
               position: "relative",
               padding: "3px",
-              margin: "-3px"
+              margin: "-3px",
             }}
           >
             <div
@@ -184,16 +196,11 @@ export function LoginForm({
                 isAnimating && isGoingBack && (phase === "email" || phase === "password") && "slide-back-exit slide-back-exit-active"
               )}
             >
-              {phase === "initial" && (
+              {phase === "initial" ? (
                 <div>
                   <FieldGroup>
                     <Field>
-                      <Button
-                        variant="outline"
-                        type="button"
-                        className="w-full"
-                        onClick={handleEnterEmailPhase}
-                      >
+                      <Button variant="outline" type="button" className="w-full" onClick={() => handlePhaseChange("email")}>
                         <Mail className="size-4" />
                         使用邮箱继续
                       </Button>
@@ -215,9 +222,9 @@ export function LoginForm({
                     </Field>
                   </FieldGroup>
                 </div>
-              )}
+              ) : null}
 
-              {phase === "email" && (
+              {phase === "email" ? (
                 <form onSubmit={handleEmailSubmit}>
                   <FieldGroup>
                     <Field>
@@ -230,7 +237,7 @@ export function LoginForm({
                         type="email"
                         placeholder="m@example.com"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(event) => setEmail(event.target.value)}
                         required
                         autoFocus
                       />
@@ -263,9 +270,9 @@ export function LoginForm({
                     </Field>
                   </FieldGroup>
                 </form>
-              )}
+              ) : null}
 
-              {phase === "password" && (
+              {phase === "password" ? (
                 <form onSubmit={handlePasswordSubmit}>
                   <FieldGroup>
                     <Field>
@@ -283,7 +290,7 @@ export function LoginForm({
                         type="password"
                         placeholder="输入你的密码"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(event) => setPassword(event.target.value)}
                         required
                         autoFocus
                       />
@@ -310,15 +317,17 @@ export function LoginForm({
                     </Field>
                   </FieldGroup>
                 </form>
-              )}
+              ) : null}
             </div>
           </div>
         </CardContent>
+
         <FieldDescription className="px-6 text-center">
           <a href="#" className="!no-underline underline-offset-4 hover:underline">使用条款</a>{" "}
           | <a href="#" className="!no-underline underline-offset-4 hover:underline">隐私政策</a>
         </FieldDescription>
       </Card>
+
       <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <span>Powered By</span>
         <Logo className="w-auto" />

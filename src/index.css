@@ -180,3 +180,22 @@
     0 1px 0 rgb(255 255 255 / 0.02) inset,
     0 10px 24px rgb(0 0 0 / 0.24);
 }
+
+/* Mobile: max-width 768px → 2 columns */
+.file-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.file-section-grid > * {
+  min-width: 0;
+}
+
+/* Desktop: min-width 1024px → auto-fill up to 7 columns based on gap */
+@media (min-width: 1024px) {
+  .file-section-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+}

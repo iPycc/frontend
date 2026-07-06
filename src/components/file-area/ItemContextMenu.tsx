@@ -1,4 +1,4 @@
-import { type FileNode } from "@/lib/mock-data"
+﻿import { type FileNode } from "@/lib/models"
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -18,7 +18,7 @@ interface ItemContextMenuProps {
   onDeleteRequest: (ids: string[]) => void
   onCopyRequest: (ids: string[]) => void
   onCutRequest: (ids: string[]) => void
-  onPropertiesRequest: (id: string) => void
+  onPropertiesRequest: (ids: string[]) => void
   onCreateChildFolder: (parentId: string) => void
 }
 
@@ -64,9 +64,10 @@ export function ItemContextMenu({
         删除
       </ContextMenuItem>
       <ContextMenuSeparator />
-      <ContextMenuItem onClick={() => onPropertiesRequest(item.id)}>
+      <ContextMenuItem onClick={() => onPropertiesRequest(ids)}>
         属性
       </ContextMenuItem>
     </ContextMenuContent>
   )
 }
+

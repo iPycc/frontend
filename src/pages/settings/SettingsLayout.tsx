@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { IconChevronDown } from "@tabler/icons-react"
 import { motion } from "motion/react"
-import { usePageTitle } from "@/hooks/use-page-title"
+
 import { useIsMobile } from "@/hooks/use-mobile"
+import { usePageTitle } from "@/hooks/use-page-title"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -88,13 +89,13 @@ export function SettingsLayout() {
                 >
                   <Icon size={16} />
                   <span>{item.label}</span>
-                  {isActive && (
+                  {isActive ? (
                     <motion.div
                       layoutId="settings-tab-indicator"
                       className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
                       transition={{ type: "spring", stiffness: 500, damping: 40 }}
                     />
-                  )}
+                  ) : null}
                 </NavLink>
               )
             })}

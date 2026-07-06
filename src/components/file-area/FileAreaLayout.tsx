@@ -1,8 +1,8 @@
-import type { MouseEvent } from "react"
+﻿import type { MouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { IconFolder, IconLoader2 } from "@tabler/icons-react"
+import { IconChevronRight, IconFolder, IconLoader2 } from "@tabler/icons-react"
 
-import { type FileNode, type SortValue, type ViewMode } from "@/lib/mock-data"
+import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   ContextMenu,
@@ -15,8 +15,6 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent } from "@/components/ui/card"
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
 
@@ -44,7 +42,7 @@ interface FileAreaProps {
   onOpenFile: (node: FileNode) => void
   onCreateFolder: () => void
   onCreateChildFolder: (parentId: string) => void
-  onUploadMock: () => void
+  onUploadRequest: () => void
   onRefresh: () => void
   onPaste: () => void
   onViewModeChange: (value: ViewMode) => void
@@ -67,7 +65,7 @@ export function FileArea({
   sortValue,
   showThumbnail = false,
   isLoading = false,
-  loadingLabel = "正在载入内容",
+  loadingLabel = "正在加载内容",
   canPaste,
   onSelectNode,
   onPrepareContext,
@@ -83,7 +81,7 @@ export function FileArea({
   onOpenFile,
   onCreateFolder,
   onCreateChildFolder,
-  onUploadMock,
+  onUploadRequest,
   onRefresh,
   onPaste,
   onViewModeChange,
@@ -94,10 +92,9 @@ export function FileArea({
   const files = items.filter((item) => item.kind === "file")
 
   const handleBackgroundClick = (event: MouseEvent) => {
-    // Deselect when clicking any empty area (not on a file card)
     const target = event.target as HTMLElement
     if (target.closest("[data-file-card]")) return
-    if (onClearSelection) onClearSelection()
+    onClearSelection?.()
   }
 
   const openNode = (node: FileNode) => {
@@ -110,25 +107,22 @@ export function FileArea({
     onOpenFile(node)
   }
 
-  const getContextIds = (nodeId: string) =>
-    selectedIds.includes(nodeId) && selectedIds.length > 1
-      ? selectedIds
-      : [nodeId]
+  const getContextIds = (nodeId: string) => (selectedIds.includes(nodeId) && selectedIds.length > 1 ? selectedIds : [nodeId])
 
   return (
     <ContextMenu>
       <ContextMenuTrigger className="contents">
         <div
-          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-3 sm:p-3 md:p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none"
+          className="app-panel relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border p-3 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none md:p-5"
           onClick={handleBackgroundClick}
         >
-          <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 sm:pr-1 md:pr-2" onClick={handleBackgroundClick}>
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
             {items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
               </div>
             ) : viewMode === "grid" ? (
-              <div className="flex flex-1 flex-col gap-4 sm:gap-6 md:gap-8">
+              <div className="flex flex-1 flex-col gap-4 md:gap-8">
                 {folders.length > 0 ? (
                   <FileSection
                     title="文件夹"
@@ -197,7 +191,7 @@ export function FileArea({
 
       <ContextMenuContent>
         <ContextMenuItem onClick={onCreateFolder}>新建文件夹</ContextMenuItem>
-        <ContextMenuItem onClick={onUploadMock}>上传模拟文件</ContextMenuItem>
+        <ContextMenuItem onClick={onUploadRequest}>上传文件</ContextMenuItem>
         <ContextMenuItem onClick={onRefresh}>刷新</ContextMenuItem>
         <ContextMenuItem disabled={!canPaste} onClick={onPaste}>
           粘贴
@@ -207,26 +201,17 @@ export function FileArea({
         <ContextMenuSub>
           <ContextMenuSubTrigger>视图</ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem onClick={() => onViewModeChange("grid")}>
-              网格视图
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onViewModeChange("list")}>
-              列表视图
-            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onViewModeChange("grid")}>网格视图</ContextMenuItem>
+            <ContextMenuItem onClick={() => onViewModeChange("list")}>列表视图</ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSub>
           <ContextMenuSubTrigger>排序</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {sortLabels.map((item) => (
-              <ContextMenuItem
-                key={item.value}
-                onClick={() => onSortChange(item.value)}
-              >
+              <ContextMenuItem key={item.value} onClick={() => onSortChange(item.value)}>
                 {item.label}
-                <ContextMenuShortcut>
-                  {sortValue === item.value ? "当前" : ""}
-                </ContextMenuShortcut>
+                <ContextMenuShortcut>{sortValue === item.value ? "当前" : ""}</ContextMenuShortcut>
               </ContextMenuItem>
             ))}
           </ContextMenuSubContent>
@@ -239,7 +224,11 @@ export function FileArea({
 function FileAreaLoading({ label }: { label: string }) {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
-      <IconLoader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card px-4 py-2 text-sm text-foreground shadow-lg">
+        <IconLoader2 className="h-4 w-4 animate-spin text-primary" />
+        <span>{label}</span>
+      </div>
     </div>
   )
 }
+

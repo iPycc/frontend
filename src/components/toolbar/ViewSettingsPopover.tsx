@@ -1,4 +1,4 @@
-import * as React from "react"
+﻿import * as React from "react"
 import {
   IconLayoutGrid,
   IconListDetails,
@@ -6,7 +6,7 @@ import {
   IconPhotoOff,
 } from "@tabler/icons-react"
 
-import { type ViewMode } from "@/lib/mock-data"
+import { type ViewMode } from "@/lib/models"
 import {
   Popover,
   PopoverContent,
@@ -103,3 +103,4 @@ export function ViewSettingsPopover({
     </Popover>
   )
 }
+

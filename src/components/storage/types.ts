@@ -1,4 +1,4 @@
-import type { BucketMount } from "@/lib/mock-data"
+﻿﻿import type { BucketMount } from "@/lib/models"
 
 export type StorageStrategyKey = "tencent" | "local" | "aliyun"
 export type StorageFormMode = "create" | "edit" | "readonly"
@@ -34,3 +34,4 @@ export interface StorageModuleDefinition {
   canCreate: boolean
   canEdit: (bucket: BucketMount) => boolean
 }
+

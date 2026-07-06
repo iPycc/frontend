@@ -11,7 +11,8 @@ import {
 
 export function UserMenu() {
   const navigate = useNavigate()
-  const { profile, logout } = useAppState()
+  const { currentUser, logout, profile } = useAppState()
+  const roleLabel = currentUser?.role === "admin" ? "Admin" : "User"
 
   return (
     <DropdownMenu>
@@ -22,33 +23,36 @@ export function UserMenu() {
           className="h-full w-full object-cover"
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 rounded-xl">
-        <div className="relative flex items-center justify-start gap-2 p-2">
-          <div className="flex w-full flex-col space-y-1 leading-none">
-            {profile.username ? (
-              <p className="flex w-full items-center justify-between text-sm">
-                <span>{profile.username}</span>
-                <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
-                  管理
+
+      <DropdownMenuContent align="end" className="w-64 rounded-xl p-1">
+        <div className="flex items-start gap-3 px-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-sm font-medium text-foreground">{profile.username}</p>
+              {currentUser ? (
+                <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                  {roleLabel}
                 </span>
-              </p>
-            ) : null}
+              ) : null}
+            </div>
+
             {profile.email ? (
-              <p className="mt-1 w-[180px] truncate text-xs leading-none text-muted-foreground">
+              <p className="mt-1 break-all text-xs leading-5 text-muted-foreground">
                 {profile.email}
               </p>
             ) : null}
           </div>
         </div>
+
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
-          个人主页
+          个人资料
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-red-600 focus:text-red-600"
-          onClick={() => {
-            logout()
+          onClick={async () => {
+            await logout()
             navigate("/login", { replace: true })
           }}
         >
