@@ -28,6 +28,11 @@ import "@/styles/slide-transition.css"
 
 type LoginPhase = "initial" | "email" | "password"
 
+function isPasskeyCanceledMessage(message: string | undefined) {
+  const normalized = (message || "").trim()
+  return normalized === "用户已取消登录"
+}
+
 export function LoginForm({
   className,
   ...props
@@ -138,23 +143,6 @@ export function LoginForm({
 
     setIsLoading(true)
     try {
-      // #region debug-point D:login-form-passkey-click
-      fetch("http://127.0.0.1:7777/event", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId: "passkey-login-cancel",
-          runId: "pre-fix",
-          hypothesisId: "D",
-          location: "login-form.tsx:handlePasskeyLogin:click",
-          msg: "[DEBUG] User triggered passkey login",
-          data: {
-            emailHint: email || null,
-            phase,
-          },
-          ts: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       const result = await loginWithPasskey(email || undefined)
       if (result.success) {
         setIsEnteringApp(true)
@@ -162,45 +150,16 @@ export function LoginForm({
         return
       }
 
-      // #region debug-point E:login-form-passkey-result
-      fetch("http://127.0.0.1:7777/event", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId: "passkey-login-cancel",
-          runId: "pre-fix",
-          hypothesisId: "E",
-          location: "login-form.tsx:handlePasskeyLogin:result",
-          msg: "[DEBUG] Passkey login resolved unsuccessfully",
-          data: {
-            emailHint: email || null,
-            resultMessage: result.message || null,
-          },
-          ts: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
+      if (isPasskeyCanceledMessage(result.message)) {
+        toast("通行密钥", {
+          description: "用户已取消登录",
+        })
+        return
+      }
       toast.error("通行密钥登录失败", {
         description: result.message || "请确认当前设备已绑定通行密钥。",
       })
     } catch (error) {
-      // #region debug-point F:login-form-passkey-catch
-      fetch("http://127.0.0.1:7777/event", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId: "passkey-login-cancel",
-          runId: "pre-fix",
-          hypothesisId: "F",
-          location: "login-form.tsx:handlePasskeyLogin:catch",
-          msg: "[DEBUG] Passkey login outer catch triggered",
-          data: {
-            emailHint: email || null,
-            errorName: error && typeof error === "object" && "name" in error ? String(error.name) : null,
-            errorMessage: error instanceof Error ? error.message : String(error),
-          },
-          ts: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       console.error("通行密钥登录错误:", error)
       toast.error("通行密钥登录异常", {
         description: "当前无法完成通行密钥登录，请稍后再试。",

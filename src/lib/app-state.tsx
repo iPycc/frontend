@@ -63,6 +63,19 @@ type AuthResult = {
   message?: string
 }
 
+function isPasskeyCanceled(error: unknown) {
+  const name = error && typeof error === "object" && "name" in error ? String(error.name) : ""
+  const message = error instanceof Error ? error.message.toLowerCase() : ""
+  return (
+    name === "AbortError" ||
+    name === "NotAllowedError" ||
+    message.includes("cancel") ||
+    message.includes("aborted") ||
+    message.includes("not allowed") ||
+    message.includes("timed out")
+  )
+}
+
 type UploadTarget = {
   mountId: string
   parentId: string | null
@@ -870,45 +883,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       try {
         const { startAuthentication } = await import("@simplewebauthn/browser")
         const begin = await apiBeginPasskeyLogin(emailHint)
-        // #region debug-point A:passkey-login-begin
-        fetch("http://127.0.0.1:7777/event", {
-          method: "POST",
-          body: JSON.stringify({
-            sessionId: "passkey-login-cancel",
-            runId: "pre-fix",
-            hypothesisId: "A",
-            location: "app-state.tsx:loginWithPasskey:begin",
-            msg: "[DEBUG] Passkey login options received",
-            data: {
-              emailHint: emailHint ?? null,
-              ceremonyId: begin.ceremony_id,
-              optionKeys: Object.keys(begin.options ?? {}),
-            },
-            ts: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         const credential = await startAuthentication({
           optionsJSON: begin.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
         })
-        // #region debug-point B:passkey-login-authenticated
-        fetch("http://127.0.0.1:7777/event", {
-          method: "POST",
-          body: JSON.stringify({
-            sessionId: "passkey-login-cancel",
-            runId: "pre-fix",
-            hypothesisId: "B",
-            location: "app-state.tsx:loginWithPasskey:authenticated",
-            msg: "[DEBUG] Browser returned passkey credential",
-            data: {
-              emailHint: emailHint ?? null,
-              ceremonyId: begin.ceremony_id,
-              credentialId: (credential as { id?: string })?.id ?? null,
-            },
-            ts: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         const session = await apiFinishPasskeyLogin({
           ceremonyId: begin.ceremony_id,
           credential: credential as unknown as Record<string, unknown>,
@@ -917,24 +894,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         emitAuthEvent({ type: "session-updated" })
         return { success: true }
       } catch (error) {
-        // #region debug-point C:passkey-login-error
-        fetch("http://127.0.0.1:7777/event", {
-          method: "POST",
-          body: JSON.stringify({
-            sessionId: "passkey-login-cancel",
-            runId: "pre-fix",
-            hypothesisId: "C",
-            location: "app-state.tsx:loginWithPasskey:error",
-            msg: "[DEBUG] Passkey login threw error",
-            data: {
-              emailHint: emailHint ?? null,
-              errorName: error && typeof error === "object" && "name" in error ? String(error.name) : null,
-              errorMessage: error instanceof Error ? error.message : String(error),
-            },
-            ts: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
+        if (isPasskeyCanceled(error)) {
+          return {
+            success: false,
+            message: "用户已取消登录",
+          }
+        }
         return {
           success: false,
           message: error instanceof Error ? error.message : "通行密钥登录失败",

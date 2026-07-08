@@ -199,23 +199,6 @@ export async function beginPasskeyLogin(email?: string) {
 }
 
 export async function finishPasskeyLogin(payload: { ceremonyId: string; credential: Record<string, unknown> }) {
-  // #region debug-point G:passkey-login-verify-request
-  fetch("http://127.0.0.1:7777/event", {
-    method: "POST",
-    body: JSON.stringify({
-      sessionId: "passkey-login-cancel",
-      runId: "pre-fix",
-      hypothesisId: "G",
-      location: "auth.ts:finishPasskeyLogin:request",
-      msg: "[DEBUG] Sending passkey verify request",
-      data: {
-        ceremonyId: payload.ceremonyId,
-        credentialId: payload.credential?.id ?? null,
-      },
-      ts: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion
   const response = await requestJson<RawAuthResponse>("/session/passkey/verify", {
     method: "POST",
     body: {
