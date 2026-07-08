@@ -36,7 +36,7 @@ interface FileAreaProps {
   onDeleteRequest: (ids: string[]) => void
   onCopyRequest: (ids: string[]) => void
   onCutRequest: (ids: string[]) => void
-  onPropertiesRequest: (id: string) => void
+  onPropertiesRequest: (ids: string[]) => void
   onOpenFile: (node: FileNode) => void
   onCreateFolder: () => void
   onCreateChildFolder: (parentId: string) => void
@@ -215,4 +215,3 @@ export function FileArea({
     </ContextMenu>
   )
 }
-

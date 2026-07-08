@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { buildDownloadUrl } from "@/api/files"
+import { requestResponse } from "@/api/client"
 
 const categoryMap = {
   image: "图片",
@@ -46,7 +47,6 @@ function getPreviewType(file: FileNode): "media" | "document" | null {
 export function AppFiles() {
   const location = useLocation()
   const {
-    authSession,
     clipboard,
     activeBucket,
     getCategoryNodes,
@@ -200,10 +200,6 @@ export function AppFiles() {
   }
 
   const handleDownloadRequest = async (ids: string[]) => {
-    if (!authSession) {
-      return
-    }
-
     try {
       for (const id of ids) {
         const node = getNodeById(id)
@@ -211,15 +207,11 @@ export function AppFiles() {
           continue
         }
 
-        const response = await fetch(buildDownloadUrl(node.backendId), {
-          credentials: "include",
+        const response = await requestResponse(buildDownloadUrl(node.backendId), {
           headers: {
-            Authorization: `Bearer ${authSession.tokens.accessToken}`,
+            Accept: "application/octet-stream",
           },
         })
-        if (!response.ok) {
-          throw new Error(`下载 ${node.name} 失败`)
-        }
 
         const blob = await response.blob()
         const objectUrl = window.URL.createObjectURL(blob)

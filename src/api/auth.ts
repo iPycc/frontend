@@ -14,6 +14,11 @@ export type RegisterRequest = {
   username: string
 }
 
+export type PasskeyOptionsResponse = {
+  ceremony_id: string
+  options: Record<string, unknown>
+}
+
 export type RawTokenPayload = {
   access_token?: string
   accessToken?: string
@@ -72,9 +77,9 @@ function buildAvatar(seed: string) {
   return `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(seed)}`
 }
 
-export function formatDateTimeToSeconds(value: unknown) {
+export function formatDateTimeToSeconds(value: unknown, timezone?: string) {
   if (typeof value !== "string" || !value.trim()) {
-    return new Date().toLocaleString("zh-CN", { hour12: false }).replace(/\//g, "-")
+    return new Date().toLocaleString("zh-CN", { hour12: false, timeZone: timezone || undefined }).replace(/\//g, "-")
   }
 
   const date = new Date(value)
@@ -82,13 +87,28 @@ export function formatDateTimeToSeconds(value: unknown) {
     return value
   }
 
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, "0")
-  const day = `${date.getDate()}`.padStart(2, "0")
-  const hour = `${date.getHours()}`.padStart(2, "0")
-  const minute = `${date.getMinutes()}`.padStart(2, "0")
-  const second = `${date.getSeconds()}`.padStart(2, "0")
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+  try {
+    const parts = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: timezone || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(date)
+    const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ""
+    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`
+  } catch {
+    const year = date.getFullYear()
+    const month = `${date.getMonth() + 1}`.padStart(2, "0")
+    const day = `${date.getDate()}`.padStart(2, "0")
+    const hour = `${date.getHours()}`.padStart(2, "0")
+    const minute = `${date.getMinutes()}`.padStart(2, "0")
+    const second = `${date.getSeconds()}`.padStart(2, "0")
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
+  }
 }
 
 export function normalizeUser(raw: Record<string, unknown>): AppUser {
@@ -170,10 +190,47 @@ export async function refreshToken() {
   return refreshRequestInFlight
 }
 
+export async function beginPasskeyLogin(email?: string) {
+  return requestJson<PasskeyOptionsResponse>("/session/passkey/options", {
+    method: "POST",
+    body: email?.trim() ? { email: email.trim().toLowerCase() } : {},
+    skipAuthRefresh: true,
+  })
+}
+
+export async function finishPasskeyLogin(payload: { ceremonyId: string; credential: Record<string, unknown> }) {
+  // #region debug-point G:passkey-login-verify-request
+  fetch("http://127.0.0.1:7777/event", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId: "passkey-login-cancel",
+      runId: "pre-fix",
+      hypothesisId: "G",
+      location: "auth.ts:finishPasskeyLogin:request",
+      msg: "[DEBUG] Sending passkey verify request",
+      data: {
+        ceremonyId: payload.ceremonyId,
+        credentialId: payload.credential?.id ?? null,
+      },
+      ts: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion
+  const response = await requestJson<RawAuthResponse>("/session/passkey/verify", {
+    method: "POST",
+    body: {
+      ceremony_id: payload.ceremonyId,
+      credential: payload.credential,
+    },
+    skipAuthRefresh: true,
+  })
+
+  return normalizeAuthSession(response)
+}
+
 export async function logout(scope: "current" | "all" = "current") {
   await requestJson<void>("/session/token", {
     method: "DELETE",
     body: { scope },
   })
 }
-

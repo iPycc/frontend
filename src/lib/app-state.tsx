@@ -1,6 +1,13 @@
 import * as React from "react"
 
-import { login as apiLogin, logout as apiLogout, refreshToken as apiRefreshToken, register as apiRegister } from "@/api/auth"
+import {
+  beginPasskeyLogin as apiBeginPasskeyLogin,
+  finishPasskeyLogin as apiFinishPasskeyLogin,
+  login as apiLogin,
+  logout as apiLogout,
+  refreshToken as apiRefreshToken,
+  register as apiRegister,
+} from "@/api/auth"
 import { configureAuthClient } from "@/api/client"
 import {
   createFolder as apiCreateFolder,
@@ -84,6 +91,7 @@ type AppStateValue = {
   updateSettings: (patch: Partial<UserSettings>) => void
   updateProfile: (patch: Partial<UserProfile>) => void
   login: (email: string, password: string) => Promise<AuthResult>
+  loginWithPasskey: (emailHint?: string) => Promise<AuthResult>
   register: (input: AuthRegisterInput) => Promise<AuthResult>
   logout: () => Promise<void>
   verifyPassword: (value: string) => boolean
@@ -498,9 +506,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const hydrateWorkspace = React.useCallback(
     async (session: AuthSession) => {
       const token = session.tokens.accessToken
-      const [profilePayload, loginActivityEntries, rawMounts, recycleEntries] = await Promise.all([
-        getCurrentProfile(token),
-        getLoginActivity(token),
+      const profilePayload = await getCurrentProfile(token)
+      const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
+      const [loginActivityEntries, rawMounts, recycleEntries] = await Promise.all([
+        getLoginActivity(token, timezone),
         listUserMounts(token),
         listRecycle(token),
       ])
@@ -517,7 +526,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         },
       }
 
-      const tz = snapshotRef.current.settings.timezone
+      const tz = timezone
       const buckets = rawMounts.map((mount) => mapMountToBucket(mount, nextSession.user, tz))
       const bucketNodeLists = await Promise.all(buckets.map((bucket) => loadMountNodes(token, bucket, tz)))
       const nodesMap = new Map<string, FileNode>()
@@ -541,10 +550,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       updateSnapshot((current) => ({
         ...current,
         profile: profilePayload.profile,
+        settings: {
+          ...current.settings,
+          timezone,
+        },
         security: {
           ...current.security,
           passwordVerified: false,
           passwordUpdatedAt: profilePayload.passwordUpdatedAt,
+          passkeysEnabled: false,
+          passkeys: [],
         },
         auth: {
           session: nextSession,
@@ -571,6 +586,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         ...current.security,
         passwordVerified: false,
         passwordUpdatedAt: "",
+        passkeysEnabled: false,
+        passkeys: [],
+        twoFactorEnabled: false,
       },
       auth: {
         session: null,
@@ -841,6 +859,85 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return {
           success: false,
           message: error instanceof Error ? error.message : "登录失败",
+        }
+      }
+    },
+    [hydrateWorkspace]
+  )
+
+  const loginWithPasskey = React.useCallback(
+    async (emailHint?: string): Promise<AuthResult> => {
+      try {
+        const { startAuthentication } = await import("@simplewebauthn/browser")
+        const begin = await apiBeginPasskeyLogin(emailHint)
+        // #region debug-point A:passkey-login-begin
+        fetch("http://127.0.0.1:7777/event", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId: "passkey-login-cancel",
+            runId: "pre-fix",
+            hypothesisId: "A",
+            location: "app-state.tsx:loginWithPasskey:begin",
+            msg: "[DEBUG] Passkey login options received",
+            data: {
+              emailHint: emailHint ?? null,
+              ceremonyId: begin.ceremony_id,
+              optionKeys: Object.keys(begin.options ?? {}),
+            },
+            ts: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
+        const credential = await startAuthentication({
+          optionsJSON: begin.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+        })
+        // #region debug-point B:passkey-login-authenticated
+        fetch("http://127.0.0.1:7777/event", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId: "passkey-login-cancel",
+            runId: "pre-fix",
+            hypothesisId: "B",
+            location: "app-state.tsx:loginWithPasskey:authenticated",
+            msg: "[DEBUG] Browser returned passkey credential",
+            data: {
+              emailHint: emailHint ?? null,
+              ceremonyId: begin.ceremony_id,
+              credentialId: (credential as { id?: string })?.id ?? null,
+            },
+            ts: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
+        const session = await apiFinishPasskeyLogin({
+          ceremonyId: begin.ceremony_id,
+          credential: credential as unknown as Record<string, unknown>,
+        })
+        await hydrateWorkspace(session)
+        emitAuthEvent({ type: "session-updated" })
+        return { success: true }
+      } catch (error) {
+        // #region debug-point C:passkey-login-error
+        fetch("http://127.0.0.1:7777/event", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId: "passkey-login-cancel",
+            runId: "pre-fix",
+            hypothesisId: "C",
+            location: "app-state.tsx:loginWithPasskey:error",
+            msg: "[DEBUG] Passkey login threw error",
+            data: {
+              emailHint: emailHint ?? null,
+              errorName: error && typeof error === "object" && "name" in error ? String(error.name) : null,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            },
+            ts: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : "通行密钥登录失败",
         }
       }
     },
@@ -1311,6 +1408,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings,
     updateProfile,
     login,
+    loginWithPasskey,
     register,
     logout,
     verifyPassword,
@@ -1371,6 +1469,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getTreeNodes,
     isAuthenticated,
     login,
+    loginWithPasskey,
     logout,
     moveNodes,
     offlineTasks,

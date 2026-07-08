@@ -34,7 +34,7 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { login } = useAppState()
+  const { login, loginWithPasskey } = useAppState()
   const state = location.state as { fromRegister?: boolean; initialHeight?: number } | null
 
   const [phase, setPhase] = useState<LoginPhase>("initial")
@@ -131,6 +131,86 @@ export function LoginForm({
     navigate("/register", { state: { fromLogin: true, initialHeight: containerHeight } })
   }
 
+  const handlePasskeyLogin = async () => {
+    if (isLoading || isEnteringApp) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      // #region debug-point D:login-form-passkey-click
+      fetch("http://127.0.0.1:7777/event", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: "passkey-login-cancel",
+          runId: "pre-fix",
+          hypothesisId: "D",
+          location: "login-form.tsx:handlePasskeyLogin:click",
+          msg: "[DEBUG] User triggered passkey login",
+          data: {
+            emailHint: email || null,
+            phase,
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
+      const result = await loginWithPasskey(email || undefined)
+      if (result.success) {
+        setIsEnteringApp(true)
+        navigate("/app")
+        return
+      }
+
+      // #region debug-point E:login-form-passkey-result
+      fetch("http://127.0.0.1:7777/event", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: "passkey-login-cancel",
+          runId: "pre-fix",
+          hypothesisId: "E",
+          location: "login-form.tsx:handlePasskeyLogin:result",
+          msg: "[DEBUG] Passkey login resolved unsuccessfully",
+          data: {
+            emailHint: email || null,
+            resultMessage: result.message || null,
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
+      toast.error("通行密钥登录失败", {
+        description: result.message || "请确认当前设备已绑定通行密钥。",
+      })
+    } catch (error) {
+      // #region debug-point F:login-form-passkey-catch
+      fetch("http://127.0.0.1:7777/event", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: "passkey-login-cancel",
+          runId: "pre-fix",
+          hypothesisId: "F",
+          location: "login-form.tsx:handlePasskeyLogin:catch",
+          msg: "[DEBUG] Passkey login outer catch triggered",
+          data: {
+            emailHint: email || null,
+            errorName: error && typeof error === "object" && "name" in error ? String(error.name) : null,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
+      console.error("通行密钥登录错误:", error)
+      toast.error("通行密钥登录异常", {
+        description: "当前无法完成通行密钥登录，请稍后再试。",
+      })
+      setIsEnteringApp(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const getTitle = () => {
     if (phase === "initial") {
       return "选择一种登录方式"
@@ -215,9 +295,9 @@ export function LoginForm({
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
                         使用 GitHub 继续
                       </Button>
-                      <Button variant="outline" type="button" className="w-full">
+                      <Button variant="outline" type="button" className="w-full" onClick={() => void handlePasskeyLogin()}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01" /><path d="M15 9h.01" /></svg>
-                        使用 通行证密钥 继续
+                        使用通行密钥继续
                       </Button>
                     </Field>
                   </FieldGroup>
@@ -241,6 +321,18 @@ export function LoginForm({
                         required
                         autoFocus
                       />
+                    </Field>
+
+                    <Field>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isLoading || isEnteringApp}
+                        className="w-full"
+                        onClick={() => void handlePasskeyLogin()}
+                      >
+                        使用通行密钥登录
+                      </Button>
                     </Field>
 
                     <Field>

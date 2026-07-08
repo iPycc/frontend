@@ -4,7 +4,16 @@ import { IconPlus, IconX } from "@tabler/icons-react"
 import { KeyRound } from "lucide-react"
 import { toast } from "sonner"
 
-import { changeCurrentPassword, getLoginActivity, type UserLoginActivityEntry } from "@/api/user"
+import {
+  beginPasskeyRegistration,
+  changeCurrentPassword,
+  deletePasskey,
+  finishPasskeyRegistration,
+  getLoginActivity,
+  listPasskeys,
+  renamePasskey,
+  type UserLoginActivityEntry,
+} from "@/api/user"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -18,17 +27,39 @@ import {
 import { useAppState } from "@/lib/app-state"
 import { StatusBadge } from "./shared"
 
-function nowLabel() {
-  return new Date().toLocaleString("zh-CN", { hour12: false }).replace(/\//g, "-")
+function isPasskeyCanceled(error: unknown) {
+  const name = error && typeof error === "object" && "name" in error ? String(error.name) : ""
+  const message = error instanceof Error ? error.message.toLowerCase() : ""
+  return (
+    name === "AbortError" ||
+    name === "NotAllowedError" ||
+    message.includes("cancel") ||
+    message.includes("aborted") ||
+    message.includes("not allowed")
+  )
 }
 
-function createPasskeyId() {
-  return `passkey-${Math.random().toString(36).slice(2, 8)}`
+function normalizeToastDescription(title: string, description: string | undefined, fallback: string) {
+  const cleaned = (description || "").trim()
+  if (!cleaned) {
+    return fallback
+  }
+
+  const normalizedTitle = title.replace(/\s+/g, "")
+  const normalizedDescription = cleaned.replace(/\s+/g, "")
+  if (
+    normalizedDescription === normalizedTitle ||
+    normalizedDescription === `${normalizedTitle}失败` ||
+    normalizedDescription === `${normalizedTitle}成功`
+  ) {
+    return fallback
+  }
+  return cleaned
 }
 
 export function SecuritySettingsPage() {
   const navigate = useNavigate()
-  const { authSession, logout, security, updateSecurity } = useAppState()
+  const { authSession, logout, security, settings, updateSecurity } = useAppState()
   const token = authSession?.tokens.accessToken ?? null
 
   const [currentPassword, setCurrentPassword] = React.useState("")
@@ -36,7 +67,14 @@ export function SecuritySettingsPage() {
   const [confirmPassword, setConfirmPassword] = React.useState("")
   const [isChangingPassword, setIsChangingPassword] = React.useState(false)
   const [isLoadingActivity, setIsLoadingActivity] = React.useState(false)
+  const [isLoadingPasskeys, setIsLoadingPasskeys] = React.useState(false)
+  const [isRegisteringPasskey, setIsRegisteringPasskey] = React.useState(false)
+  const [deletingPasskeyId, setDeletingPasskeyId] = React.useState<string | null>(null)
+  const [editingPasskeyId, setEditingPasskeyId] = React.useState<string | null>(null)
+  const [editingPasskeyName, setEditingPasskeyName] = React.useState("")
+  const [savingPasskeyId, setSavingPasskeyId] = React.useState<string | null>(null)
   const [loginActivity, setLoginActivity] = React.useState<UserLoginActivityEntry[]>([])
+  const editingContainerRef = React.useRef<HTMLDivElement | null>(null)
 
   const loadLoginActivity = React.useCallback(async () => {
     if (!token) {
@@ -46,7 +84,7 @@ export function SecuritySettingsPage() {
 
     setIsLoadingActivity(true)
     try {
-      const activity = await getLoginActivity(token)
+      const activity = await getLoginActivity(token, settings.timezone)
       setLoginActivity(activity)
     } catch (error) {
       console.error("加载登录活动失败:", error)
@@ -57,11 +95,70 @@ export function SecuritySettingsPage() {
     } finally {
       setIsLoadingActivity(false)
     }
-  }, [token])
+  }, [settings.timezone, token])
 
   React.useEffect(() => {
     void loadLoginActivity()
   }, [loadLoginActivity])
+
+  const loadPasskeyList = React.useCallback(async () => {
+    if (!token) {
+      updateSecurity({
+        passkeysEnabled: false,
+        passkeys: [],
+      })
+      return
+    }
+
+    setIsLoadingPasskeys(true)
+    try {
+      const response = await listPasskeys(token, settings.timezone)
+      updateSecurity({
+        passkeysEnabled: response.passkeysEnabled,
+        passkeys: response.passkeys,
+      })
+    } catch (error) {
+      console.error("加载通行密钥失败:", error)
+      toast.error("通行密钥", {
+        description: normalizeToastDescription(
+          "通行密钥",
+          error instanceof Error ? error.message : undefined,
+          "加载失败，请稍后再试。"
+        ),
+      })
+      updateSecurity({
+        passkeysEnabled: false,
+        passkeys: [],
+      })
+    } finally {
+      setIsLoadingPasskeys(false)
+    }
+  }, [settings.timezone, token, updateSecurity])
+
+  React.useEffect(() => {
+    void loadPasskeyList()
+  }, [loadPasskeyList])
+
+  const cancelEditingPasskey = React.useCallback(() => {
+    setEditingPasskeyId(null)
+    setEditingPasskeyName("")
+  }, [])
+
+  React.useEffect(() => {
+    if (!editingPasskeyId) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target
+      if (editingContainerRef.current && target instanceof Node && !editingContainerRef.current.contains(target)) {
+        cancelEditingPasskey()
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [cancelEditingPasskey, editingPasskeyId])
 
   const activityRows = loginActivity
 
@@ -104,19 +201,115 @@ export function SecuritySettingsPage() {
     }
   }
 
-  const addPasskey = () => {
-    updateSecurity({
-      passkeysEnabled: true,
-      passkeys: [
-        ...security.passkeys,
-        {
-          id: createPasskeyId(),
-          name: `安全密钥 ${security.passkeys.length + 1}`,
-          createdAt: nowLabel(),
-          lastUsedAt: "刚刚添加",
-        },
-      ],
-    })
+  const addPasskey = async () => {
+    if (!token) {
+      return
+    }
+
+    setIsRegisteringPasskey(true)
+    try {
+      const { startRegistration } = await import("@simplewebauthn/browser")
+      const begin = await beginPasskeyRegistration(token)
+      const credential = await startRegistration({
+        optionsJSON: begin.options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      })
+      const result = await finishPasskeyRegistration(token, {
+        ceremonyId: begin.ceremony_id,
+        credential: credential as unknown as Record<string, unknown>,
+      })
+      await loadPasskeyList()
+      toast.success("通行密钥", {
+        description: `已添加：${result.passkey.name}`,
+      })
+    } catch (error) {
+      console.error("添加通行密钥失败:", error)
+      if (isPasskeyCanceled(error)) {
+        toast("通行密钥", {
+          description: "用户已取消创建",
+        })
+      } else {
+        toast.error("通行密钥", {
+          description: normalizeToastDescription(
+            "通行密钥",
+            error instanceof Error ? error.message : undefined,
+            "创建失败，请稍后再试。"
+          ),
+        })
+      }
+    } finally {
+      setIsRegisteringPasskey(false)
+    }
+  }
+
+  const handleDeletePasskey = async (passkeyId: string, passkeyName: string) => {
+    if (!token) {
+      return
+    }
+
+    setDeletingPasskeyId(passkeyId)
+    try {
+      await deletePasskey(token, passkeyId)
+      await loadPasskeyList()
+      if (editingPasskeyId === passkeyId) {
+        cancelEditingPasskey()
+      }
+      toast.success("通行密钥", {
+        description: `${passkeyName} 已删除`,
+      })
+    } catch (error) {
+      console.error("删除通行密钥失败:", error)
+      toast.error("通行密钥", {
+        description: normalizeToastDescription(
+          "通行密钥",
+          error instanceof Error ? error.message : undefined,
+          "删除失败，请稍后再试。"
+        ),
+      })
+    } finally {
+      setDeletingPasskeyId(null)
+    }
+  }
+
+  const startEditingPasskey = (passkeyId: string, name: string) => {
+    setEditingPasskeyId(passkeyId)
+    setEditingPasskeyName(name)
+  }
+
+  const handleSavePasskeyName = async (passkeyId: string) => {
+    if (!token) {
+      return
+    }
+
+    const nextName = editingPasskeyName.trim()
+    if (!nextName) {
+      toast.error("通行密钥", {
+        description: "名称不能为空",
+      })
+      return
+    }
+
+    setSavingPasskeyId(passkeyId)
+    try {
+      const updated = await renamePasskey(token, passkeyId, nextName, settings.timezone)
+      updateSecurity({
+        passkeys: security.passkeys.map((item) => (item.id === passkeyId ? updated : item)),
+      })
+      cancelEditingPasskey()
+      toast.success("通行密钥", {
+        description: `已修改为 ${updated.name}`,
+      })
+    } catch (error) {
+      console.error("修改通行密钥名称失败:", error)
+      toast.error("通行密钥", {
+        description: normalizeToastDescription(
+          "通行密钥",
+          error instanceof Error ? error.message : undefined,
+          "修改失败，请稍后再试。"
+        ),
+      })
+    } finally {
+      setSavingPasskeyId(null)
+    }
   }
 
   return (
@@ -175,6 +368,11 @@ export function SecuritySettingsPage() {
         <section className="space-y-3">
           <div className="text-sm font-medium">通行密钥</div>
           <div className="space-y-3">
+            {isLoadingPasskeys ? (
+              <div className="rounded-xl border border-border/70 px-4 py-6 text-sm text-muted-foreground">
+                正在加载通行密钥...
+              </div>
+            ) : null}
             {security.passkeys.map((item) => (
               <div
                 key={item.id}
@@ -185,7 +383,51 @@ export function SecuritySettingsPage() {
                     <KeyRound size={22} />
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{item.name}</div>
+                    {editingPasskeyId === item.id ? (
+                      <div ref={editingContainerRef} className="flex flex-wrap items-center gap-2">
+                        <Input
+                          autoFocus
+                          value={editingPasskeyName}
+                          className="h-9 w-full min-w-[220px] max-w-[320px]"
+                          maxLength={128}
+                          onChange={(event) => setEditingPasskeyName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault()
+                              void handleSavePasskeyName(item.id)
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault()
+                              cancelEditingPasskey()
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={savingPasskeyId === item.id}
+                          onClick={() => void handleSavePasskeyName(item.id)}
+                        >
+                          {savingPasskeyId === item.id ? "修改中..." : "修改"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingPasskeyId === item.id}
+                          onClick={cancelEditingPasskey}
+                        >
+                          取消
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="truncate text-left text-sm font-medium transition-colors hover:text-primary"
+                        onClick={() => startEditingPasskey(item.id, item.name)}
+                      >
+                        {item.name}
+                      </button>
+                    )}
                     <div className="mt-1 text-sm text-muted-foreground">
                       创建于 {item.createdAt}
                     </div>
@@ -197,21 +439,23 @@ export function SecuritySettingsPage() {
                 <button
                   type="button"
                   className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-                  onClick={() => {
-                    updateSecurity({
-                      passkeys: security.passkeys.filter((passkey) => passkey.id !== item.id),
-                    })
-                  }}
+                  onClick={() => void handleDeletePasskey(item.id, item.name)}
+                  disabled={deletingPasskeyId === item.id || savingPasskeyId === item.id}
                   aria-label={`删除 ${item.name}`}
                 >
                   <IconX size={18} />
                 </button>
               </div>
             ))}
+            {!isLoadingPasskeys && security.passkeys.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+                当前还没有已绑定的通行密钥。
+              </div>
+            ) : null}
           </div>
-          <Button variant="outline" onClick={addPasskey}>
+          <Button variant="outline" onClick={() => void addPasskey()} disabled={isRegisteringPasskey}>
             <IconPlus size={16} />
-            添加新凭证
+            {isRegisteringPasskey ? "添加中..." : "添加新通行密钥"}
           </Button>
         </section>
       </div>

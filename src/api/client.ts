@@ -39,6 +39,16 @@ function getApiBaseUrl() {
   return env?.VITE_API_BASE_URL || DEFAULT_API_BASE
 }
 
+function resolveRequestUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
+  if (path.startsWith("/api/")) {
+    return path
+  }
+  return `${getApiBaseUrl()}${path}`
+}
+
 function toRequestBody(body: unknown) {
   if (body === undefined || body === null) {
     return undefined
@@ -72,14 +82,31 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
   return requestJsonInternal<T>(path, options, true)
 }
 
+export async function requestResponse(path: string, options: RequestOptions = {}) {
+  return requestResponseInternal(path, options, true)
+}
+
 async function requestJsonInternal<T>(path: string, options: RequestOptions, allowRefresh: boolean): Promise<T> {
+  const response = await requestResponseInternal(path, options, allowRefresh, "application/json")
+  const rawText = await response.text()
+  return (rawText ? parseMaybeJson(rawText) : null) as T
+}
+
+async function requestResponseInternal(
+  path: string,
+  options: RequestOptions,
+  allowRefresh: boolean,
+  accept = "*/*"
+): Promise<Response> {
   const headers = new Headers(options.headers)
 
   if (options.body !== undefined && !headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
   }
 
-  headers.set("Accept", "application/json")
+  if (!headers.has("Accept")) {
+    headers.set("Accept", accept)
+  }
   headers.set("X-Device-Fingerprint", getDeviceFingerprint())
 
   const token = options.token ?? authRuntime.getAccessToken?.() ?? null
@@ -87,7 +114,7 @@ async function requestJsonInternal<T>(path: string, options: RequestOptions, all
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await fetch(resolveRequestUrl(path), {
     method: options.method ?? "GET",
     headers,
     body: toRequestBody(options.body),
@@ -103,19 +130,18 @@ async function requestJsonInternal<T>(path: string, options: RequestOptions, all
   ) {
     const refreshedToken = await refreshAccessToken()
     if (refreshedToken) {
-      return requestJsonInternal<T>(path, { ...options, token: refreshedToken }, false)
+      return requestResponseInternal(path, { ...options, token: refreshedToken }, false, accept)
     }
     authRuntime.onAuthFailure?.()
   }
 
-  const rawText = await response.text()
-  const payload = rawText ? parseMaybeJson(rawText) : null
-
   if (!response.ok) {
+    const rawText = await response.text()
+    const payload = rawText ? parseMaybeJson(rawText) : null
     throw new ApiError(response.status, pickErrorMessage(payload, response.status), payload)
   }
 
-  return payload as T
+  return response
 }
 
 async function refreshAccessToken() {

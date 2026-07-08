@@ -1,4 +1,7 @@
 import type { ReactNode } from "react"
+import { toast } from "sonner"
+
+import { updateUserPreferences } from "@/api/user"
 import { useAppState } from "@/lib/app-state"
 import {
   languageOptions,
@@ -9,7 +12,29 @@ import {
 } from "./shared"
 
 export function PersonalizationSettingsPage() {
-  const { settings, setThemeMode, updateSettings } = useAppState()
+  const { authSession, settings, setThemeMode, updateSettings } = useAppState()
+  const token = authSession?.tokens.accessToken ?? null
+
+  const handleTimezoneChange = async (value: string) => {
+    const previous = settings.timezone
+    updateSettings({ timezone: value })
+
+    if (!token) {
+      return
+    }
+
+    try {
+      await updateUserPreferences(token, { timezone: value })
+      toast.success("偏好设置", {
+        description: "时区已保存",
+      })
+    } catch (error) {
+      updateSettings({ timezone: previous })
+      toast.error("偏好设置", {
+        description: error instanceof Error ? error.message : "时区保存失败，请稍后再试。",
+      })
+    }
+  }
 
   return (
     <div className="max-w-[760px] space-y-9">
@@ -24,7 +49,7 @@ export function PersonalizationSettingsPage() {
       <FieldBlock label="时区" hint="设置展示时区，默认跟随系统时区">
         <SelectField
           value={settings.timezone}
-          onChange={(value) => updateSettings({ timezone: value })}
+          onChange={(value) => void handleTimezoneChange(value)}
           options={timezoneOptions}
         />
       </FieldBlock>
