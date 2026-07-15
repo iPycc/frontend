@@ -7,6 +7,7 @@ import {
   logout as apiLogout,
   refreshToken as apiRefreshToken,
   register as apiRegister,
+  verifyTwoFactorLogin as apiVerifyTwoFactorLogin,
 } from "@/api/auth"
 import { configureAuthClient } from "@/api/client"
 import {
@@ -22,7 +23,7 @@ import {
 } from "@/api/files"
 import { checkBackendHealth } from "@/api/system"
 import { abortUpload, completeUpload, createUploadSession, recordRemotePart, uploadLocalPart } from "@/api/uploads"
-import { getCurrentProfile, getLoginActivity } from "@/api/user"
+import { getCurrentProfile, getLoginActivity, getTwoFactorStatus } from "@/api/user"
 import {
   createId,
   defaultAppSnapshot,
@@ -61,6 +62,8 @@ type AuthRegisterInput = {
 type AuthResult = {
   success: boolean
   message?: string
+  twoFactorToken?: string
+  method?: "password" | "passkey"
 }
 
 function isPasskeyCanceled(error: unknown) {
@@ -105,6 +108,7 @@ type AppStateValue = {
   updateProfile: (patch: Partial<UserProfile>) => void
   login: (email: string, password: string) => Promise<AuthResult>
   loginWithPasskey: (emailHint?: string) => Promise<AuthResult>
+  verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey") => Promise<AuthResult>
   register: (input: AuthRegisterInput) => Promise<AuthResult>
   logout: () => Promise<void>
   verifyPassword: (value: string) => boolean
@@ -215,6 +219,7 @@ function loadSnapshot(): AppSnapshot {
       security: {
         ...defaultSecurity,
         passwordUpdatedAt: parsed.security?.passwordUpdatedAt ?? "",
+        twoFactorEnabled: parsed.security?.twoFactorEnabled ?? false,
       },
     }
   } catch {
@@ -460,10 +465,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         settings: snapshot.settings,
         security: {
           passwordUpdatedAt: snapshot.security.passwordUpdatedAt,
+          twoFactorEnabled: snapshot.security.twoFactorEnabled,
         },
       })
     )
-  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.settings])
+  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -536,6 +542,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           avatar: profilePayload.profile.avatar,
           registeredAt: profilePayload.profile.registeredAt,
           group: profilePayload.profile.group,
+          twoFactorEnabled: profilePayload.twoFactorEnabled,
         },
       }
 
@@ -571,6 +578,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           ...current.security,
           passwordVerified: false,
           passwordUpdatedAt: profilePayload.passwordUpdatedAt,
+          twoFactorEnabled: profilePayload.twoFactorEnabled,
           passkeysEnabled: false,
           passkeys: [],
         },
@@ -864,8 +872,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const login = React.useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       try {
-        const session = await apiLogin({ email: email.trim().toLowerCase(), password: password.trim() })
-        await hydrateWorkspace(session)
+        const result = await apiLogin({ email: email.trim().toLowerCase(), password: password.trim() })
+        if (result.kind === "2fa") {
+          return {
+            success: false,
+            message: "requires_2fa",
+            twoFactorToken: result.twoFactorToken,
+            method: result.method,
+          }
+        }
+        await hydrateWorkspace(result)
         emitAuthEvent({ type: "session-updated" })
         return { success: true }
       } catch (error) {
@@ -886,11 +902,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const credential = await startAuthentication({
           optionsJSON: begin.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
         })
-        const session = await apiFinishPasskeyLogin({
+        const result = await apiFinishPasskeyLogin({
           ceremonyId: begin.ceremony_id,
           credential: credential as unknown as Record<string, unknown>,
         })
-        await hydrateWorkspace(session)
+        if (result.kind === "2fa") {
+          return {
+            success: false,
+            message: "requires_2fa",
+            twoFactorToken: result.twoFactorToken,
+            method: result.method,
+          }
+        }
+        await hydrateWorkspace(result)
         emitAuthEvent({ type: "session-updated" })
         return { success: true }
       } catch (error) {
@@ -903,6 +927,31 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return {
           success: false,
           message: error instanceof Error ? error.message : "通行密钥登录失败",
+        }
+      }
+    },
+    [hydrateWorkspace]
+  )
+
+  const verifyTwoFactor = React.useCallback(
+    async (
+      twoFactorToken: string,
+      code: string,
+      method: "password" | "passkey" = "password"
+    ): Promise<AuthResult> => {
+      try {
+        const session = await apiVerifyTwoFactorLogin({
+          twoFactorToken,
+          code,
+          method,
+        })
+        await hydrateWorkspace(session)
+        emitAuthEvent({ type: "session-updated" })
+        return { success: true }
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : "两步验证失败",
         }
       }
     },
@@ -1374,6 +1423,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateProfile,
     login,
     loginWithPasskey,
+    verifyTwoFactor,
     register,
     logout,
     verifyPassword,
@@ -1435,6 +1485,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated,
     login,
     loginWithPasskey,
+    verifyTwoFactor,
     logout,
     moveNodes,
     offlineTasks,

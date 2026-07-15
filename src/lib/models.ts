@@ -47,6 +47,7 @@ export interface AppUser {
   role: UserRole
   group: string
   registeredAt: string
+  twoFactorEnabled?: boolean
 }
 
 export interface AuthTokens {

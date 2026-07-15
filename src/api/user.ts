@@ -13,6 +13,7 @@ type RawUserResponse = {
   avatar?: string | null
   created_at?: string
   password_updated_at?: string | null
+  two_factor_enabled?: boolean
 }
 
 type RawLoginActivityEntry = {
@@ -30,6 +31,7 @@ export type ProfilePayload = {
   profile: UserProfile
   passwordUpdatedAt: string
   timezone: string
+  twoFactorEnabled: boolean
 }
 
 export type UserLoginActivityEntry = {
@@ -43,9 +45,11 @@ export type UserLoginActivityEntry = {
 }
 
 export type ChangePasswordRequest = {
-  currentPassword: string
+  currentPassword?: string
   newPassword: string
   confirmPassword: string
+  ceremonyId?: string
+  credential?: Record<string, unknown>
 }
 
 export type UserPreferencesPayload = {
@@ -97,6 +101,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
       role,
       group: buildGroupLabel(role, raw.group),
       registeredAt: formatDateTimeToSeconds(raw.created_at, timezone),
+      twoFactorEnabled: Boolean(raw.two_factor_enabled),
     },
     profile: {
       username,
@@ -109,6 +114,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
     },
     passwordUpdatedAt: formatDateTimeToSeconds(raw.password_updated_at ?? raw.created_at, timezone),
     timezone,
+    twoFactorEnabled: Boolean(raw.two_factor_enabled),
   }
 }
 
@@ -160,9 +166,10 @@ export async function changeCurrentPassword(token: string, payload: ChangePasswo
     method: "POST",
     token,
     body: {
-      current_password: payload.currentPassword,
+      ...(payload.currentPassword ? { current_password: payload.currentPassword } : {}),
       new_password: payload.newPassword,
       confirm_password: payload.confirmPassword,
+      ...(payload.ceremonyId ? { ceremony_id: payload.ceremonyId, credential: payload.credential } : {}),
     },
   })
 }
@@ -249,6 +256,85 @@ export async function renamePasskey(token: string, passkeyId: string, name: stri
   })
 
   return normalizePasskey(response, timezone)
+}
+
+export async function getTwoFactorStatus(token: string) {
+  return requestJson<{ enabled: boolean }>("/user/me/2fa", {
+    token,
+  })
+}
+
+export type TwoFactorSetupInitiateResponse = {
+  setup_token: string
+  secret: string
+  qr_uri: string
+}
+
+export async function initiateTwoFactorSetupWithPassword(
+  token: string,
+  password: string
+): Promise<TwoFactorSetupInitiateResponse> {
+  return requestJson<TwoFactorSetupInitiateResponse>("/user/me/2fa/setup/password", {
+    method: "POST",
+    token,
+    body: { password },
+  })
+}
+
+export async function initiateTwoFactorSetupWithPasskey(
+  token: string,
+  ceremonyId: string,
+  credential: Record<string, unknown>
+): Promise<TwoFactorSetupInitiateResponse> {
+  return requestJson<TwoFactorSetupInitiateResponse>("/user/me/2fa/setup/passkey", {
+    method: "POST",
+    token,
+    body: { ceremony_id: ceremonyId, credential },
+  })
+}
+
+export type TwoFactorSetupConfirmResponse = {
+  enabled: boolean
+  backup_codes: string[]
+}
+
+export async function confirmTwoFactorSetup(
+  token: string,
+  payload: { setupToken: string; secret: string; code: string }
+): Promise<{ enabled: boolean; backupCodes: string[] }> {
+  const response = await requestJson<TwoFactorSetupConfirmResponse>("/user/me/2fa/setup/confirm", {
+    method: "POST",
+    token,
+    body: {
+      setup_token: payload.setupToken,
+      secret: payload.secret,
+      code: payload.code,
+    },
+  })
+
+  return {
+    enabled: response.enabled,
+    backupCodes: response.backup_codes,
+  }
+}
+
+export type TwoFactorDisableRequest = {
+  code: string
+  password?: string
+  ceremonyId?: string
+  credential?: Record<string, unknown>
+}
+
+export async function disableTwoFactor(token: string, payload: TwoFactorDisableRequest) {
+  return requestJson<{ message: string }>("/user/me/2fa/disable", {
+    method: "POST",
+    token,
+    body: {
+      code: payload.code,
+      ...(payload.password ? { password: payload.password } : {}),
+      ...(payload.ceremonyId ? { ceremony_id: payload.ceremonyId, credential: payload.credential } : {}),
+    },
+  })
 }
 
 export function mergePasswordUpdatedAt(security: SecurityState, passwordUpdatedAt: string): SecurityState {

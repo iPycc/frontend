@@ -33,15 +33,28 @@ export type RawTokenPayload = {
 export type RawAuthResponse = {
   user?: Record<string, unknown>
   token?: RawTokenPayload
+  requires_2fa?: boolean
+  two_factor_token?: string
+  message?: string
   data?: {
     user?: Record<string, unknown>
     token?: RawTokenPayload
+    requires_2fa?: boolean
+    two_factor_token?: string
+    message?: string
   }
   session?: {
     user?: Record<string, unknown>
     token?: RawTokenPayload
+    requires_2fa?: boolean
+    two_factor_token?: string
+    message?: string
   }
 }
+
+export type LoginResult =
+  | ({ kind: "session" } & AuthSession)
+  | { kind: "2fa"; twoFactorToken: string; method: "password" | "passkey"; message?: string }
 
 export function normalizeRole(value: unknown): AppUser["role"] {
   const role = String(value ?? "").toLowerCase()
@@ -152,13 +165,42 @@ function normalizeAuthSession(payload: RawAuthResponse): AuthSession {
   }
 }
 
-export async function login(request: LoginRequest) {
+function normalizeLoginResult(
+  payload: RawAuthResponse,
+  method: "password" | "passkey"
+): LoginResult {
+  const requires2fa =
+    payload.requires_2fa ??
+    payload.data?.requires_2fa ??
+    payload.session?.requires_2fa ??
+    false
+  const twoFactorToken =
+    payload.two_factor_token ??
+    payload.data?.two_factor_token ??
+    payload.session?.two_factor_token
+
+  if (requires2fa && twoFactorToken) {
+    return {
+      kind: "2fa",
+      twoFactorToken,
+      method,
+      message: payload.message ?? payload.data?.message ?? payload.session?.message,
+    }
+  }
+
+  return {
+    kind: "session",
+    ...normalizeAuthSession(payload),
+  }
+}
+
+export async function login(request: LoginRequest): Promise<LoginResult> {
   const response = await requestJson<RawAuthResponse>("/session/token", {
     method: "POST",
     body: request,
   })
 
-  return normalizeAuthSession(response)
+  return normalizeLoginResult(response, "password")
 }
 
 export async function register(request: RegisterRequest) {
@@ -198,12 +240,33 @@ export async function beginPasskeyLogin(email?: string) {
   })
 }
 
-export async function finishPasskeyLogin(payload: { ceremonyId: string; credential: Record<string, unknown> }) {
+export async function finishPasskeyLogin(payload: {
+  ceremonyId: string
+  credential: Record<string, unknown>
+}): Promise<LoginResult> {
   const response = await requestJson<RawAuthResponse>("/session/passkey/verify", {
     method: "POST",
     body: {
       ceremony_id: payload.ceremonyId,
       credential: payload.credential,
+    },
+    skipAuthRefresh: true,
+  })
+
+  return normalizeLoginResult(response, "passkey")
+}
+
+export async function verifyTwoFactorLogin(payload: {
+  twoFactorToken: string
+  code: string
+  method?: "password" | "passkey"
+}): Promise<AuthSession> {
+  const response = await requestJson<RawAuthResponse>("/session/2fa/verify", {
+    method: "POST",
+    body: {
+      two_factor_token: payload.twoFactorToken,
+      code: payload.code,
+      method: payload.method ?? "password",
     },
     skipAuthRefresh: true,
   })

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { ArrowLeft, Loader2, Mail, RectangleEllipsis } from "lucide-react"
+import { ArrowLeft, Loader2, Mail, RectangleEllipsis, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { ModeToggle } from "@/components/shared/ModeToggle"
@@ -20,13 +20,14 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Logo } from "@/components/ui/logo"
 import { Input } from "@/components/ui/input"
 import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
 
-type LoginPhase = "initial" | "email" | "password"
+type LoginPhase = "initial" | "email" | "password" | "twoFactor"
 
 function isPasskeyCanceledMessage(message: string | undefined) {
   const normalized = (message || "").trim()
@@ -39,14 +40,21 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { login, loginWithPasskey } = useAppState()
+  const { login, loginWithPasskey, verifyTwoFactor } = useAppState()
   const state = location.state as { fromRegister?: boolean; initialHeight?: number } | null
 
   const [phase, setPhase] = useState<LoginPhase>("initial")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [isAnimating, setIsAnimating] = useState(false)
-  const [isGoingBack, setIsGoingBack] = useState(false)
+  const [twoFactorToken, setTwoFactorToken] = useState<string>("")
+  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey">("password")
+  const [otpCode, setOtpCode] = useState("")
+  const [slideTransition, setSlideTransition] = useState<{
+    isAnimating: boolean
+    isGoingBack: boolean
+    leavingPhase: LoginPhase
+    enteringPhase: LoginPhase
+  } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEnteringApp, setIsEnteringApp] = useState(false)
   const [containerHeight, setContainerHeight] = useState<number | "auto">(
@@ -76,11 +84,15 @@ export function LoginForm({
       return
     }
 
-    setIsGoingBack(goingBack)
-    setIsAnimating(true)
+    setSlideTransition({
+      isAnimating: true,
+      isGoingBack: goingBack,
+      leavingPhase: phase,
+      enteringPhase: nextPhase,
+    })
     setTimeout(() => {
       setPhase(nextPhase)
-      setTimeout(() => setIsAnimating(false), 50)
+      setTimeout(() => setSlideTransition(null), 50)
     }, 300)
   }
 
@@ -106,6 +118,14 @@ export function LoginForm({
         return
       }
 
+      if (result.message === "requires_2fa" && result.twoFactorToken) {
+        setTwoFactorToken(result.twoFactorToken)
+        setTwoFactorMethod(result.method ?? "password")
+        setOtpCode("")
+        handlePhaseChange("twoFactor")
+        return
+      }
+
       toast.error("登录失败", {
         description: result.message || "请检查邮箱和密码后重试。",
       })
@@ -120,7 +140,45 @@ export function LoginForm({
     }
   }
 
+  const handleTwoFactorSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (isLoading || isEnteringApp || otpCode.length !== 6) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const result = await verifyTwoFactor(twoFactorToken, otpCode, twoFactorMethod)
+      if (result.success) {
+        setIsEnteringApp(true)
+        navigate("/app")
+        return
+      }
+
+      toast.error("两步验证失败", {
+        description: result.message || "验证码错误，请检查后重试。",
+      })
+    } catch (error) {
+      console.error("两步验证错误:", error)
+      toast.error("两步验证异常", {
+        description: "当前无法完成验证，请稍后再试。",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleBack = () => {
+    if (phase === "twoFactor") {
+      if (twoFactorMethod === "passkey") {
+        handlePhaseChange("initial", true)
+      } else {
+        handlePhaseChange("password", true)
+      }
+      setOtpCode("")
+      return
+    }
+
     if (phase === "password") {
       handlePhaseChange("email", true)
       return
@@ -150,6 +208,14 @@ export function LoginForm({
         return
       }
 
+      if (result.message === "requires_2fa" && result.twoFactorToken) {
+        setTwoFactorToken(result.twoFactorToken)
+        setTwoFactorMethod(result.method ?? "passkey")
+        setOtpCode("")
+        handlePhaseChange("twoFactor")
+        return
+      }
+
       if (isPasskeyCanceledMessage(result.message)) {
         toast("通行密钥", {
           description: "用户已取消登录",
@@ -176,6 +242,9 @@ export function LoginForm({
     }
     if (phase === "email") {
       return "登录你的账号"
+    }
+    if (phase === "twoFactor") {
+      return "两步验证"
     }
     return "请输入密码"
   }
@@ -211,6 +280,11 @@ export function LoginForm({
               请输入账号 <span className="font-medium text-foreground">{email}</span> 对应的密码
             </CardDescription>
           ) : null}
+          {phase === "twoFactor" ? (
+            <CardDescription>
+              请输入验证应用生成的 6 位验证码以继续登录
+            </CardDescription>
+          ) : null}
         </CardHeader>
 
         <CardContent>
@@ -229,10 +303,22 @@ export function LoginForm({
               ref={contentRef}
               className={cn(
                 "slide-phase",
-                isAnimating && !isGoingBack && (phase === "email" || phase === "password") && "slide-enter slide-enter-active",
-                isAnimating && !isGoingBack && phase === "initial" && "slide-exit slide-exit-active",
-                isAnimating && isGoingBack && (phase === "initial" || phase === "email") && "slide-back-enter slide-back-enter-active",
-                isAnimating && isGoingBack && (phase === "email" || phase === "password") && "slide-back-exit slide-back-exit-active"
+                slideTransition?.isAnimating &&
+                  !slideTransition.isGoingBack &&
+                  slideTransition.leavingPhase === phase &&
+                  "slide-exit slide-exit-active",
+                slideTransition?.isAnimating &&
+                  !slideTransition.isGoingBack &&
+                  slideTransition.enteringPhase === phase &&
+                  "slide-enter slide-enter-active",
+                slideTransition?.isAnimating &&
+                  slideTransition.isGoingBack &&
+                  slideTransition.leavingPhase === phase &&
+                  "slide-back-exit slide-back-exit-active",
+                slideTransition?.isAnimating &&
+                  slideTransition.isGoingBack &&
+                  slideTransition.enteringPhase === phase &&
+                  "slide-back-enter slide-back-enter-active"
               )}
             >
               {phase === "initial" ? (
@@ -356,6 +442,60 @@ export function LoginForm({
                           </>
                         ) : (
                           "登录"
+                        )}
+                      </Button>
+                    </Field>
+
+                    <Field>
+                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp} className="w-full">
+                        <ArrowLeft className="size-4" />
+                        上一步
+                      </Button>
+                    </Field>
+                  </FieldGroup>
+                </form>
+              ) : null}
+
+              {phase === "twoFactor" ? (
+                <form onSubmit={handleTwoFactorSubmit}>
+                  <FieldGroup>
+                    <Field>
+                      <div className="flex flex-row gap-2">
+                        <ShieldCheck className="size-5" />
+                        <FieldLabel htmlFor="otp">验证码</FieldLabel>
+                      </div>
+                      <InputOTP
+                        id="otp"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={setOtpCode}
+                        disabled={isLoading || isEnteringApp}
+                        autoFocus
+                        pushPasswordManagerStrategy="none"
+                      >
+                        <InputOTPGroup>
+                          <InputOTPSlot index={0} />
+                          <InputOTPSlot index={1} />
+                          <InputOTPSlot index={2} />
+                          <InputOTPSlot index={3} />
+                          <InputOTPSlot index={4} />
+                          <InputOTPSlot index={5} />
+                        </InputOTPGroup>
+                      </InputOTP>
+                      <FieldDescription>
+                        打开你的验证应用查看 6 位验证码
+                      </FieldDescription>
+                    </Field>
+
+                    <Field>
+                      <Button type="submit" disabled={isLoading || isEnteringApp || otpCode.length !== 6} className="w-full">
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin" />
+                            验证中...
+                          </>
+                        ) : (
+                          "验证并登录"
                         )}
                       </Button>
                     </Field>
