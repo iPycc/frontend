@@ -20,7 +20,7 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "@/components/ui/field"
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { Logo } from "@/components/ui/logo"
 import { Input } from "@/components/ui/input"
 import { useAppState } from "@/lib/app-state"
@@ -57,13 +57,16 @@ export function LoginForm({
   } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEnteringApp, setIsEnteringApp] = useState(false)
+  const [isLeavingToRegister, setIsLeavingToRegister] = useState(false)
+  const [enableHeightTransition, setEnableHeightTransition] = useState(false)
   const [containerHeight, setContainerHeight] = useState<number | "auto">(
     state?.fromRegister && state?.initialHeight ? state.initialHeight : "auto"
   )
   const contentRef = useRef<HTMLDivElement>(null)
+  const hasMeasuredInitialHeight = useRef(false)
 
   useEffect(() => {
-    if (!contentRef.current) {
+    if (!contentRef.current || isLeavingToRegister) {
       return
     }
 
@@ -71,13 +74,18 @@ export function LoginForm({
     if (state?.fromRegister) {
       requestAnimationFrame(() => {
         setContainerHeight(height)
+        setEnableHeightTransition(true)
         window.history.replaceState({}, document.title)
       })
       return
     }
 
     setContainerHeight(height)
-  }, [phase, state?.fromRegister])
+    if (hasMeasuredInitialHeight.current) {
+      setEnableHeightTransition(true)
+    }
+    hasMeasuredInitialHeight.current = true
+  }, [phase, state?.fromRegister, isLeavingToRegister])
 
   const handlePhaseChange = (nextPhase: LoginPhase, goingBack = false) => {
     if (phase === nextPhase) {
@@ -191,7 +199,16 @@ export function LoginForm({
 
   const handleGoToRegister = (event: React.MouseEvent) => {
     event.preventDefault()
-    navigate("/register", { state: { fromLogin: true, initialHeight: containerHeight } })
+    if (isLeavingToRegister) {
+      return
+    }
+
+    setIsLeavingToRegister(true)
+    setEnableHeightTransition(true)
+    setContainerHeight(422)
+    setTimeout(() => {
+      navigate("/register", { state: { fromLogin: true, initialHeight: 432 } })
+    }, 300)
   }
 
   const handlePasskeyLogin = async () => {
@@ -289,10 +306,10 @@ export function LoginForm({
 
         <CardContent>
           <div
-            className={state?.fromRegister ? "slide-container" : ""}
+            className="slide-container"
             style={{
               height: containerHeight === "auto" ? "auto" : `${containerHeight + 10}px`,
-              transition: state?.fromRegister ? "height 0.3s ease-in-out" : "none",
+              transition: enableHeightTransition ? "height 0.3s ease-in-out" : "none",
               overflow: "hidden",
               position: "relative",
               padding: "3px",
@@ -372,7 +389,7 @@ export function LoginForm({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={isLoading || isEnteringApp}
+                        disabled={isLoading || isEnteringApp || isLeavingToRegister}
                         className="w-full"
                         onClick={() => void handlePasskeyLogin()}
                       >
@@ -381,7 +398,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isEnteringApp} className="w-full">
+                      <Button type="submit" disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
@@ -393,7 +410,14 @@ export function LoginForm({
                       </Button>
                       <FieldDescription className="text-center">
                         还没有账号？{" "}
-                        <a href="#" onClick={handleGoToRegister} className="underline-offset-4 hover:underline">
+                        <a
+                          href="#"
+                          onClick={handleGoToRegister}
+                          className={cn(
+                            "underline-offset-4 hover:underline",
+                            isLeavingToRegister && "pointer-events-none opacity-50"
+                          )}
+                        >
                           立即注册
                         </a>
                       </FieldDescription>
@@ -434,7 +458,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isEnteringApp} className="w-full">
+                      <Button type="submit" disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
@@ -447,7 +471,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp} className="w-full">
+                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         <ArrowLeft className="size-4" />
                         上一步
                       </Button>
@@ -469,14 +493,18 @@ export function LoginForm({
                         maxLength={6}
                         value={otpCode}
                         onChange={setOtpCode}
-                        disabled={isLoading || isEnteringApp}
+                        disabled={isLoading || isEnteringApp || isLeavingToRegister}
                         autoFocus
                         pushPasswordManagerStrategy="none"
+                        className="w-full"
                       >
-                        <InputOTPGroup>
+                        <InputOTPGroup className="flex-1 *:data-[slot=input-otp-slot]:flex-1 *:data-[slot=input-otp-slot]:h-10 *:data-[slot=input-otp-slot]:sm:h-12 *:data-[slot=input-otp-slot]:text-lg *:data-[slot=input-otp-slot]:sm:text-xl">
                           <InputOTPSlot index={0} />
                           <InputOTPSlot index={1} />
                           <InputOTPSlot index={2} />
+                        </InputOTPGroup>
+                        <InputOTPSeparator />
+                        <InputOTPGroup className="flex-1 *:data-[slot=input-otp-slot]:flex-1 *:data-[slot=input-otp-slot]:h-10 *:data-[slot=input-otp-slot]:sm:h-12 *:data-[slot=input-otp-slot]:text-lg *:data-[slot=input-otp-slot]:sm:text-xl">
                           <InputOTPSlot index={3} />
                           <InputOTPSlot index={4} />
                           <InputOTPSlot index={5} />
@@ -501,7 +529,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp} className="w-full">
+                      <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         <ArrowLeft className="size-4" />
                         上一步
                       </Button>
