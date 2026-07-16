@@ -14,6 +14,37 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (
+                ['react', 'react-dom', 'react-router-dom'].some((pkg) =>
+                  id.includes(`node_modules/${pkg}`),
+                )
+              ) {
+                return 'vendor';
+              }
+              if (
+                [
+                  '@radix-ui',
+                  'radix-ui',
+                  'lucide-react',
+                  'class-variance-authority',
+                  'clsx',
+                  'tailwind-merge',
+                  'framer-motion',
+                  'motion',
+                ].some((pkg) => id.includes(`node_modules/${pkg}`))
+              ) {
+                return 'ui';
+              }
+            }
+          },
+        },
+      },
+    },
     server: {
       host: true,
       allowedHosts: true,
