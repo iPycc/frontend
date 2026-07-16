@@ -111,3 +111,7 @@ export async function permanentlyDeleteRecycleNodes(token: string, body: DeleteN
 export function buildDownloadUrl(nodeId: number) {
   return `/api/v1/explorer/download/${nodeId}`
 }
+
+export function buildFolderDownloadUrl(nodeId: number) {
+  return `/api/v1/explorer/download/folder/${nodeId}`
+}

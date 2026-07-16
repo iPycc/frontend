@@ -86,8 +86,55 @@ export function buildGroupLabel(role: AppUser["role"], fallback?: unknown) {
   }
 }
 
-function buildAvatar(seed: string) {
-  return `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(seed)}`
+function stringToHash(seed: string): number {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+function hashToHsl(hash: number, offset = 0): string {
+  const hue = (hash + offset * 137) % 360
+  const saturation = 55 + ((hash >> 3) % 25)
+  const lightness = 45 + ((hash >> 6) % 15)
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+export function buildAvatar(seed: string): string {
+  const hash = stringToHash(seed)
+  const bg = hashToHsl(hash, 0)
+  const fg = "#ffffff"
+  const patternIndex = hash % 4
+
+  let pattern = ""
+  if (patternIndex === 0) {
+    pattern = `<circle cx='50' cy='50' r='40' fill='${fg}' opacity='0.15'/>`
+  } else if (patternIndex === 1) {
+    pattern = `<rect x='20' y='20' width='60' height='60' rx='12' fill='${fg}' opacity='0.12'/>`
+  } else if (patternIndex === 2) {
+    pattern = `<path d='M50 15 L85 85 H15 Z' fill='${fg}' opacity='0.12'/>`
+  } else {
+    pattern = `<circle cx='50' cy='50' r='25' fill='none' stroke='${fg}' stroke-width='8' opacity='0.15'/>`
+  }
+
+  const svg = `
+    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+      <rect width='100' height='100' fill='${bg}'/>
+      ${pattern}
+      <text x='50' y='55' font-family='Inter, Noto Sans SC, sans-serif' font-size='36' font-weight='600'
+            fill='${fg}' text-anchor='middle' dominant-baseline='middle'>
+        ${seed.charAt(0).toUpperCase()}
+      </text>
+    </svg>
+  `.trim()
+
+  const encoded = svg
+    .replace(/"/g, "'")
+    .replace(/\s+/g, " ")
+    .replace(/> </g, "><")
+  return `data:image/svg+xml,${encodeURIComponent(encoded)}`
 }
 
 export function formatDateTimeToSeconds(value: unknown, timezone?: string) {

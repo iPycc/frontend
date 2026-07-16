@@ -1,15 +1,17 @@
-import { useMemo } from "react"
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { motion } from "motion/react"
+import { motion, AnimatePresence } from "motion/react"
 import {
   IconCopy,
-  IconDownload,
+  IconEdit,
+  IconExternalLink,
   IconEye,
-  IconLink,
+  IconFolderOff,
+  IconRefresh,
   IconShare,
   IconTrash,
-  IconFolderOff,
+  IconChevronDown,
 } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
@@ -18,56 +20,97 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 
-function formatExpiry(value?: string) {
-  if (!value) return "永久有效"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  const diff = date.getTime() - Date.now()
-  if (diff < 0) return "已过期"
-  const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
-  if (days <= 1) return "今天过期"
-  return `${days} 天后过期`
-}
+type SortOption = "newest" | "oldest" | "views"
 
-function formatDate(value?: string) {
+function formatRelativeTime(value?: string) {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  const now = Date.now()
+  const diff = now - date.getTime()
+  const minutes = Math.floor(diff / (1000 * 60))
+  if (minutes < 1) return "刚刚"
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  return date.toLocaleDateString("zh-CN")
 }
 
 export function Shares() {
   usePageTitle("我的分享")
   const navigate = useNavigate()
-  const { getShareRecords, deleteShares, formatBytes, isAuthenticated } = useAppState()
+  const { getShareRecords, deleteShares, reloadWorkspace, isAuthenticated } = useAppState()
   const shares = getShareRecords()
+  const [sortBy, setSortBy] = useState<SortOption>("newest")
+  const [sortOpen, setSortOpen] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const sortRef = useRef<HTMLDivElement>(null)
 
-  const stats = useMemo(() => {
-    const active = shares.filter((item) => !item.expiresAt || new Date(item.expiresAt) > new Date()).length
-    const views = shares.reduce((sum, item) => sum + (item.views || 0), 0)
-    const downloads = shares.reduce((sum, item) => sum + (item.downloads || 0), 0)
-    return { total: shares.length, active, views, downloads }
-  }, [shares])
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null)
+      }
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setSortOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  const sortedShares = [...shares].sort((a, b) => {
+    if (sortBy === "newest") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    }
+    if (sortBy === "oldest") {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    }
+    return (b.views || 0) - (a.views || 0)
+  })
 
   const handleCopy = async (slug: string) => {
     const url = `${window.location.origin}/share/${slug}`
     try {
       await navigator.clipboard.writeText(url)
-      toast.success("分享链接已复制")
+      toast.success("分享链接已复制到剪贴板")
     } catch {
       toast.error("复制失败")
     }
+    setContextMenu(null)
   }
 
-  const handleDelete = (id: string) => {
-    deleteShares([id])
+  const handleOpen = (slug: string) => {
+    window.open(`/share/${slug}`, "_blank", "noopener,noreferrer")
+    setContextMenu(null)
+  }
+
+  const handleDelete = async (id: string) => {
+    await deleteShares([id])
     toast.success("分享链接已删除")
+    setContextMenu(null)
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await reloadWorkspace()
+    setRefreshing(false)
+  }
+
+  const handleContextMenu = (e: ReactMouseEvent, id: string) => {
+    e.preventDefault()
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setContextMenu({ id, x: rect.left, y: rect.bottom + 4 })
+  }
+
+  const sortLabels: Record<SortOption, string> = {
+    newest: "最新",
+    oldest: "最早",
+    views: "访问最多",
   }
 
   if (!isAuthenticated) {
@@ -87,42 +130,60 @@ export function Shares() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-6 shadow-sm sm:p-8">
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">我的分享</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              管理和追踪你分享给他人的文件链接，随时复制或撤销访问权限。
-            </p>
-          </div>
-          <Button onClick={() => navigate("/app")}>
-            <IconShare size={16} className="mr-1.5" />
-            去分享文件
-          </Button>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">我的分享</h1>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="刷新"
+          >
+            <IconRefresh size={22} className={cn(refreshing && "animate-spin")} />
+          </button>
         </div>
 
-        <div className="relative z-10 mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "分享总数", value: stats.total },
-            { label: "有效链接", value: stats.active },
-            { label: "总访问量", value: stats.views },
-            { label: "总下载量", value: stats.downloads },
-          ].map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05, duration: 0.25 }}
-              className="rounded-xl border border-border/50 bg-background/70 p-4"
-            >
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-              <p className="mt-1 text-xl font-semibold">{stat.value.toLocaleString("zh-CN")}</p>
-            </motion.div>
-          ))}
+        <div ref={sortRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setSortOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/50"
+          >
+            {sortLabels[sortBy]}
+            <IconChevronDown size={16} className={cn("transition-transform", sortOpen && "rotate-180")} />
+          </button>
+          <AnimatePresence>
+            {sortOpen ? (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full z-50 mt-1.5 w-36 overflow-hidden rounded-xl border border-border/60 bg-popover shadow-lg"
+              >
+                {(Object.keys(sortLabels) as SortOption[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setSortBy(key)
+                      setSortOpen(false)
+                    }}
+                    className={cn(
+                      "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-muted",
+                      sortBy === key ? "text-primary font-medium" : "text-foreground"
+                    )}
+                  >
+                    {sortLabels[key]}
+                  </button>
+                ))}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
-      </section>
+      </div>
 
-      {shares.length === 0 ? (
+      {sortedShares.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-border/60 bg-card p-12 text-center shadow-sm">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
             <IconFolderOff size={36} className="text-muted-foreground" />
@@ -136,106 +197,98 @@ export function Shares() {
           </Button>
         </div>
       ) : (
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shares.map((item, index) => {
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {sortedShares.map((item, index) => {
             const node = item.node
-            const url = `${window.location.origin}/share/${item.id}`
             const expired = item.expiresAt ? new Date(item.expiresAt) <= new Date() : false
-
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.04, duration: 0.25 }}
-                className="group flex flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                transition={{ delay: index * 0.03, duration: 0.2 }}
+                onContextMenu={(e) => handleContextMenu(e, item.id)}
+                className={cn(
+                  "group relative flex cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 shadow-sm transition-all hover:border-border hover:shadow-md",
+                  expired && "opacity-60"
+                )}
+                onClick={() => handleOpen(item.id)}
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted">
-                    {node ? <FileGlyph item={node} size={22} /> : <IconLink size={22} className="text-muted-foreground" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-medium" title={node?.name || "已删除文件"}>
-                      {node?.name || "已删除文件"}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {node?.kind === "folder" ? "文件夹" : node?.ext?.toUpperCase() || "文件"}
-                      {node?.size ? ` · ${formatBytes(node.size)}` : ""}
-                    </p>
-                  </div>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center">
+                  {node ? <FileGlyph item={node} size={28} /> : <IconShare size={24} className="text-muted-foreground" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-base font-medium" title={node?.name || "已删除文件"}>
+                    {node?.name || "已删除文件"}
+                  </h3>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {formatRelativeTime(item.createdAt)}
+                    {item.maxDownloads ? ` · ${item.downloads || 0}/${item.maxDownloads} 次` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+                  <IconEye size={16} />
+                  <span>{item.views || 0}</span>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2">
-                  <div className="flex flex-1 items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-2.5 py-1.5">
-                    <IconLink size={14} className="shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 truncate text-xs text-muted-foreground">/share/{item.id}</span>
+                {expired ? (
+                  <div className="absolute -top-2 right-2 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground">
+                    已过期
                   </div>
-                  <Button
-                    variant="outline"
-                    size="icon-xs"
-                    onClick={() => handleCopy(item.id)}
-                    aria-label="复制链接"
-                  >
-                    <IconCopy size={13} />
-                  </Button>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
-                      item.access === "公开访问"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                    )}
-                  >
-                    {item.access}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-medium",
-                      expired
-                        ? "bg-destructive/10 text-destructive"
-                        : "bg-primary/10 text-primary"
-                    )}
-                  >
-                    {formatExpiry(item.expiresAt)}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1">
-                      <IconEye size={14} />
-                      {item.views || 0}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <IconDownload size={14} />
-                      {item.downloads || 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon-xs" onClick={() => handleCopy(item.id)} aria-label="复制">
-                      <IconCopy size={13} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => handleDelete(item.id)}
-                      aria-label="删除"
-                    >
-                      <IconTrash size={13} />
-                    </Button>
-                  </div>
-                </div>
-
-                <p className="mt-3 text-[11px] text-muted-foreground">创建于 {formatDate(item.createdAt)}</p>
+                ) : null}
               </motion.div>
             )
           })}
-        </section>
+        </div>
       )}
+
+      <AnimatePresence>
+        {contextMenu ? (
+          <motion.div
+            ref={menuRef}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            className="fixed z-50 min-w-[180px] overflow-hidden rounded-xl border border-border/60 bg-popover py-1 shadow-xl"
+          >
+            <button
+              type="button"
+              onClick={() => handleOpen(contextMenu.id)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-muted"
+            >
+              <IconExternalLink size={16} className="text-muted-foreground" />
+              打开
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCopy(contextMenu.id)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-muted"
+            >
+              <IconCopy size={16} className="text-muted-foreground" />
+              复制链接到剪贴板
+            </button>
+            <button
+              type="button"
+              onClick={() => setContextMenu(null)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-muted"
+            >
+              <IconEdit size={16} className="text-muted-foreground" />
+              编辑
+            </button>
+            <div className="my-1 h-px bg-border/60" />
+            <button
+              type="button"
+              onClick={() => handleDelete(contextMenu.id)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <IconTrash size={16} />
+              删除
+            </button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }

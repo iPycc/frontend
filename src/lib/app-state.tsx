@@ -22,6 +22,14 @@ import {
   type ExplorerNode,
 } from "@/api/files"
 import { checkBackendHealth } from "@/api/system"
+import {
+  createShare as apiCreateShare,
+  listMyShares as apiListMyShares,
+  revokeShare as apiRevokeShare,
+  ShareAccess,
+  type ShareCreateInput,
+  type ShareRead,
+} from "@/api/share"
 import { abortUpload, completeUpload, createUploadSession, recordRemotePart, sha256File, uploadLocalPart } from "@/api/uploads"
 import { getCurrentProfile, getLoginActivity, getTwoFactorStatus } from "@/api/user"
 import {
@@ -57,6 +65,13 @@ type AuthRegisterInput = {
   email: string
   password: string
   username: string
+}
+
+type ShareCreateOptions = {
+  access?: "public" | "password"
+  password?: string
+  expiresInHours?: number | null
+  maxDownloads?: number | null
 }
 
 type AuthResult = {
@@ -138,8 +153,8 @@ type AppStateValue = {
   deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<void>
   restoreNodes: (nodeIds: string[]) => Promise<void>
   permanentlyDeleteNodes: (nodeIds: string[]) => Promise<void>
-  shareNodes: (nodeIds: string[]) => Promise<ShareRecord[]>
-  deleteShares: (shareIds: string[]) => void
+  shareNodes: (nodeIds: string[], options?: ShareCreateOptions) => Promise<ShareRecord[]>
+  deleteShares: (shareIds: string[]) => Promise<void>
   recordShareView: (shareId: string) => void
   recordShareDownload: (shareId: string) => void
   copyNodes: (nodeIds: string[]) => void
@@ -543,10 +558,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const token = session.tokens.accessToken
       const profilePayload = await getCurrentProfile(token)
       const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
-      const [loginActivityEntries, rawMounts, recycleEntries] = await Promise.all([
+      const [loginActivityEntries, rawMounts, recycleEntries, rawShares] = await Promise.all([
         getLoginActivity(token, timezone),
         listUserMounts(token),
         listRecycle(token),
+        apiListMyShares(token).catch(() => [] as ShareRead[]),
       ])
 
       const nextSession: AuthSession = {
@@ -608,7 +624,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           buckets[0]?.id ??
           "",
         nodes: Array.from(nodesMap.values()),
-        shares: current.shares,
+        shares: rawShares.map((share) => {
+          const node = nodesMap.get(String(share.node_id))
+          return {
+            ...mapShareRead(share),
+            nodeName: node?.name,
+            nodeKind: node?.kind,
+            nodeExt: node?.ext,
+            nodeSize: node?.size,
+            nodeMediaType: node?.mediaType,
+            nodePreview: node?.preview,
+          }
+        }),
         fileContents: {},
       }))
     },
@@ -1195,50 +1222,90 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await deleteNodes(nodeIds, true)
   }, [deleteNodes])
 
+  const mapShareRead = (share: ShareRead): ShareRecord => ({
+    id: share.id,
+    nodeId: String(share.node_id),
+    access: share.access === ShareAccess.PASSWORD ? "密码访问" : "公开访问",
+    expiresAt: share.expires_at ?? "",
+    createdAt: share.created_at,
+    views: share.view_count,
+    downloads: share.download_count,
+    maxDownloads: share.max_downloads,
+  })
+
   const shareNodes = React.useCallback(
-    async (nodeIds: string[]) => {
+    async (nodeIds: string[], options: ShareCreateOptions = {}) => {
+      const session = snapshotRef.current.auth.session
       const nodes = nodeIds
         .map((id) => snapshotRef.current.nodes.find((node) => node.id === id))
         .filter(Boolean) as FileNode[]
 
-      if (nodes.length === 0) {
+      if (!session || nodes.length === 0) {
         toast.info("当前没有可分享的文件")
         return [] as ShareRecord[]
       }
 
-      const newRecords: ShareRecord[] = nodes.map((node) => ({
-        id: createShareSlug(),
-        nodeId: node.id,
-        access: "公开访问",
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        views: 0,
-        downloads: 0,
-        nodeName: node.name,
-        nodeKind: node.kind,
-        nodeExt: node.ext,
-        nodeSize: node.size,
-        nodeMediaType: node.mediaType,
-        nodePreview: node.preview,
+      const inputs: ShareCreateInput[] = nodes.map((node) => ({
+        node_id: node.backendId ?? Number(node.id),
+        access: options.access === "password" ? ShareAccess.PASSWORD : ShareAccess.PUBLIC,
+        password: options.access === "password" && options.password ? options.password : null,
+        expires_in_hours: options.expiresInHours ?? null,
+        max_downloads: options.maxDownloads ?? null,
       }))
 
-      updateSnapshot((current) => ({
-        ...current,
-        shares: [...current.shares, ...newRecords],
-      }))
+      try {
+        const created = await Promise.all(
+          inputs.map((input) => apiCreateShare(session.tokens.accessToken, input))
+        )
+        const newRecords: ShareRecord[] = created.map((share) => {
+          const node = nodes.find((n) => n.backendId === share.node_id) ?? nodes[0]
+          return {
+            ...mapShareRead(share),
+            nodeName: node.name,
+            nodeKind: node.kind,
+            nodeExt: node.ext,
+            nodeSize: node.size,
+            nodeMediaType: node.mediaType,
+            nodePreview: node.preview,
+          }
+        })
 
-      toast.success(`已生成 ${newRecords.length} 条分享链接`)
-      return newRecords
+        updateSnapshot((current) => ({
+          ...current,
+          shares: [...current.shares, ...newRecords],
+        }))
+
+        toast.success(`已生成 ${newRecords.length} 条分享链接`)
+        return newRecords
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "创建分享失败")
+        return [] as ShareRecord[]
+      }
     },
     [updateSnapshot]
   )
 
   const deleteShares = React.useCallback(
-    (shareIds: string[]) => {
-      updateSnapshot((current) => ({
-        ...current,
-        shares: current.shares.filter((record) => !shareIds.includes(record.id)),
-      }))
+    async (shareIds: string[]) => {
+      const session = snapshotRef.current.auth.session
+      if (!session) {
+        updateSnapshot((current) => ({
+          ...current,
+          shares: current.shares.filter((record) => !shareIds.includes(record.id)),
+        }))
+        return
+      }
+
+      try {
+        await Promise.all(shareIds.map((id) => apiRevokeShare(session.tokens.accessToken, id)))
+        updateSnapshot((current) => ({
+          ...current,
+          shares: current.shares.filter((record) => !shareIds.includes(record.id)),
+        }))
+        toast.success("分享链接已删除")
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "删除分享失败")
+      }
     },
     [updateSnapshot]
   )

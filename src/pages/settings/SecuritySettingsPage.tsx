@@ -995,6 +995,13 @@ function ChangePasswordDialog({ open, onOpenChange, token, userEmail, hasPasskey
       return
     }
 
+    if (newPassword.length < 8 || confirmPassword.length < 8) {
+      toast.error("修改密码失败", {
+        description: "新密码长度不能少于 8 位。",
+      })
+      return
+    }
+
     if (newPassword !== confirmPassword) {
       toast.error("修改密码失败", {
         description: "两次输入的新密码不一致。",

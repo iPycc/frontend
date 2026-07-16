@@ -1,9 +1,12 @@
-import { Outlet } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 
-import { ShareFooter } from "./ShareFooter"
+import { FilingBar } from "@/components/shared/FilingBar"
 import { ShareNavbar } from "./ShareNavbar"
 
 export function ShareLayout() {
+  const location = useLocation()
+  const hideFooter = location.pathname === "/share"
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -14,7 +17,7 @@ export function ShareLayout() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
         <Outlet />
       </main>
-      <ShareFooter />
+      {!hideFooter && <FilingBar className="shrink-0 border-t border-border/60 bg-background/95" />}
     </div>
   )
 }

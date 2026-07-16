@@ -151,6 +151,8 @@ export interface ShareRecord {
   createdAt: string
   views: number
   downloads: number
+  maxDownloads?: number | null
+  password?: string | null
   nodeName?: string
   nodeKind?: "folder" | "file"
   nodeExt?: string

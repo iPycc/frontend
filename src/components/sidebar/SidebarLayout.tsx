@@ -33,6 +33,7 @@ import { BucketSwitcher } from "./BucketSwitcher"
 import { SidebarFolderTree, buildTree } from "./SidebarFolderTree"
 import { SidebarNavItem } from "./SidebarNavItem"
 import { SidebarQuota } from "./SidebarQuota"
+import { SidebarFooterContent } from "@/components/shared/SidebarFooterContent"
 
 const utilityPaths = [
   "/app/shared-with-me",
@@ -214,6 +215,7 @@ export function SidebarLayout() {
             formatBytes={formatBytes}
           />
         ) : null}
+        <SidebarFooterContent className="mt-3" />
       </SidebarFooter>
     </Sidebar>
   )

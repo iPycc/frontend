@@ -1,4 +1,4 @@
-import { buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
+import { buildAvatar, buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
 import { requestJson } from "@/api/client"
 import type { AppUser, PasskeyCredential, SecurityState, UserProfile } from "@/lib/models"
 
@@ -91,7 +91,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
   const timezone = typeof raw.timezone === "string" && raw.timezone.trim() ? raw.timezone : "Asia/Shanghai"
   const avatar = typeof raw.avatar === "string" && raw.avatar.trim()
     ? raw.avatar
-    : `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(username)}`
+    : buildAvatar(username)
 
   return {
     account: {

@@ -9,19 +9,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+function getInitials(name?: string) {
+  if (!name) return "?"
+  return name.slice(0, 2).toUpperCase()
+}
+
 export function UserMenu() {
   const navigate = useNavigate()
   const { currentUser, logout, profile } = useAppState()
   const roleLabel = currentUser?.role === "admin" ? "Admin" : "User"
+  const hasAvatar = Boolean(profile.avatar?.trim())
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="ml-1 h-10 w-10 overflow-hidden rounded-full border border-[#d6d6d6] bg-white focus:outline-none dark:border-white/10 dark:bg-[#171717]">
-        <img
-          src={profile.avatar}
-          alt={profile.username}
-          className="h-full w-full object-cover"
-        />
+      <DropdownMenuTrigger className="ml-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[#d6d6d6] bg-white focus:outline-none dark:border-white/10 dark:bg-[#171717]">
+        {hasAvatar ? (
+          <img
+            src={profile.avatar}
+            alt={profile.username}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="text-xs font-medium text-foreground/80">
+            {getInitials(profile.username || currentUser?.username)}
+          </span>
+        )}
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-64 rounded-xl p-1">

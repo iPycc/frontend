@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { NavLink, useNavigate } from "react-router-dom"
 import { IconMenu2, IconMoon, IconSun, IconX } from "@tabler/icons-react"
-import { motion, AnimatePresence } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/ui/logo"
@@ -42,23 +42,14 @@ export function ShareNavbar() {
               to={link.to}
               className={({ isActive }) =>
                 cn(
-                  "relative rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                  isActive && "text-foreground"
+                  "relative rounded-full px-4 py-2 text-sm font-medium transition-colors hover:text-foreground",
+                  isActive
+                    ? "bg-nav-active-bg text-nav-active-fg"
+                    : "text-muted-foreground"
                 )
               }
             >
-              {({ isActive }) => (
-                <>
-                  {link.label}
-                  {isActive && (
-                    <motion.span
-                      layoutId="share-nav-pill"
-                      className="absolute inset-0 -z-10 rounded-full bg-nav-active-bg"
-                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    />
-                  )}
-                </>
-              )}
+              {link.label}
             </NavLink>
           ))}
         </nav>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { motion } from "motion/react"
 import {
@@ -17,13 +17,17 @@ import { Input } from "@/components/ui/input"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
-import { buildDownloadUrl } from "@/api/files"
 import { requestResponse } from "@/api/client"
+import {
+  buildSharedDownloadUrl,
+  getShareInfo,
+  verifySharePassword,
+  type ShareNodeInfo,
+} from "@/api/share"
 import { cn } from "@/lib/utils"
-import { type FileNode } from "@/lib/models"
 import { ShareNotFound } from "./ShareNotFound"
 
-function formatDate(value?: string) {
+function formatDate(value?: string | null) {
   if (!value) return "-"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -36,7 +40,7 @@ function formatDate(value?: string) {
   })
 }
 
-function formatExpiry(value?: string) {
+function formatExpiry(value?: string | null) {
   if (!value) return "永久有效"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -49,58 +53,103 @@ function formatExpiry(value?: string) {
 
 export function ShareDetail() {
   const { slug } = useParams<{ slug: string }>()
-  const { shares, getNodeById, formatBytes, recordShareView, recordShareDownload } = useAppState()
+  const [searchParams] = useSearchParams()
+  const { shares, formatBytes, recordShareDownload } = useAppState()
   const [password, setPassword] = useState("")
-  const [passwordVerified, setPasswordVerified] = useState(false)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [info, setInfo] = useState<ShareNodeInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [verifyingPassword, setVerifyingPassword] = useState(false)
 
-  const share = useMemo(() => shares.find((record) => record.id === slug), [shares, slug])
+  const localShare = useMemo(
+    () => shares.find((record) => record.id === slug),
+    [shares, slug]
+  )
 
-  const node: FileNode | undefined = useMemo(() => {
-    if (!share) return undefined
-    const realNode = getNodeById(share.nodeId)
-    if (realNode) return realNode
-    if (!share.nodeName) return undefined
-    return {
-      id: share.nodeId,
-      bucketId: "",
-      kind: share.nodeKind ?? "file",
-      name: share.nodeName,
-      ext: share.nodeExt,
-      size: share.nodeSize,
-      mediaType: share.nodeMediaType,
-      preview: share.nodePreview,
-      updatedAt: share.createdAt,
-    } as FileNode
-  }, [share, getNodeById])
-
-  usePageTitle(share?.nodeName || "分享详情")
+  usePageTitle(info?.node_name || localShare?.nodeName || "分享详情")
 
   useEffect(() => {
-    if (share && !share.expiresAt) {
-      recordShareView(share.id)
-    } else if (share && new Date(share.expiresAt) > new Date()) {
-      recordShareView(share.id)
+    if (!slug) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setAccessToken(null)
+    setPassword("")
+    getShareInfo(slug)
+      .then((data) => {
+        if (cancelled) return
+        setInfo(data)
+        const urlPwd = searchParams.get("pwd")
+        if (urlPwd && data.access === "password") {
+          setPassword(urlPwd)
+          verifySharePassword(slug, { password: urlPwd })
+            .then((result) => {
+              if (cancelled) return
+              setAccessToken(result.access_token)
+            })
+            .catch(() => {
+              // ignore auto-verify failure
+            })
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : "分享不存在或已过期")
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-  }, [share, recordShareView])
+  }, [slug, searchParams])
 
-  const requiresPassword = share?.access === "密码访问"
-  const expired = share?.expiresAt ? new Date(share.expiresAt) <= new Date() : false
-  const canAccess = !expired && (!requiresPassword || passwordVerified)
+  const requiresPassword = info ? info.access === "password" : localShare?.access === "密码访问"
+  const expired = info
+    ? info.expires_at !== null && new Date(info.expires_at) <= new Date()
+    : localShare?.expiresAt
+      ? new Date(localShare.expiresAt) <= new Date()
+      : false
+  const reachedDownloadLimit = info
+    ? info.max_downloads !== null && info.download_count >= info.max_downloads
+    : false
+  const canAccess = !expired && !reachedDownloadLimit && (!requiresPassword || Boolean(accessToken))
 
-  const handleVerifyPassword = () => {
-    if (!password.trim()) {
-      toast.error("请输入访问密码")
+  const displayName = info?.node_name || localShare?.nodeName || "未知文件"
+  const displayKind: "folder" | "file" = info
+    ? (info.node_type as "folder" | "file")
+    : localShare?.nodeKind
+      ? localShare.nodeKind
+      : "file"
+  const displaySize = localShare?.nodeSize
+  const displayExt = localShare?.nodeExt
+  const displayPreview = localShare?.nodePreview?.trim() || null
+  const displayMediaType = localShare?.nodeMediaType
+  const hasPreview = Boolean(displayPreview) && displayPreview.startsWith("/")
+
+  const handleVerifyPassword = async () => {
+    if (!slug || !password.trim() || verifyingPassword) {
+      if (!password.trim()) toast.error("请输入访问密码")
       return
     }
-    setPasswordVerified(true)
-    toast.success("密码验证通过")
+    setVerifyingPassword(true)
+    try {
+      const result = await verifySharePassword(slug, { password })
+      setAccessToken(result.access_token)
+      toast.success("密码验证通过")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "密码验证失败")
+    } finally {
+      setVerifyingPassword(false)
+    }
   }
 
   const handleCopyLink = async () => {
-    if (!share) return
+    if (!slug) return
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/share/${share.id}`)
+      await navigator.clipboard.writeText(`${window.location.origin}/share/${slug}`)
       setCopied(true)
       toast.success("链接已复制")
       window.setTimeout(() => setCopied(false), 2000)
@@ -110,34 +159,37 @@ export function ShareDetail() {
   }
 
   const handleDownload = async () => {
-    if (!share || !node) return
-    const backendId = node.backendId
-    if (!backendId) {
-      toast.info("源文件已被删除或暂无可下载内容")
-      return
-    }
-
+    if (!slug || !canAccess || displayKind === "folder") return
     try {
-      const response = await requestResponse(buildDownloadUrl(backendId), {
+      const response = await requestResponse(buildSharedDownloadUrl(slug, accessToken), {
         headers: { Accept: "application/octet-stream" },
       })
       const blob = await response.blob()
       const objectUrl = window.URL.createObjectURL(blob)
       const anchor = document.createElement("a")
       anchor.href = objectUrl
-      anchor.download = node.name
+      anchor.download = displayName
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
       window.URL.revokeObjectURL(objectUrl)
-      recordShareDownload(share.id)
+      recordShareDownload(slug)
       toast.success("开始下载")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "下载失败")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "下载失败")
     }
   }
 
-  if (!share) {
+  if (loading) {
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-4 py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">加载分享信息...</p>
+      </div>
+    )
+  }
+
+  if (error || !info) {
     return <ShareNotFound />
   }
 
@@ -150,19 +202,30 @@ export function ShareDetail() {
         className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
       >
         <div className="relative flex aspect-[16/7] items-center justify-center bg-gradient-to-br from-primary/10 via-background to-muted sm:aspect-[16/6]">
-          {canAccess && node?.preview && node.mediaType === "image" ? (
+          {canAccess && hasPreview && displayMediaType === "image" ? (
             <img
-              src={node.preview}
-              alt={node.name}
+              src={displayPreview!}
+              alt={displayName}
               className="h-full w-full object-cover"
             />
           ) : (
             <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-card shadow-sm sm:h-28 sm:w-28">
-              {node ? (
-                <FileGlyph item={node} size={48} />
-              ) : (
-                <IconFile size={48} className="text-muted-foreground" />
-              )}
+              <FileGlyph
+                item={{
+                  id: info.share_id,
+                  name: displayName,
+                  kind: displayKind,
+                  ext: displayExt,
+                  mediaType: displayMediaType,
+                  preview: displayPreview,
+                  size: displaySize,
+                  updatedAt: info.expires_at ?? "",
+                  createdAt: "",
+                  bucketId: "",
+                  parentId: null,
+                }}
+                size={48}
+              />
             </div>
           )}
         </div>
@@ -171,17 +234,17 @@ export function ShareDetail() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
               <h1 className="break-words text-xl font-semibold tracking-tight sm:text-2xl">
-                {node?.name || share.nodeName || "未知文件"}
+                {displayName}
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <IconEye size={15} />
-                  {share.views || 0} 次访问
+                  {info.view_count} 次访问
                 </span>
                 <span>·</span>
                 <span className="flex items-center gap-1">
                   <IconDownload size={15} />
-                  {share.downloads || 0} 次下载
+                  {info.download_count} 次下载
                 </span>
               </div>
             </div>
@@ -191,7 +254,12 @@ export function ShareDetail() {
                 {copied ? <IconFile size={15} /> : <IconCopy size={15} />}
                 <span className="ml-1.5">{copied ? "已复制" : "复制链接"}</span>
               </Button>
-              <Button size="sm" onClick={handleDownload} disabled={!canAccess}>
+              <Button
+                size="sm"
+                onClick={() => void handleDownload()}
+                disabled={!canAccess || displayKind === "folder"}
+                title={displayKind === "folder" ? "暂不支持文件夹下载" : ""}
+              >
                 <IconDownload size={16} className="mr-1.5" />
                 下载
               </Button>
@@ -202,12 +270,12 @@ export function ShareDetail() {
             <span
               className={cn(
                 "rounded-full px-3 py-1 text-xs font-medium",
-                share.access === "公开访问"
+                info.access === "public"
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
               )}
             >
-              {share.access}
+              {info.access === "public" ? "公开访问" : "密码访问"}
             </span>
             <span
               className={cn(
@@ -217,25 +285,25 @@ export function ShareDetail() {
                   : "bg-primary/10 text-primary"
               )}
             >
-              {formatExpiry(share.expiresAt)}
+              {formatExpiry(info.expires_at)}
             </span>
-            {node?.size ? (
+            {displaySize ? (
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                {formatBytes(node.size)}
+                {formatBytes(displaySize)}
               </span>
             ) : null}
-            {node?.kind === "folder" ? (
+            {displayKind === "folder" ? (
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
                 文件夹
               </span>
-            ) : node?.ext ? (
+            ) : displayExt ? (
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                {node.ext.toUpperCase()}
+                {displayExt.toUpperCase()}
               </span>
             ) : null}
           </div>
 
-          {requiresPassword && !passwordVerified ? (
+          {requiresPassword && !accessToken ? (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -252,11 +320,14 @@ export function ShareDetail() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") handleVerifyPassword()
+                    if (event.key === "Enter") void handleVerifyPassword()
                   }}
                   className="sm:flex-1"
+                  autoFocus
                 />
-                <Button onClick={handleVerifyPassword}>验证密码</Button>
+                <Button onClick={() => void handleVerifyPassword()} disabled={verifyingPassword}>
+                  {verifyingPassword ? "验证中..." : "验证密码"}
+                </Button>
               </div>
             </motion.div>
           ) : null}
@@ -267,23 +338,31 @@ export function ShareDetail() {
             </div>
           ) : null}
 
+          {reachedDownloadLimit ? (
+            <div className="mt-6 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+              该分享链接已达到下载次数上限。
+            </div>
+          ) : null}
+
           <div className="mt-6 grid gap-3 border-t border-border/40 pt-6 text-sm text-muted-foreground sm:grid-cols-2">
             <div className="flex items-center gap-2">
               <IconClock size={15} />
-              <span>创建于 {formatDate(share.createdAt)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <IconClock size={15} />
-              <span>有效期至 {share.expiresAt ? formatDate(share.expiresAt) : "永久"}</span>
+              <span>有效期至 {info.expires_at ? formatDate(info.expires_at) : "永久"}</span>
             </div>
             <div className="flex items-center gap-2">
               <IconShare size={15} />
-              <span>短链接 /share/{share.id}</span>
+              <span>短链接 /share/{info.share_id}</span>
             </div>
             <div className="flex items-center gap-2">
               <IconEye size={15} />
-              <span>访问权限：{share.access}</span>
+              <span>访问权限：{info.access === "public" ? "公开访问" : "密码访问"}</span>
             </div>
+            {info.max_downloads ? (
+              <div className="flex items-center gap-2">
+                <IconDownload size={15} />
+                <span>下载限制：{info.download_count}/{info.max_downloads} 次</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </motion.div>

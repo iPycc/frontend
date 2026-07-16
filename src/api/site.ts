@@ -4,9 +4,6 @@ export type WebsiteSettings = {
   site_title: string
   site_logo_url: string
   site_description: string
-  seo_title: string
-  seo_description: string
-  seo_keywords: string
   site_theme: string
   site_font: string
   site_border_radius: string

@@ -4,7 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { ArrowLeft, Loader2, Mail, RectangleEllipsis, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
+import { FilingLink } from "@/components/shared/FilingBar"
 import { ModeToggle } from "@/components/shared/ModeToggle"
+import { useWebsiteSettings } from "@/components/shared/useWebsiteSettings"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -42,6 +44,7 @@ export function LoginForm({
   const navigate = useNavigate()
   const { login, loginWithPasskey, verifyTwoFactor } = useAppState()
   const state = location.state as { fromRegister?: boolean; initialHeight?: number } | null
+  const websiteSettings = useWebsiteSettings()
 
   const [phase, setPhase] = useState<LoginPhase>("initial")
   const [email, setEmail] = useState("")
@@ -289,6 +292,9 @@ export function LoginForm({
           </div>
           <ModeToggle />
         </div>
+        {websiteSettings.site_description ? (
+          <p className="px-6 pb-2 text-sm text-muted-foreground">{websiteSettings.site_description}</p>
+        ) : null}
 
         <CardHeader className="text-left">
           <CardTitle className="text-xl">{getTitle()}</CardTitle>
@@ -547,11 +553,14 @@ export function LoginForm({
         </FieldDescription>
       </Card>
 
-      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <span>Powered By</span>
-        <Logo className="w-auto" />
-        |
-        <span>iPycc</span>
+      <div className="flex flex-col items-center justify-center gap-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Powered By</span>
+          <Logo className="w-auto" />
+          <span>|</span>
+          <span>iPycc</span>
+        </div>
+        <FilingLink className="text-xs" />
       </div>
     </div>
   )

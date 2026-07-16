@@ -3,13 +3,13 @@ import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea, RenameDialog, MoveDialog, ShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
+import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
-import { type FileNode, type ShareRecord, type SortValue, type ViewMode } from "@/lib/models"
-import { buildDownloadUrl } from "@/api/files"
+import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
+import { buildDownloadUrl, buildFolderDownloadUrl } from "@/api/files"
 import { requestResponse } from "@/api/client"
 
 const categoryMap = {
@@ -79,7 +79,7 @@ export function AppFiles() {
   const [renameValue, setRenameValue] = React.useState("")
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
-  const [shareRecords, setShareRecords] = React.useState<ShareRecord[]>([])
+  const [shareDialogNodes, setShareDialogNodes] = React.useState<FileNode[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
@@ -188,9 +188,25 @@ export function AppFiles() {
     setMoveTargetId(currentFolderId || activeBucket.rootNodeId)
   }
 
-  const handleShareRequest = async (ids: string[]) => {
-    const records = await shareNodes(ids)
-    setShareRecords(records)
+  const handleShareRequest = (ids: string[]) => {
+    const nodes = ids
+      .map((id) => getNodeById(id))
+      .filter(Boolean) as FileNode[]
+    if (nodes.length === 0) {
+      toast.info("当前没有可分享的文件")
+      return
+    }
+    setShareDialogNodes(nodes)
+  }
+
+  const handleCreateShare = async (nodeIds: string[], options: import("@/components/file-area/CreateShareDialog").ShareOptions) => {
+    const records = await shareNodes(nodeIds, {
+      access: options.access,
+      password: options.password,
+      expiresInHours: options.expiresInHours,
+      maxDownloads: options.maxDownloads,
+    })
+    return records
   }
 
   const handleDownloadRequest = async (ids: string[]) => {
@@ -201,7 +217,8 @@ export function AppFiles() {
           continue
         }
 
-        const response = await requestResponse(buildDownloadUrl(node.backendId), {
+        const downloadUrl = node.kind === "folder" ? buildFolderDownloadUrl(node.backendId) : buildDownloadUrl(node.backendId)
+        const response = await requestResponse(downloadUrl, {
           headers: {
             Accept: "application/octet-stream",
           },
@@ -211,7 +228,7 @@ export function AppFiles() {
         const objectUrl = window.URL.createObjectURL(blob)
         const anchor = document.createElement("a")
         anchor.href = objectUrl
-        anchor.download = node.name
+        anchor.download = node.kind === "folder" ? `${node.name}.zip` : node.name
         document.body.appendChild(anchor)
         anchor.click()
         anchor.remove()
@@ -423,10 +440,11 @@ export function AppFiles() {
         onSubmit={(value) => void submitMove(value)}
       />
 
-      <ShareDialog
-        open={shareRecords.length > 0}
-        records={shareRecords}
-        onOpenChange={(open) => !open && setShareRecords([])}
+      <CreateShareDialog
+        open={shareDialogNodes.length > 0}
+        nodes={shareDialogNodes}
+        onOpenChange={(open) => !open && setShareDialogNodes([])}
+        onCreate={handleCreateShare}
       />
 
       <DeleteConfirmDialog

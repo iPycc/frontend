@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { Mail, RectangleEllipsis, User } from "lucide-react"
 import { toast } from "sonner"
 
+import { FilingLink } from "@/components/shared/FilingBar"
 import { ModeToggle } from "@/components/shared/ModeToggle"
 import { Button } from "@/components/ui/button"
 import {
@@ -201,11 +202,14 @@ export function SignupForm({
         </FieldDescription>
       </Card>
 
-      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-        <span>Powered By</span>
-        <Logo className="w-auto" />
-        |
-        <span>iPycc</span>
+      <div className="flex flex-col items-center justify-center gap-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Powered By</span>
+          <Logo className="w-auto" />
+          <span>|</span>
+          <span>iPycc</span>
+        </div>
+        <FilingLink className="text-xs" />
       </div>
     </div>
   )
