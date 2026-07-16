@@ -80,7 +80,8 @@ type RawPasskeyVerificationResponse = {
 }
 
 function buildHomepage(username: string) {
-  return `https://cloudrave.app/u/${encodeURIComponent(username.trim().toLowerCase().replace(/\s+/g, "-"))}`
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  return `${origin}/u/${encodeURIComponent(username.trim().toLowerCase().replace(/\s+/g, "-"))}`
 }
 
 function normalizeProfile(raw: RawUserResponse): ProfilePayload {

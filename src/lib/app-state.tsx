@@ -1292,7 +1292,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const getFileContent = React.useCallback((fileId: string) => snapshot.fileContents[fileId] ?? "", [snapshot.fileContents])
 
   const updateFileContent = React.useCallback(() => {
-    toast.info("当前 MVP 暂不支持在线编辑")
+    toast.info("在线编辑保存功能暂未接入后端")
   }, [])
 
   const updateUploadQueueItem = React.useCallback((id: string, patch: Partial<UploadQueueItem>) => {

@@ -1,12 +1,15 @@
-﻿import * as React from "react"
+import * as React from "react"
 import {
+  IconDeviceFloppy,
+  IconDownload,
   IconMaximize,
   IconMinimize,
   IconSettings,
   IconX,
-  IconDeviceFloppy,
 } from "@tabler/icons-react"
 
+import { buildDownloadUrl } from "@/api/files"
+import { requestResponse } from "@/api/client"
 import { type FileNode } from "@/lib/models"
 import { useAppState } from "@/lib/app-state"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -36,10 +39,11 @@ export function DocumentPreviewModal({
   onClose,
 }: DocumentPreviewModalProps) {
   const isMobile = useIsMobile()
-  const { getFileContent, updateFileContent } = useAppState()
+  const { updateFileContent } = useAppState()
   const [fullscreen, setFullscreen] = React.useState(isMobile)
   const [content, setContent] = React.useState("")
   const [isDirty, setIsDirty] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const lineNumbersRef = React.useRef<HTMLDivElement>(null)
 
@@ -47,13 +51,37 @@ export function DocumentPreviewModal({
     setFullscreen(isMobile)
   }, [isMobile, open])
 
-  // Load content when file changes
+  // Load real content from backend when an editable file is opened
   React.useEffect(() => {
-    if (file) {
-      setContent(getFileContent(file.id))
+    if (!file || !open) return
+
+    const isText = ["txt", "md", "json", "log", "csv", "xml", "yaml", "yml", "ini", "conf"].includes(
+      file.ext?.toLowerCase() ?? ""
+    )
+    const isCode = file.mediaType === "code" || ["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "c", "cpp", "h", "css", "html", "sql", "sh"].includes(
+      file.ext?.toLowerCase() ?? ""
+    )
+    const isEditable = isText || isCode
+
+    if (!isEditable || !file.backendId) {
+      setContent("")
       setIsDirty(false)
+      return
     }
-  }, [file?.id, open])
+
+    setLoading(true)
+    requestResponse(buildDownloadUrl(file.backendId))
+      .then(async (response) => {
+        const text = await response.text()
+        setContent(text)
+        setIsDirty(false)
+      })
+      .catch(() => {
+        toast.error("文件内容加载失败")
+        setContent("")
+      })
+      .finally(() => setLoading(false))
+  }, [file?.id, file?.backendId, open])
 
   if (!file) return null
 
@@ -65,12 +93,13 @@ export function DocumentPreviewModal({
   )
   const isPdf = file.ext?.toLowerCase() === "pdf"
   const isEditable = isText || isCode
+  const canDownload = Boolean(file.backendId)
+  const downloadUrl = file.backendId ? buildDownloadUrl(file.backendId) : ""
 
   const handleSave = () => {
     if (!file) return
     updateFileContent(file.id, content)
     setIsDirty(false)
-    toast.success("已保存")
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -89,6 +118,26 @@ export function DocumentPreviewModal({
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault()
       handleSave()
+    }
+  }
+
+  const handleDownload = async () => {
+    if (!file || !file.backendId) return
+    try {
+      const response = await requestResponse(buildDownloadUrl(file.backendId), {
+        headers: { Accept: "application/octet-stream" },
+      })
+      const blob = await response.blob()
+      const objectUrl = window.URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = objectUrl
+      anchor.download = file.name
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.URL.revokeObjectURL(objectUrl)
+    } catch {
+      toast.error("下载失败")
     }
   }
 
@@ -117,6 +166,17 @@ export function DocumentPreviewModal({
               >
                 <IconDeviceFloppy size={14} />
                 {isDirty ? "保存*" : "已保存"}
+              </Button>
+            )}
+            {!isEditable && canDownload && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => void handleDownload()}
+              >
+                <IconDownload size={14} />
+                下载
               </Button>
             )}
             <DropdownMenu>
@@ -171,49 +231,59 @@ export function DocumentPreviewModal({
         {/* Content */}
         <div className="flex-1 overflow-hidden bg-background">
           {isEditable ? (
-            <div className="flex h-full">
-              {/* Line numbers */}
-              <div
-                ref={lineNumbersRef}
-                className="select-none shrink-0 w-12 overflow-hidden bg-muted/30 border-r border-border text-right"
-                style={{ overflowY: "hidden" }}
-              >
-                <div className="font-mono text-sm pt-0">
-                  {Array.from({ length: lineCount }, (_, i) => (
-                    <div key={i} className="px-3 text-muted-foreground/50" style={{ lineHeight: "1.625rem" }}>
-                      {i + 1}
-                    </div>
-                  ))}
+            loading ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                正在加载文件内容…
+              </div>
+            ) : (
+              <div className="flex h-full">
+                {/* Line numbers */}
+                <div
+                  ref={lineNumbersRef}
+                  className="select-none shrink-0 w-12 overflow-hidden bg-muted/30 border-r border-border text-right"
+                  style={{ overflowY: "hidden" }}
+                >
+                  <div className="font-mono text-sm pt-0">
+                    {Array.from({ length: lineCount }, (_, i) => (
+                      <div key={i} className="px-3 text-muted-foreground/50" style={{ lineHeight: "1.625rem" }}>
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
                 </div>
+                {/* Editor */}
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  onScroll={handleScroll}
+                  spellCheck={false}
+                  className="flex-1 resize-none bg-background font-mono text-sm text-foreground outline-none p-0 px-2 overflow-auto"
+                  placeholder="空文件，开始输入..."
+                  style={{ lineHeight: "1.625rem" }}
+                />
               </div>
-              {/* Editor */}
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={handleChange}
-                onKeyDown={handleKeyDown}
-                onScroll={handleScroll}
-                spellCheck={false}
-                className="flex-1 resize-none bg-background font-mono text-sm text-foreground outline-none p-0 px-2 overflow-auto"
-                placeholder="空文件，开始输入..."
-                style={{ lineHeight: "1.625rem" }}
-              />
-            </div>
-          ) : isPdf ? (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <FileGlyph item={file} />
-                <span className="text-sm">PDF 预览（模拟）</span>
-                <span className="text-xs text-muted-foreground/60">{file.name}</span>
-              </div>
-            </div>
+            )
+          ) : isPdf && canDownload ? (
+            <iframe
+              src={downloadUrl}
+              title={file.name}
+              className="h-full w-full border-0"
+            />
           ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
+            <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
               <div className="flex flex-col items-center gap-3">
                 <FileGlyph item={file} />
-                <span className="text-sm">文档预览（模拟）</span>
+                <span className="text-sm">暂不支持该格式在线预览</span>
                 <span className="text-xs text-muted-foreground/60">{file.name}</span>
               </div>
+              {canDownload && (
+                <Button variant="outline" size="sm" onClick={() => void handleDownload()}>
+                  <IconDownload size={14} className="mr-1.5" />
+                  下载文件
+                </Button>
+              )}
             </div>
           )}
         </div>
