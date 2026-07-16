@@ -151,6 +151,12 @@ export interface ShareRecord {
   createdAt: string
   views: number
   downloads: number
+  nodeName?: string
+  nodeKind?: "folder" | "file"
+  nodeExt?: string
+  nodeSize?: number
+  nodeMediaType?: MediaType
+  nodePreview?: string
 }
 
 export interface OfflineTask {

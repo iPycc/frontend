@@ -138,6 +138,9 @@ type AppStateValue = {
   restoreNodes: (nodeIds: string[]) => Promise<void>
   permanentlyDeleteNodes: (nodeIds: string[]) => Promise<void>
   shareNodes: (nodeIds: string[]) => Promise<ShareRecord[]>
+  deleteShares: (shareIds: string[]) => void
+  recordShareView: (shareId: string) => void
+  recordShareDownload: (shareId: string) => void
   copyNodes: (nodeIds: string[]) => void
   cutNodes: (nodeIds: string[]) => void
   pasteNodes: (targetParentId: string | null, bucketId?: string) => Promise<void>
@@ -221,6 +224,7 @@ function loadSnapshot(): AppSnapshot {
         passwordUpdatedAt: parsed.security?.passwordUpdatedAt ?? "",
         twoFactorEnabled: parsed.security?.twoFactorEnabled ?? false,
       },
+      shares: parsed.shares ?? defaultAppSnapshot.shares,
     }
   } catch {
     return defaultAppSnapshot
@@ -305,6 +309,15 @@ function formatDateTime(value?: string | null, timezone?: string) {
     const second = `${date.getSeconds()}`.padStart(2, "0")
     return `${year}-${month}-${day} ${hour}:${minute}:${second}`
   }
+}
+
+function createShareSlug() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  let result = ""
+  for (let i = 0; i < 6; i += 1) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
 }
 
 function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?: string): BucketMount {
@@ -467,9 +480,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           passwordUpdatedAt: snapshot.security.passwordUpdatedAt,
           twoFactorEnabled: snapshot.security.twoFactorEnabled,
         },
+        shares: snapshot.shares,
       })
     )
-  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings])
+  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -592,7 +606,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           buckets[0]?.id ??
           "",
         nodes: Array.from(nodesMap.values()),
-        shares: [],
+        shares: current.shares,
         fileContents: {},
       }))
     },
@@ -822,7 +836,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const getSharedWithMeNodes = React.useCallback(() => [] as FileNode[], [])
   const getRecycleNodes = React.useCallback(() => snapshot.nodes.filter((node) => Boolean(node.deletedAt)), [snapshot.nodes])
-  const getShareRecords = React.useCallback(() => [] as Array<ShareRecord & { node?: FileNode }>, [])
+  const getShareRecords = React.useCallback(
+    () =>
+      snapshot.shares.map((record) => ({
+        ...record,
+        node: getNodeById(record.nodeId),
+      })),
+    [snapshot.shares, getNodeById]
+  )
 
   const setThemeMode = React.useCallback(
     (mode: ThemeMode) => {
@@ -1172,10 +1193,77 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await deleteNodes(nodeIds, true)
   }, [deleteNodes])
 
-  const shareNodes = React.useCallback(async () => {
-    toast.info("当前 MVP 暂不支持真实分享链接")
-    return [] as ShareRecord[]
-  }, [])
+  const shareNodes = React.useCallback(
+    async (nodeIds: string[]) => {
+      const nodes = nodeIds
+        .map((id) => snapshotRef.current.nodes.find((node) => node.id === id))
+        .filter(Boolean) as FileNode[]
+
+      if (nodes.length === 0) {
+        toast.info("当前没有可分享的文件")
+        return [] as ShareRecord[]
+      }
+
+      const newRecords: ShareRecord[] = nodes.map((node) => ({
+        id: createShareSlug(),
+        nodeId: node.id,
+        access: "公开访问",
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date().toISOString(),
+        views: 0,
+        downloads: 0,
+        nodeName: node.name,
+        nodeKind: node.kind,
+        nodeExt: node.ext,
+        nodeSize: node.size,
+        nodeMediaType: node.mediaType,
+        nodePreview: node.preview,
+      }))
+
+      updateSnapshot((current) => ({
+        ...current,
+        shares: [...current.shares, ...newRecords],
+      }))
+
+      toast.success(`已生成 ${newRecords.length} 条分享链接`)
+      return newRecords
+    },
+    [updateSnapshot]
+  )
+
+  const deleteShares = React.useCallback(
+    (shareIds: string[]) => {
+      updateSnapshot((current) => ({
+        ...current,
+        shares: current.shares.filter((record) => !shareIds.includes(record.id)),
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const recordShareView = React.useCallback(
+    (shareId: string) => {
+      updateSnapshot((current) => ({
+        ...current,
+        shares: current.shares.map((record) =>
+          record.id === shareId ? { ...record, views: record.views + 1 } : record
+        ),
+      }))
+    },
+    [updateSnapshot]
+  )
+
+  const recordShareDownload = React.useCallback(
+    (shareId: string) => {
+      updateSnapshot((current) => ({
+        ...current,
+        shares: current.shares.map((record) =>
+          record.id === shareId ? { ...record, downloads: record.downloads + 1 } : record
+        ),
+      }))
+    },
+    [updateSnapshot]
+  )
 
   const copyNodes = React.useCallback(
     (nodeIds: string[]) => {
@@ -1520,6 +1608,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     restoreNodes,
     permanentlyDeleteNodes,
     shareNodes,
+    deleteShares,
+    recordShareView,
+    recordShareDownload,
     copyNodes,
     cutNodes,
     pasteNodes,
@@ -1537,8 +1628,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     currentUser,
     cutNodes,
     deleteNodes,
+    deleteShares,
     duplicateNodes,
     effectiveTheme,
+    recordShareDownload,
+    recordShareView,
     getCategoryNodes,
     getFileContent,
     getFolderPathId,

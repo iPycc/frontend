@@ -1,6 +1,7 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom"
 
 import { MainLayout } from "./components/shared/MainLayout"
+import { ShareLayout } from "./components/share"
 import { Skeleton } from "./components/ui/skeleton"
 import { Toaster } from "./components/ui/sonner"
 import { useAppState } from "./lib/app-state"
@@ -11,6 +12,8 @@ import { Discussions } from "./pages/Discussions"
 import { Mounts } from "./pages/Mounts"
 import { Offline } from "./pages/Offline"
 import { Recycle } from "./pages/Recycle"
+import { ShareDetail } from "./pages/ShareDetail"
+import { ShareNotFound } from "./pages/ShareNotFound"
 import { Shares } from "./pages/Shares"
 import { SharedWithMe } from "./pages/SharedWithMe"
 import { Store } from "./pages/Store"
@@ -31,11 +34,20 @@ import {
 function isProtectedPath(pathname: string) {
   return (
     pathname === "/" ||
+    pathname === "/share" ||
     pathname.startsWith("/app") ||
     pathname.startsWith("/settings") ||
     pathname.startsWith("/admin") ||
     pathname.startsWith("/images")
   )
+}
+
+function ProtectedShareLayout() {
+  const { authReady, isAuthenticated } = useAppState()
+  if (!authReady) {
+    return null
+  }
+  return isAuthenticated ? <ShareLayout /> : <Navigate to="/login" replace />
 }
 
 function AppBootstrapShell() {
@@ -117,7 +129,6 @@ export default function App() {
         >
           <Route path="/app" element={<AppFiles />} />
           <Route path="/app/buckets" element={<Buckets />} />
-          <Route path="/app/shares" element={<Shares />} />
           <Route path="/app/recycle" element={<Recycle />} />
           <Route path="/app/tasks" element={<Tasks />} />
           <Route path="/app/shared-with-me" element={<SharedWithMe />} />
@@ -142,6 +153,15 @@ export default function App() {
           <Route path="/admin/users" element={isAdmin ? <Users /> : <Navigate to="/app" replace />} />
           <Route path="/admin/guests" element={isAdmin ? <Guests /> : <Navigate to="/app" replace />} />
           <Route path="/admin/system" element={isAdmin ? <System /> : <Navigate to="/app" replace />} />
+        </Route>
+
+        <Route element={<ProtectedShareLayout />}>
+          <Route path="/share" element={<Shares />} />
+        </Route>
+
+        <Route element={<ShareLayout />}>
+          <Route path="/share/:slug" element={<ShareDetail />} />
+          <Route path="/share/*" element={<ShareNotFound />} />
         </Route>
 
         <Route

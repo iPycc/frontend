@@ -8,7 +8,7 @@ import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
-import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
+import { type FileNode, type ShareRecord, type SortValue, type ViewMode } from "@/lib/models"
 import { buildDownloadUrl } from "@/api/files"
 import { requestResponse } from "@/api/client"
 
@@ -79,7 +79,7 @@ export function AppFiles() {
   const [renameValue, setRenameValue] = React.useState("")
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
-  const [shareLinks, setShareLinks] = React.useState<string[]>([])
+  const [shareRecords, setShareRecords] = React.useState<ShareRecord[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
@@ -190,7 +190,7 @@ export function AppFiles() {
 
   const handleShareRequest = async (ids: string[]) => {
     const records = await shareNodes(ids)
-    setShareLinks(records.map((record) => `https://share.cloudrave.app/${record.id}`))
+    setShareRecords(records)
   }
 
   const handleDownloadRequest = async (ids: string[]) => {
@@ -424,9 +424,9 @@ export function AppFiles() {
       />
 
       <ShareDialog
-        open={shareLinks.length > 0}
-        links={shareLinks}
-        onOpenChange={(open) => !open && setShareLinks([])}
+        open={shareRecords.length > 0}
+        records={shareRecords}
+        onOpenChange={(open) => !open && setShareRecords([])}
       />
 
       <DeleteConfirmDialog

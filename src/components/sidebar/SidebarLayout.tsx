@@ -174,8 +174,8 @@ export function SidebarLayout() {
               <span>与我共享</span>
             </SidebarNavItem>
             <SidebarNavItem
-              to="/app/shares"
-              active={location.pathname === "/app/shares"}
+              to="/share"
+              active={location.pathname === "/share"}
             >
               <IconShare size={17} />
               <span>我的分享</span>
