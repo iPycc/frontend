@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { IconFolderPlus, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
+import { IconFolderPlus, IconFolderUp, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { CreateFolderDialog } from "@/components/file-area"
@@ -19,7 +19,7 @@ export function CreateMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { createFolder, getFolderPathId, requestUpload } = useAppState()
+  const { createFolder, getFolderPathId, requestUpload, requestFolderUpload } = useAppState()
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
 
   const currentFolderId = useMemo(() => {
@@ -57,6 +57,10 @@ export function CreateMenu() {
           <DropdownMenuItem onClick={() => requestUpload(currentFolderId)}>
             <IconUpload size={16} />
             Upload File
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => requestFolderUpload(currentFolderId)}>
+            <IconFolderUp size={16} />
+            Upload Folder
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate("/settings/storage")}>

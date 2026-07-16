@@ -16,6 +16,8 @@ export type UploadSessionPlan = {
     expires_at?: string | null
   }>
   expires_at?: string | null
+  is_duplicate?: boolean
+  node_id?: number | null
 }
 
 export type UploadSession = {
@@ -45,11 +47,21 @@ export type CreateUploadSessionInput = {
   mount_id: number
   parent_id?: number | null
   file_name: string
+  relative_path?: string | null
+  checksum?: string | null
   object_key?: string | null
   mode?: UploadMode
   size: number
   part_size?: number
   content_type?: string | null
+}
+
+export async function sha256File(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const digest = await crypto.subtle.digest("SHA-256", buffer)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
 }
 
 export async function createUploadSession(token: string, body: CreateUploadSessionInput) {

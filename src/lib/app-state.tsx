@@ -22,7 +22,7 @@ import {
   type ExplorerNode,
 } from "@/api/files"
 import { checkBackendHealth } from "@/api/system"
-import { abortUpload, completeUpload, createUploadSession, recordRemotePart, uploadLocalPart } from "@/api/uploads"
+import { abortUpload, completeUpload, createUploadSession, recordRemotePart, sha256File, uploadLocalPart } from "@/api/uploads"
 import { getCurrentProfile, getLoginActivity, getTwoFactorStatus } from "@/api/user"
 import {
   createId,
@@ -117,6 +117,7 @@ type AppStateValue = {
   setActiveBucket: (bucketId: string) => void
   reloadWorkspace: () => Promise<void>
   requestUpload: (parentId?: string | null, mountId?: string) => void
+  requestFolderUpload: (parentId?: string | null, mountId?: string) => void
   setUploadQueueOpen: (open: boolean) => void
   retryUpload: (id: string) => void
   removeUpload: (id: string) => void
@@ -446,9 +447,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [uploadQueueOpen, setUploadQueueOpen] = React.useState(false)
   const backendHealthNotifiedRef = React.useRef(false)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const folderInputRef = React.useRef<HTMLInputElement | null>(null)
   const pendingUploadTargetRef = React.useRef<UploadTarget | null>(null)
   const uploadControllersRef = React.useRef(new Map<string, AbortController>())
-  const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget }>())
+  const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget; relativePath?: string }>())
   const snapshotRef = React.useRef(snapshot)
 
   React.useEffect(() => {
@@ -1326,7 +1328,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           progress: 0,
           uploadedBytes: 0,
           totalBytes: saved.file.size,
-          speedText: "准备中...",
+          speedText: "计算校验值...",
           errorMessage: undefined,
         })
         const apiParentId =
@@ -1334,15 +1336,29 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             ? Number(saved.target.parentId)
             : undefined
 
+        const checksum = await sha256File(saved.file)
         const plan = await createUploadSession(session.tokens.accessToken, {
           mount_id: bucket.backendId,
           parent_id: apiParentId,
           file_name: saved.file.name,
+          relative_path: saved.relativePath,
+          checksum,
           size: saved.file.size,
           content_type: saved.file.type || "application/octet-stream",
           mode: "multipart",
         })
         sessionId = plan.session_id
+        if (plan.is_duplicate) {
+          updateUploadQueueItem(id, {
+            sessionId,
+            status: "completed",
+            progress: 100,
+            uploadedBytes: saved.file.size,
+            speedText: "秒传完成",
+          })
+          await reloadWorkspace()
+          return
+        }
         updateUploadQueueItem(id, {
           sessionId,
           expiresAt: plan.expires_at ?? undefined,
@@ -1464,10 +1480,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     fileInputRef.current?.click()
   }, [])
 
-  const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const requestFolderUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
+    const session = snapshotRef.current.auth.session
+    const targetMountId = mountId ?? snapshotRef.current.activeBucketId
+    if (!session || !targetMountId) {
+      toast.error("当前没有可用的上传目标")
+      return
+    }
+
+    pendingUploadTargetRef.current = {
+      mountId: targetMountId,
+      parentId,
+    }
+    folderInputRef.current?.click()
+  }, [])
+
+  const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
     const target = pendingUploadTargetRef.current
     const files: File[] = event.target.files ? Array.from(event.target.files as ArrayLike<File>) : []
-      event.target.value = ""
+    event.target.value = ""
 
     if (!target || files.length === 0) {
       return
@@ -1475,10 +1506,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     const nextItems = files.map<UploadQueueItem>((file) => {
       const id = createId("upload")
-      uploadFilesRef.current.set(id, { file, target })
+      const relativePath = isFolder && file.webkitRelativePath ? file.webkitRelativePath : undefined
+      uploadFilesRef.current.set(id, { file, target, relativePath })
       return {
         id,
         fileName: file.name,
+        relativePath,
         fileSize: file.size,
         mountId: target.mountId,
         parentId: target.parentId,
@@ -1587,6 +1620,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setActiveBucket,
     reloadWorkspace,
     requestUpload,
+    requestFolderUpload,
     setUploadQueueOpen,
     retryUpload,
     removeUpload,
@@ -1656,6 +1690,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     reloadWorkspace,
     removeUpload,
     renameNode,
+    requestFolderUpload,
     requestUpload,
     resetPasswordVerification,
     restoreNodes,
@@ -1688,7 +1723,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         type="file"
         multiple
         className="hidden"
-        onChange={handleFileInputChange}
+        onChange={(event) => handleFileInputChange(event, false)}
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory="true"
+        directory=""
+        className="hidden"
+        onChange={(event) => handleFileInputChange(event, true)}
       />
     </AppStateContext.Provider>
   )
