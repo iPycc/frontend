@@ -9,7 +9,6 @@ import {
   IconEye,
   IconFile,
   IconLock,
-  IconShare,
 } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
@@ -350,10 +349,6 @@ export function ShareDetail() {
               <span>有效期至 {info.expires_at ? formatDate(info.expires_at) : "永久"}</span>
             </div>
             <div className="flex items-center gap-2">
-              <IconShare size={15} />
-              <span>短链接 /share/{info.share_id}</span>
-            </div>
-            <div className="flex items-center gap-2">
               <IconEye size={15} />
               <span>访问权限：{info.access === "public" ? "公开访问" : "密码访问"}</span>
             </div>
@@ -366,10 +361,6 @@ export function ShareDetail() {
           </div>
         </div>
       </motion.div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        此页面由 Cloudrave 分享服务提供。若内容涉及侵权或违规，请联系我们处理。
-      </p>
     </div>
   )
 }
