@@ -3,11 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { IconFolderPlus, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
 import { toast } from "sonner"
 
+import { CreateFolderDialog } from "@/components/file-area"
 import { useAppState } from "@/lib/app-state"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +21,6 @@ export function CreateMenu() {
   const isMobile = useIsMobile()
   const { createFolder, getFolderPathId, requestUpload } = useAppState()
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
-  const [folderName, setFolderName] = useState("")
 
   const currentFolderId = useMemo(() => {
     if (!location.pathname.startsWith("/app")) {
@@ -34,21 +32,12 @@ export function CreateMenu() {
   }, [getFolderPathId, location.pathname, location.search])
 
   const openCreateFolderDialog = () => {
-    setFolderName("")
     setCreateFolderOpen(true)
   }
 
-  const submitCreateFolder = async () => {
-    const name = folderName.trim()
-    if (!name) {
-      toast.error("Please enter a folder name")
-      return
-    }
-
+  const submitCreateFolder = async (name: string) => {
     const created = await createFolder(currentFolderId, name)
     if (created) {
-      setCreateFolderOpen(false)
-      setFolderName("")
       toast.success("Folder created")
     }
   }
@@ -77,33 +66,15 @@ export function CreateMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Folder</DialogTitle>
-          </DialogHeader>
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submitCreateFolder()
-            }}
-          >
-            <Input
-              value={folderName}
-              onChange={(event) => setFolderName(event.target.value)}
-              placeholder="Enter folder name"
-              autoFocus
-            />
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateFolderOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">Create</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateFolderDialog
+        open={createFolderOpen}
+        onOpenChange={setCreateFolderOpen}
+        title="New Folder"
+        description="Create a new folder to organize your files."
+        defaultName="New Folder"
+        locationLabel="Current folder"
+        onSubmit={(name) => void submitCreateFolder(name)}
+      />
     </>
   )
 }

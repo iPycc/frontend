@@ -1044,15 +1044,45 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
 
       const apiParentId = parentId && !parentId.startsWith("root:") ? Number(parentId) : undefined
-      const created = await apiCreateFolder(session.tokens.accessToken, {
-        mount_id: bucket.backendId,
-        parent_id: apiParentId,
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      const tempId = `optimistic-folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const tempNode: FileNode = {
+        id: tempId,
+        bucketId: bucket.id,
+        parentId: uiParentId,
+        kind: "folder",
         name: trimmedName,
-      })
-      await reloadWorkspace()
-      return mapNodeToFileNode(created, bucket.id, parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId, snapshotRef.current.settings.timezone)
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      }
+
+      updateSnapshot((current) => ({
+        ...current,
+        nodes: [...current.nodes, tempNode],
+      }))
+
+      try {
+        const created = await apiCreateFolder(session.tokens.accessToken, {
+          mount_id: bucket.backendId,
+          parent_id: apiParentId,
+          name: trimmedName,
+        })
+        const realNode = mapNodeToFileNode(created, bucket.id, uiParentId, snapshotRef.current.settings.timezone)
+        updateSnapshot((current) => ({
+          ...current,
+          nodes: current.nodes.map((node) => (node.id === tempId ? realNode : node)),
+        }))
+        return realNode
+      } catch (error) {
+        updateSnapshot((current) => ({
+          ...current,
+          nodes: current.nodes.filter((node) => node.id !== tempId),
+        }))
+        toast.error(error instanceof Error ? error.message : "创建文件夹失败")
+        return null
+      }
     },
-    [defaultBucketId, reloadWorkspace]
+    [defaultBucketId, updateSnapshot]
   )
 
   const renameNode = React.useCallback(async (nodeId: string, name: string) => {
@@ -1081,12 +1111,49 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    await apiDeleteNodes(session.tokens.accessToken, {
-      node_ids: backendIds,
-      hard_delete: hardDelete,
-    })
-    await reloadWorkspace()
-  }, [reloadWorkspace])
+    // Collect the selected nodes and all their descendants for optimistic removal.
+    const idsToRemove = new Set(nodeIds)
+    const collectDescendants = (parentIds: string[]) => {
+      const children = snapshotRef.current.nodes.filter(
+        (node) => node.parentId && parentIds.includes(node.parentId)
+      )
+      if (children.length === 0) return
+      const childIds = children.map((node) => node.id)
+      childIds.forEach((id) => idsToRemove.add(id))
+      collectDescendants(childIds)
+    }
+    collectDescendants(nodeIds)
+
+    const previousNodes = snapshotRef.current.nodes
+
+    if (hardDelete) {
+      updateSnapshot((current) => ({
+        ...current,
+        nodes: current.nodes.filter((node) => !idsToRemove.has(node.id)),
+      }))
+    } else {
+      const deletedAt = formatDateTime(new Date().toISOString(), snapshotRef.current.settings.timezone)
+      updateSnapshot((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          idsToRemove.has(node.id) ? { ...node, deletedAt } : node
+        ),
+      }))
+    }
+
+    try {
+      await apiDeleteNodes(session.tokens.accessToken, {
+        node_ids: backendIds,
+        hard_delete: hardDelete,
+      })
+    } catch (error) {
+      updateSnapshot((current) => ({
+        ...current,
+        nodes: previousNodes,
+      }))
+      toast.error(error instanceof Error ? error.message : "删除失败")
+    }
+  }, [updateSnapshot])
 
   const restoreNodes = React.useCallback(async (nodeIds: string[]) => {
     const session = snapshotRef.current.auth.session

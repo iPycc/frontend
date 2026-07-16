@@ -3,15 +3,12 @@ import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea, RenameDialog, MoveDialog, ShareDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
+import { FileArea, RenameDialog, MoveDialog, ShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { buildDownloadUrl } from "@/api/files"
 import { requestResponse } from "@/api/client"
 
@@ -85,7 +82,6 @@ export function AppFiles() {
   const [shareLinks, setShareLinks] = React.useState<string[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
-  const [createFolderName, setCreateFolderName] = React.useState("新建文件夹")
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
   const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
   const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
@@ -162,16 +158,14 @@ export function AppFiles() {
 
   const handleCreateFolder = (parentId = currentFolderId) => {
     setCreateFolderParentId(parentId)
-    setCreateFolderName("新建文件夹")
     setCreateFolderOpen(true)
   }
 
-  const submitCreateFolder = async () => {
-    const name = createFolderName.trim()
-    if (!name) return
-    await createFolder(createFolderParentId, name)
-    setCreateFolderOpen(false)
-    toast.success("文件夹已创建")
+  const submitCreateFolder = async (name: string) => {
+    const created = await createFolder(createFolderParentId, name)
+    if (created) {
+      toast.success("文件夹已创建")
+    }
   }
 
   const handleUpload = () => {
@@ -442,31 +436,13 @@ export function AppFiles() {
         onConfirm={() => void submitDelete()}
       />
 
-      <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>新建文件夹</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground">请输入文件夹名称</label>
-            <Input
-              value={createFolderName}
-              onChange={(event) => setCreateFolderName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void submitCreateFolder()
-              }}
-              autoFocus
-              onFocus={(event) => event.target.select()}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={() => void submitCreateFolder()}>创建</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateFolderDialog
+        open={createFolderOpen}
+        onOpenChange={setCreateFolderOpen}
+        defaultName="新建文件夹"
+        locationLabel={currentPath ? `位置：${currentPath}` : activeBucket.name}
+        onSubmit={(name) => void submitCreateFolder(name)}
+      />
     </>
   )
 }
