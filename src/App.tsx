@@ -29,6 +29,7 @@ import {
   SecuritySettingsPage,
   SettingsLayout,
   StorageSettingsPage,
+  WebsiteSettingsPage,
 } from "./pages/settings"
 
 function isProtectedPath(pathname: string) {
@@ -146,6 +147,7 @@ export default function App() {
             />
             <Route path="security" element={<SecuritySettingsPage />} />
             <Route path="storage" element={<StorageSettingsPage />} />
+            <Route path="website" element={<WebsiteSettingsPage />} />
           </Route>
 
           <Route path="/images" element={<AppFiles />} />

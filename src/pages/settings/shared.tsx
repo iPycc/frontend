@@ -1,4 +1,4 @@
-﻿import * as React from "react"
+import * as React from "react"
 import {
   IconBucket,
   IconEyeOff,
@@ -8,6 +8,7 @@ import {
   IconSun,
   IconTree,
   IconUserCircle,
+  IconWorld,
 } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
@@ -27,6 +28,7 @@ export type SettingsTabId =
   | "personalization"
   | "security"
   | "storage"
+  | "website"
 
 export const settingsTabs: Array<{
   id: SettingsTabId
@@ -57,6 +59,12 @@ export const settingsTabs: Array<{
     label: "存储空间",
     description: "COS 连接策略与挂载配置",
     icon: IconBucket,
+  },
+  {
+    id: "website",
+    label: "站点设置",
+    description: "网站标题、页脚、备案与主题样式",
+    icon: IconWorld,
   },
 ]
 
