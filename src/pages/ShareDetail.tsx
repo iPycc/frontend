@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
-import { requestResponse } from "@/api/client"
 import {
   buildSharedDownloadUrl,
   getShareInfo,
@@ -157,26 +156,18 @@ export function ShareDetail() {
     }
   }
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!slug || !canAccess || displayKind === "folder") return
-    try {
-      const response = await requestResponse(buildSharedDownloadUrl(slug, accessToken), {
-        headers: { Accept: "application/octet-stream" },
-      })
-      const blob = await response.blob()
-      const objectUrl = window.URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = objectUrl
-      anchor.download = displayName
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      window.URL.revokeObjectURL(objectUrl)
-      recordShareDownload(slug)
-      toast.success("开始下载")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "下载失败")
-    }
+    const url = buildSharedDownloadUrl(slug, accessToken)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = displayName
+    anchor.rel = "noopener"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    recordShareDownload(slug)
+    toast.success("开始下载")
   }
 
   if (loading) {
@@ -255,7 +246,7 @@ export function ShareDetail() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => void handleDownload()}
+                onClick={handleDownload}
                 disabled={!canAccess || displayKind === "folder"}
                 title={displayKind === "folder" ? "暂不支持文件夹下载" : ""}
               >
