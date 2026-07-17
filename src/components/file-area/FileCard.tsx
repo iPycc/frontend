@@ -1,8 +1,11 @@
-﻿import { useState } from "react"
+import { useState } from "react"
 import type { MouseEvent } from "react"
+import { useEffect } from "react"
 import { IconCheck, IconCircle, IconPlayerPlay } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/models"
+import { requestResponse } from "@/api/client"
+import { buildPreviewAudioCoverUrl, buildPreviewImageUrl, buildPreviewUrl, buildPreviewVideoPosterUrl } from "@/api/files"
 import { useAppState } from "@/lib/app-state"
 import { cn, truncateFilename } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -20,7 +23,7 @@ interface FileCardProps extends ItemHandlers {
 function canShowThumbnail(item: FileNode) {
   if (item.kind === "folder") return false
   const mt = item.mediaType
-  if (mt === "image" || mt === "video" || mt === "document" || mt === "code") return true
+  if (mt === "image" || mt === "video" || mt === "audio" || mt === "document" || mt === "code") return true
   const ext = item.ext?.toLowerCase() ?? ""
   return ["txt", "md", "log", "csv", "json", "xml", "yaml", "yml", "ini", "conf"].includes(ext)
 }
@@ -51,10 +54,41 @@ export function FileCard({
   const { getFileContent } = useAppState()
   const hasThumbnail = showThumbnail && canShowThumbnail(item)
   const isText = isTextFile(item)
-  const previewUrl = item.preview || null
-  const hasPreviewImage = hasThumbnail && item.mediaType === "image" && !!previewUrl && !isText
+  const previewUrl = item.mediaType === "video" && item.backendId
+    ? buildPreviewVideoPosterUrl(item.backendId, item.updatedAt)
+    : item.mediaType === "audio" && item.backendId
+      ? buildPreviewAudioCoverUrl(item.backendId, item.updatedAt)
+      : item.preview || null
+  const hasPreviewImage = hasThumbnail && (item.mediaType === "image" || item.mediaType === "video" || item.mediaType === "audio") && !!previewUrl && !isText
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
+  const [videoFrameReady, setVideoFrameReady] = useState(false)
+  const [textPreview, setTextPreview] = useState("")
+  const [textPreviewLoading, setTextPreviewLoading] = useState(false)
+
+  useEffect(() => {
+    if (!hasThumbnail || !isText || !item.backendId) {
+      setTextPreview("")
+      setTextPreviewLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    const version = item.updatedAt ? `?v=${encodeURIComponent(item.updatedAt)}` : ""
+    setTextPreviewLoading(true)
+    void requestResponse(`${buildPreviewUrl(item.backendId)}${version}`, {
+      signal: controller.signal,
+      headers: { Range: "bytes=0-4095" },
+    })
+      .then((response) => response.text())
+      .then((value) => setTextPreview(value))
+      .catch(() => {
+        if (!controller.signal.aborted) setTextPreview("")
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTextPreviewLoading(false)
+      })
+    return () => controller.abort()
+  }, [hasThumbnail, isText, item.backendId, item.updatedAt])
 
   if (!showThumbnail || item.kind === "folder") {
     return (
@@ -155,6 +189,8 @@ export function FileCard({
                 {!imageLoaded && <Skeleton className="absolute inset-0 h-full w-full" />}
                 <img
                   src={previewUrl}
+                  srcSet={item.backendId && item.mediaType === "image" ? `${buildPreviewImageUrl(item.backendId, "thumbnail", item.updatedAt)} 320w, ${buildPreviewImageUrl(item.backendId, "thumbnail_2x", item.updatedAt)} 640w` : undefined}
+                  sizes="(max-width: 768px) 50vw, 240px"
                   alt={item.name}
                   className={cn("h-full w-full object-cover transition-opacity duration-300", imageLoaded ? "opacity-100" : "opacity-0")}
                   loading="lazy"
@@ -165,14 +201,32 @@ export function FileCard({
                   onError={() => setImageFailed(true)}
                 />
               </>
+            ) : hasThumbnail && item.mediaType === "video" && item.backendId ? (
+              <>
+                {!videoFrameReady ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
+                <video
+                  src={buildPreviewUrl(item.backendId)}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className={cn("h-full w-full object-cover transition-opacity duration-300", videoFrameReady ? "opacity-100" : "opacity-0")}
+                  onLoadedMetadata={(event) => {
+                    const video = event.currentTarget
+                    video.currentTime = Math.min(Math.max(video.duration * 0.1, 0.5), 5)
+                  }}
+                  onSeeked={() => setVideoFrameReady(true)}
+                  aria-label={`${item.name} 视频封面`}
+                />
+              </>
             ) : hasThumbnail && isText ? (
               <div className="absolute inset-0 overflow-hidden bg-white p-2 dark:bg-zinc-900">
+                {textPreviewLoading ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
                 <div
                   className="h-full w-full overflow-hidden"
                   style={{ transform: "scale(0.55)", transformOrigin: "top left", width: "182%", height: "182%" }}
                 >
                   <pre className="pointer-events-none select-none whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.5] text-zinc-800 dark:text-zinc-200">
-                    {getFileContent(item.id) || <span className="italic text-zinc-400 dark:text-zinc-600">暂无预览内容</span>}
+                    {textPreview || getFileContent(item.id) || <span className="italic text-zinc-400 dark:text-zinc-600">暂无预览内容</span>}
                   </pre>
                 </div>
               </div>

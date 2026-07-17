@@ -12,6 +12,7 @@ import {
 import { configureAuthClient } from "@/api/client"
 import {
   buildPreviewUrl,
+  buildPreviewImageUrl,
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
   listCategoryNodePage,
@@ -158,7 +159,7 @@ type AppStateValue = {
   loginWithPasskey: (emailHint?: string) => Promise<AuthResult>
   verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey") => Promise<AuthResult>
   register: (input: AuthRegisterInput) => Promise<AuthResult>
-  logout: () => Promise<void>
+  logout: (scope?: "current" | "all") => Promise<void>
   verifyPassword: (value: string) => boolean
   resetPasswordVerification: () => void
   updateSecurity: (patch: Partial<SecurityState>) => void
@@ -438,7 +439,7 @@ function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: strin
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
   let preview: string | undefined
   if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
-    preview = buildPreviewUrl(node.id)
+    preview = mediaType === "image" ? buildPreviewImageUrl(node.id, "thumbnail_2x", node.updated_at) : buildPreviewUrl(node.id)
   }
   return {
     id: String(node.id),
@@ -479,6 +480,7 @@ function mapShareRead(share: ShareRead): ShareRecord {
     nodeExt: nodeName && nodeKind === "file" ? extractExtension(nodeName) : undefined,
     nodeSize: share.node_size ?? undefined,
     nodeMediaType,
+    itemCount: share.item_count,
   }
 }
 
@@ -1524,9 +1526,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [hydrateWorkspace]
   )
 
-  const logout = React.useCallback(async () => {
+  const logout = React.useCallback(async (scope: "current" | "all" = "current") => {
     try {
-      await apiLogout("current")
+      await apiLogout(scope)
     } catch {
       // ignore transport failures
     } finally {
@@ -1801,30 +1803,27 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return [] as ShareRecord[]
       }
 
-      const inputs: ShareCreateInput[] = nodes.map((node) => ({
-        node_id: node.backendId ?? Number(node.id),
+      const input: ShareCreateInput = {
+        node_ids: nodes.map((node) => node.backendId ?? Number(node.id)),
         access: options.access === "password" ? ShareAccess.PASSWORD : ShareAccess.PUBLIC,
         password: options.access === "password" && options.password ? options.password : null,
         expires_in_hours: options.expiresInHours ?? null,
         max_downloads: options.maxDownloads ?? null,
-      }))
+      }
 
       try {
-        const created = await Promise.all(
-          inputs.map((input) => apiCreateShare(session.tokens.accessToken, input))
-        )
-        const newRecords: ShareRecord[] = created.map((share) => {
-          const node = nodes.find((n) => n.backendId === share.node_id) ?? nodes[0]
-          return {
-            ...mapShareRead(share),
-            nodeName: node.name,
-            nodeKind: node.kind,
-            nodeExt: node.ext,
-            nodeSize: node.size,
-            nodeMediaType: node.mediaType,
-            nodePreview: node.preview,
-          }
-        })
+        const share = await apiCreateShare(session.tokens.accessToken, input)
+        const node = nodes.find((candidate) => candidate.backendId === share.node_id) ?? nodes[0]
+        const newRecords: ShareRecord[] = [{
+          ...mapShareRead(share),
+          nodeName: node.name,
+          nodeKind: node.kind,
+          nodeExt: node.ext,
+          nodeSize: node.size,
+          nodeMediaType: node.mediaType,
+          nodePreview: node.preview,
+          itemCount: nodes.length,
+        }]
 
         updateSnapshot((current) => ({
           ...current,
@@ -1965,7 +1964,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           parent_id: apiParentId,
           file_name: saved.file.name,
           relative_path: saved.relativePath,
-          checksum,
+          checksum: checksum ?? undefined,
           size: saved.file.size,
           content_type: saved.file.type || "application/octet-stream",
           mode: "multipart",
@@ -2379,8 +2378,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       <input
         ref={folderInputRef}
         type="file"
-        webkitdirectory="true"
-        directory=""
+        {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
         className="hidden"
         onChange={(event) => handleFileInputChange(event, true)}
       />

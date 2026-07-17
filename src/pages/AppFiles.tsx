@@ -3,14 +3,15 @@ import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, DocumentPreviewModal, UploadQueueDock } from "@/components/file-area"
+import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, UploadQueueDock } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
-import { buildDownloadUrl, buildFolderDownloadUrl } from "@/api/files"
+import { buildDownloadUrl, buildFolderDownloadUrl, prefetchPreviewManifest } from "@/api/files"
 import { requestResponse } from "@/api/client"
+import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 
 const categoryMap = {
   image: "图片",
@@ -32,17 +33,16 @@ function getPageTitle(category: keyof typeof categoryMap | null, currentPath: st
   return "我的文件"
 }
 
-function getPreviewType(file: FileNode): "media" | "document" | null {
+function isPreviewable(file: FileNode) {
   const mt = file.mediaType
-  if (mt === "image" || mt === "video" || mt === "audio") return "media"
-  if (mt === "document" || mt === "code") return "document"
+  if (mt === "image" || mt === "video" || mt === "audio" || mt === "document" || mt === "code" || mt === "archive") return true
   const ext = file.ext?.toLowerCase() ?? ""
-  if (["txt", "md", "json", "log", "csv", "xml", "yaml", "yml", "ini", "conf"].includes(ext)) return "document"
-  return null
+  return ["txt", "md", "json", "log", "csv", "xml", "yaml", "yml", "ini", "conf", "zip", "tar", "gz", "tgz", "7z", "rar"].includes(ext)
 }
 
 export function AppFiles() {
   const location = useLocation()
+  const { openAudio } = useAudioPlayer()
   const {
     clipboard,
     activeBucket,
@@ -88,8 +88,7 @@ export function AppFiles() {
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
-  const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
-  const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
+  const [previewFile, setPreviewFile] = React.useState<FileNode | null>(null)
   const [resolvedFolderId, setResolvedFolderId] = React.useState<string | null>(null)
   const [routeLoading, setRouteLoading] = React.useState(true)
 
@@ -115,16 +114,24 @@ export function AppFiles() {
   const selectedNodeIdsSignature = React.useMemo(() => selectedNodes.map((node) => node.id).join("|"), [selectedNodes])
   const panelNodeIdsSignature = React.useMemo(() => panelNodes.map((node) => node.id).join("|"), [panelNodes])
 
-  const mediaFiles = React.useMemo(
-    () => items.filter((item) => item.kind === "file" && getPreviewType(item) === "media"),
+  const previewableFiles = React.useMemo(
+    () => items.filter((item) => item.kind === "file" && isPreviewable(item)),
     [items]
   )
 
-  const mediaPreviewIndex = React.useMemo(() => {
-    if (!mediaPreviewFile) return 0
-    const idx = mediaFiles.findIndex((f) => f.id === mediaPreviewFile.id)
+  const previewIndex = React.useMemo(() => {
+    if (!previewFile) return 0
+    const idx = previewableFiles.findIndex((file) => file.id === previewFile.id)
     return idx >= 0 ? idx : 0
-  }, [mediaPreviewFile, mediaFiles])
+  }, [previewFile, previewableFiles])
+
+  const adjacentPreviewFiles = React.useMemo(() => {
+    if (previewableFiles.length <= 1) return []
+    return [
+      previewableFiles[(previewIndex - 1 + previewableFiles.length) % previewableFiles.length],
+      previewableFiles[(previewIndex + 1) % previewableFiles.length],
+    ]
+  }, [previewIndex, previewableFiles])
 
   const pathParts = currentPath.split("/").filter(Boolean)
   const folderOptions = React.useMemo(() => {
@@ -368,30 +375,38 @@ export function AppFiles() {
   }
 
   const handleOpenFile = React.useCallback(
-    (node: FileNode) => {
-      const type = getPreviewType(node)
-      if (type === "media") {
-        setMediaPreviewFile(node)
-      } else if (type === "document") {
-        setDocPreviewFile(node)
-      } else {
-        openPropertiesPanel(node)
+    async (node: FileNode) => {
+      if (node.mediaType === "audio") {
+        openAudio(node, previewableFiles)
+        return
       }
+      if (node.backendId) {
+        try {
+          await prefetchPreviewManifest(node.backendId)
+        } catch {
+          // The modal owns the visible retry/error state.
+        }
+      }
+      setPreviewFile(node)
     },
-    [openPropertiesPanel]
+    [openAudio, previewableFiles]
   )
 
-  const handleMediaPrev = React.useCallback(() => {
-    if (mediaFiles.length <= 1) return
-    const idx = (mediaPreviewIndex - 1 + mediaFiles.length) % mediaFiles.length
-    setMediaPreviewFile(mediaFiles[idx])
-  }, [mediaFiles, mediaPreviewIndex])
+  const handlePreviewPrev = React.useCallback(async () => {
+    if (previewableFiles.length <= 1) return
+    const index = (previewIndex - 1 + previewableFiles.length) % previewableFiles.length
+    const next = previewableFiles[index]
+    if (next.backendId) await prefetchPreviewManifest(next.backendId).catch(() => undefined)
+    setPreviewFile(next)
+  }, [previewIndex, previewableFiles])
 
-  const handleMediaNext = React.useCallback(() => {
-    if (mediaFiles.length <= 1) return
-    const idx = (mediaPreviewIndex + 1) % mediaFiles.length
-    setMediaPreviewFile(mediaFiles[idx])
-  }, [mediaFiles, mediaPreviewIndex])
+  const handlePreviewNext = React.useCallback(async () => {
+    if (previewableFiles.length <= 1) return
+    const index = (previewIndex + 1) % previewableFiles.length
+    const next = previewableFiles[index]
+    if (next.backendId) await prefetchPreviewManifest(next.backendId).catch(() => undefined)
+    setPreviewFile(next)
+  }, [previewIndex, previewableFiles])
 
   return (
     <>
@@ -476,11 +491,13 @@ export function AppFiles() {
       <UploadQueueDock parentId={currentFolderId} />
 
       <FilePreviewModal
-        open={Boolean(mediaPreviewFile)}
-        file={mediaPreviewFile}
-        currentIndex={mediaPreviewIndex}
-        totalCount={mediaFiles.length}
-        onClose={() => setMediaPreviewFile(null)}
+        key={previewFile?.id ?? "preview-closed"}
+        open={Boolean(previewFile)}
+        file={previewFile}
+        preloadFiles={adjacentPreviewFiles}
+        currentIndex={previewIndex}
+        totalCount={previewableFiles.length}
+        onClose={() => setPreviewFile(null)}
         onDownload={(ids) => void handleDownloadRequest(ids)}
         onProperties={(id) => handlePropertiesRequest([id])}
         onCopy={handleCopyIds}
@@ -489,14 +506,8 @@ export function AppFiles() {
         onMove={handleMoveRequest}
         onShare={(ids) => void handleShareRequest(ids)}
         onDelete={handleDeleteRequest}
-        onPrev={handleMediaPrev}
-        onNext={handleMediaNext}
-      />
-
-      <DocumentPreviewModal
-        open={Boolean(docPreviewFile)}
-        file={docPreviewFile}
-        onClose={() => setDocPreviewFile(null)}
+        onPrev={handlePreviewPrev}
+        onNext={handlePreviewNext}
       />
 
       <RenameDialog

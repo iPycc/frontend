@@ -4,6 +4,7 @@ import { MainLayout } from "./components/shared/MainLayout"
 import { ShareLayout } from "./components/share"
 import { Skeleton } from "./components/ui/skeleton"
 import { Toaster } from "./components/ui/sonner"
+import { AudioPlayerProvider } from "./components/audio/AudioPlayerProvider"
 import { useAppState } from "./lib/app-state"
 import { AppFiles } from "./pages/AppFiles"
 import { AuthLayout } from "./pages/AuthLayout"
@@ -116,8 +117,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Toaster position="bottom-center" richColors />
-      <Routes>
+      <AudioPlayerProvider>
+        <Toaster position="bottom-center" richColors />
+        <Routes>
         <Route
           path="/"
           element={authReady ? <Navigate to={isAuthenticated ? "/app" : "/login"} replace /> : null}
@@ -175,7 +177,8 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/setup" element={<Navigate to="/register" replace />} />
         </Route>
-      </Routes>
+        </Routes>
+      </AudioPlayerProvider>
     </BrowserRouter>
   )
 }

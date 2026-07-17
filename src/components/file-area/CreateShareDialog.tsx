@@ -341,7 +341,7 @@ export function CreateShareDialog({ open, nodes, onOpenChange, onCreate }: Creat
                 ) : (
                   <div className="space-y-2">
                     {records.map((record) => {
-                      const node = nodes.find((n) => n.id === String(record.nodeId ?? record.node_id))
+                      const node = nodes.find((n) => n.id === String(record.nodeId))
                       const url = `${window.location.origin}/share/${record.id}`
                       return (
                         <div key={record.id} className="rounded-2xl bg-muted/50 px-4 py-3">

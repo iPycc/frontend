@@ -6,7 +6,7 @@ export enum ShareAccess {
 }
 
 export type ShareCreateInput = {
-  node_id: number
+  node_ids: number[]
   access: ShareAccess
   password?: string | null
   expires_in_hours?: number | null
@@ -26,6 +26,7 @@ export type ShareRead = {
   node_name: string | null
   node_type: "folder" | "file" | null
   node_size: number | null
+  item_count: number
 }
 
 export type ShareVerifyInput = {
@@ -39,13 +40,27 @@ export type ShareAccessTokenResponse = {
 export type ShareNodeInfo = {
   share_id: string
   access: ShareAccess
-  node_id: number
+  node_id: number | null
   node_name: string
   node_type: string
+  node_size: number
+  owner_name: string
+  owner_avatar: string | null
   expires_at: string | null
   max_downloads: number | null
   download_count: number
   view_count: number
+  folder_count: number
+  file_count: number
+  items: SharedNode[]
+}
+
+export type SharedNode = {
+  id: number
+  parent_id: number | null
+  name: string
+  type: "folder" | "file"
+  size: number
 }
 
 export async function createShare(token: string, body: ShareCreateInput) {
@@ -67,8 +82,17 @@ export async function revokeShare(token: string, shareId: string) {
   })
 }
 
-export async function getShareInfo(shareId: string) {
-  return requestJson<ShareNodeInfo>(`/share/${shareId}`)
+export async function getShareInfo(shareId: string, accessToken?: string | null) {
+  const query = accessToken ? `?access_token=${encodeURIComponent(accessToken)}` : ""
+  return requestJson<ShareNodeInfo>(`/share/${shareId}${query}`)
+}
+
+export async function listSharedNodes(shareId: string, parentId?: number | null, accessToken?: string | null) {
+  const query = new URLSearchParams()
+  if (parentId !== undefined && parentId !== null) query.set("parent_id", String(parentId))
+  if (accessToken) query.set("access_token", accessToken)
+  const suffix = query.size ? `?${query.toString()}` : ""
+  return requestJson<SharedNode[]>(`/share/${shareId}/nodes${suffix}`)
 }
 
 export async function verifySharePassword(shareId: string, body: ShareVerifyInput) {
@@ -78,9 +102,26 @@ export async function verifySharePassword(shareId: string, body: ShareVerifyInpu
   })
 }
 
-export function buildSharedDownloadUrl(shareId: string, accessToken?: string | null) {
+export function buildSharedDownloadUrl(shareId: string, accessToken?: string | null, nodeId?: number | null) {
   const url = `/api/v1/share/${shareId}/download`
-  if (!accessToken) return url
-  const separator = url.includes("?") ? "&" : "?"
-  return `${url}${separator}access_token=${encodeURIComponent(accessToken)}`
+  const query = new URLSearchParams()
+  if (accessToken) query.set("access_token", accessToken)
+  if (nodeId !== undefined && nodeId !== null) query.set("node_id", String(nodeId))
+  return query.size ? `${url}?${query.toString()}` : url
+}
+
+export function buildSharedPreviewUrl(shareId: string, accessToken?: string | null, nodeId?: number | null) {
+  const url = `/api/v1/share/${shareId}/preview`
+  const query = new URLSearchParams()
+  if (accessToken) query.set("access_token", accessToken)
+  if (nodeId !== undefined && nodeId !== null) query.set("node_id", String(nodeId))
+  return query.size ? `${url}?${query.toString()}` : url
+}
+
+export function buildSharedCoverUrl(shareId: string, accessToken?: string | null, nodeId?: number | null) {
+  const url = `/api/v1/share/${shareId}/cover`
+  const query = new URLSearchParams()
+  if (accessToken) query.set("access_token", accessToken)
+  if (nodeId !== undefined && nodeId !== null) query.set("node_id", String(nodeId))
+  return query.size ? `${url}?${query.toString()}` : url
 }

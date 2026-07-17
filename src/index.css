@@ -164,6 +164,87 @@
   border-radius: 999px;
 }
 
+.media-range {
+  --range-progress: 0%;
+  height: 4px;
+  cursor: pointer;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(to right, white var(--range-progress), rgb(255 255 255 / 0.32) var(--range-progress));
+  transition: height 120ms ease;
+  touch-action: none;
+}
+
+.media-range:hover,
+.media-range:focus-visible {
+  height: 6px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .media-range {
+    height: 6px;
+  }
+
+  .media-range::-webkit-slider-thumb {
+    opacity: 1;
+    width: 14px;
+    height: 14px;
+  }
+
+  .media-range::-moz-range-thumb {
+    opacity: 1;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.media-range-themed {
+  background: linear-gradient(
+    to right,
+    var(--primary) var(--range-progress),
+    color-mix(in oklab, var(--muted-foreground) 28%, transparent) var(--range-progress)
+  );
+}
+
+.media-range::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: white;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.45);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.media-range:hover::-webkit-slider-thumb,
+.media-range:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.media-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: white;
+  opacity: 0;
+}
+
+.media-range:hover::-moz-range-thumb,
+.media-range:focus-visible::-moz-range-thumb {
+  opacity: 1;
+}
+
+.media-range-themed::-webkit-slider-thumb {
+  background: var(--primary);
+}
+
+.media-range-themed::-moz-range-thumb {
+  background: var(--primary);
+}
+
 .app-shell {
   background: var(--app-shell);
 }

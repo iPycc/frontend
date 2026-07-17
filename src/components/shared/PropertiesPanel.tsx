@@ -6,6 +6,7 @@ import {
   IconPlus,
   IconClock,
   IconPhoto,
+  IconFile,
   IconLock,
 } from "@tabler/icons-react"
 import { Files } from "lucide-react"
@@ -103,8 +104,10 @@ export interface PropertiesPanelContentProps {
   nodes?: FileNode[]
   bucketName: string
   formatBytes: (size?: number) => string
+  previewMetadata?: Record<string, unknown>
   onClose: () => void
   dark?: boolean
+  embedded?: boolean
 }
 
 export function PropertiesPanelContent({
@@ -112,8 +115,10 @@ export function PropertiesPanelContent({
   nodes,
   bucketName,
   formatBytes,
+  previewMetadata,
   onClose,
   dark = false,
+  embedded = false,
 }: PropertiesPanelContentProps) {
   const [tab, setTab] = React.useState<PanelTab>("details")
   const multiNodes = nodes && nodes.length > 1 ? nodes : null
@@ -125,10 +130,12 @@ export function PropertiesPanelContent({
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col",
-        dark
-          ? "border-l border-white/10 bg-[#1a1a1a]"
-          : "md:rounded-xl border border-border bg-card shadow-sm dark:border-white/10"
+        "flex h-full min-h-0 w-full flex-col overflow-hidden",
+        embedded
+          ? dark ? "bg-[#1a1a1a]" : "bg-card"
+          : dark
+            ? "border-l border-white/10 bg-[#1a1a1a]"
+            : "border border-border bg-card shadow-sm md:rounded-xl dark:border-white/10"
       )}
     >
       {/* Sticky header: icon + name + close */}
@@ -178,7 +185,7 @@ export function PropertiesPanelContent({
           multiNodes ? (
             <MultiDetailsTab nodes={multiNodes} bucketName={bucketName} formatBytes={formatBytes} dark={dark} />
           ) : (
-            <DetailsTab node={node} bucketName={bucketName} formatBytes={formatBytes} dark={dark} />
+            <DetailsTab node={node} bucketName={bucketName} formatBytes={formatBytes} previewMetadata={previewMetadata} dark={dark} />
           )
         ) : (
           <ActivityTab dark={dark} />
@@ -239,12 +246,10 @@ export function PropertiesPanel() {
     <aside
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        // 一次性切换占位宽度，避免 auto-fill 文件网格在宽度动画期间逐帧重排
-        "relative shrink-0 overflow-hidden",
+        "relative shrink-0 overflow-hidden transition-[width,margin] duration-200 ease-out",
         isOpen ? "w-[340px] ml-1.5 md:ml-2" : "w-0 ml-0"
       )}
     >
-      {/* 面板内容独立滑入；文件区域只在开关时重排一次 */}
       <div
         className={cn(
           "absolute inset-y-0 left-0 w-[340px] transition-transform duration-200 ease-linear",
@@ -273,20 +278,42 @@ function DetailsTab({
   node,
   bucketName,
   formatBytes,
+  previewMetadata,
   dark,
 }: {
   node: FileNode
   bucketName: string
   formatBytes: (size?: number) => string
+  previewMetadata?: Record<string, unknown>
   dark: boolean
 }) {
   const isImage = node.mediaType === "image"
   const isVideo = node.mediaType === "video"
+  const isAudio = node.mediaType === "audio"
   const hasPreview = isImage || isVideo
+  const hasMediaMetadata = hasPreview || isAudio
 
   const fg = dark ? "text-white/90" : "text-foreground"
   const fgMuted = dark ? "text-white/50" : "text-muted-foreground"
   const borderCls = dark ? "border-white/10" : "border-border"
+  const width = typeof previewMetadata?.width === "number" ? previewMetadata.width : null
+  const height = typeof previewMetadata?.height === "number" ? previewMetadata.height : null
+  const duration = typeof previewMetadata?.duration === "number" ? previewMetadata.duration : null
+  const format = typeof previewMetadata?.format === "string"
+    ? previewMetadata.format
+    : typeof previewMetadata?.container === "string"
+      ? previewMetadata.container
+      : null
+  const videoCodec = typeof previewMetadata?.video_codec === "string" ? previewMetadata.video_codec : null
+  const audioCodec = typeof previewMetadata?.audio_codec === "string" ? previewMetadata.audio_codec : null
+  const audioTitle = typeof previewMetadata?.title === "string" ? previewMetadata.title : null
+  const audioArtist = typeof previewMetadata?.artist === "string" ? previewMetadata.artist : null
+  const audioAlbum = typeof previewMetadata?.album === "string" ? previewMetadata.album : null
+  const audioAlbumArtist = typeof previewMetadata?.album_artist === "string" ? previewMetadata.album_artist : null
+  const audioGenre = typeof previewMetadata?.genre === "string" ? previewMetadata.genre : null
+  const audioDate = typeof previewMetadata?.date === "string" ? previewMetadata.date : null
+  const audioTrack = typeof previewMetadata?.track === "string" ? previewMetadata.track : null
+  const audioBitrate = typeof previewMetadata?.bitrate === "number" ? previewMetadata.bitrate : null
 
   return (
     <div className="space-y-3 md:space-y-5">
@@ -296,13 +323,25 @@ function DetailsTab({
         </div>
       ) : null}
 
-      {hasPreview ? (
+      {hasMediaMetadata ? (
         <div className="space-y-3 md:space-y-4">
           <h3 className={cn("text-sm font-medium mb-1.5 md:text-base md:mb-2", fg)}>媒体信息</h3>
-          <InfoRow icon={<IconClock size={16} />} label="拍摄时间" value={node.updatedAt} dark={dark} />
-          {isImage ? (
-            <InfoRow icon={<IconPhoto size={16} />} label="分辨率" value="1179 × 1159" dark={dark} />
+          {!isAudio ? <InfoRow icon={<IconClock size={16} />} label="拍摄时间" value={node.updatedAt} dark={dark} /> : null}
+          {audioTitle ? <InfoRow icon={<IconFile size={16} />} label="标题" value={audioTitle} dark={dark} /> : null}
+          {audioArtist ? <InfoRow icon={<IconFile size={16} />} label="歌手" value={audioArtist} dark={dark} /> : null}
+          {audioAlbum ? <InfoRow icon={<IconFile size={16} />} label="专辑" value={audioAlbum} dark={dark} /> : null}
+          {audioAlbumArtist ? <InfoRow icon={<IconFile size={16} />} label="专辑艺术家" value={audioAlbumArtist} dark={dark} /> : null}
+          {audioGenre ? <InfoRow icon={<IconFile size={16} />} label="流派" value={audioGenre} dark={dark} /> : null}
+          {audioDate ? <InfoRow icon={<IconClock size={16} />} label="发行时间" value={audioDate} dark={dark} /> : null}
+          {audioTrack ? <InfoRow icon={<IconFile size={16} />} label="音轨" value={audioTrack} dark={dark} /> : null}
+          {width && height ? (
+            <InfoRow icon={<IconPhoto size={16} />} label="分辨率" value={`${width} × ${height}`} dark={dark} />
           ) : null}
+          {duration !== null ? <InfoRow icon={<IconClock size={16} />} label="时长" value={formatDuration(duration)} dark={dark} /> : null}
+          {format ? <InfoRow icon={<IconFile size={16} />} label="封装格式" value={format} dark={dark} /> : null}
+          {videoCodec ? <InfoRow icon={<IconPhoto size={16} />} label="视频编码" value={videoCodec} dark={dark} /> : null}
+          {audioCodec ? <InfoRow icon={<IconFile size={16} />} label="音频编码" value={audioCodec} dark={dark} /> : null}
+          {audioBitrate ? <InfoRow icon={<IconFile size={16} />} label="比特率" value={`${Math.round(audioBitrate / 1000)} kbps`} dark={dark} /> : null}
         </div>
       ) : null}
 
@@ -366,6 +405,17 @@ function DetailsTab({
       </div>
     </div>
   )
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "–"
+  const whole = Math.floor(seconds)
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const remaining = whole % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`
+    : `${minutes}:${String(remaining).padStart(2, "0")}`
 }
 
 /* ------------------------------------------------------------------ */

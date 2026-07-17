@@ -159,6 +159,7 @@ export interface ShareRecord {
   nodeSize?: number
   nodeMediaType?: MediaType
   nodePreview?: string
+  itemCount?: number
 }
 
 export interface OfflineTask {
@@ -341,13 +342,13 @@ export function inferMediaType(name: string, kind: FileNode["kind"] = "file"): M
 
   const ext = name.split(".").pop()?.toLowerCase() ?? ""
 
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico", "heic"].includes(ext)) {
+  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico", "heic", "tif", "tiff"].includes(ext)) {
     return "image"
   }
   if (["mp4", "mov", "mkv", "avi", "webm", "flv", "m4v", "wmv"].includes(ext)) {
     return "video"
   }
-  if (["mp3", "wav", "flac", "ogg", "m4a", "aac"].includes(ext)) {
+  if (["mp3", "wav", "flac", "ogg", "m4a", "aac", "opus"].includes(ext)) {
     return "audio"
   }
   if (["zip", "rar", "7z", "tar", "gz", "bz2", "xz"].includes(ext)) {
@@ -389,7 +390,7 @@ export function inferMediaType(name: string, kind: FileNode["kind"] = "file"): M
   ) {
     return "code"
   }
-  if (["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt"].includes(ext)) {
+    if (["pdf", "doc", "docx", "docm", "dot", "dotx", "xls", "xlsx", "xlsm", "xlsb", "xltx", "ppt", "pptx", "pptm", "pps", "ppsx", "csv", "txt"].includes(ext)) {
     return "document"
   }
 

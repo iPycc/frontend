@@ -18,6 +18,7 @@ type RequestOptions = {
   token?: string | null
   headers?: HeadersInit
   signal?: AbortSignal
+  cache?: RequestCache
   skipAuthRefresh?: boolean
 }
 
@@ -119,6 +120,7 @@ async function requestResponseInternal(
     headers,
     body: toRequestBody(options.body),
     signal: options.signal,
+    cache: options.cache,
     credentials: "include",
   })
 

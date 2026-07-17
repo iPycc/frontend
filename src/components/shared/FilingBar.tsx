@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { useWebsiteSettings } from "./useWebsiteSettings"
 
-const FILING_LOGO_URL = "./beian.png"
+const FILING_LOGO_URL = "/beian.png"
 
 export { useWebsiteSettings, FILING_LOGO_URL }
 

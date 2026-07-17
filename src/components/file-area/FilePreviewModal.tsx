@@ -1,20 +1,27 @@
-﻿import * as React from "react"
+import * as React from "react"
 import {
-  IconDownload,
-  IconInfoCircle,
-  IconDots,
-  IconX,
+  IconArrowMoveRight,
+  IconChevronLeft,
+  IconChevronRight,
   IconCopy,
   IconCut,
+  IconDots,
+  IconDownload,
   IconEdit,
+  IconInfoCircle,
+  IconLoader2,
+  IconMinus,
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconRefresh,
   IconShare3,
   IconTrash,
-  IconArrowMoveRight,
-  IconLoader2,
+  IconX,
 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
-import { type FileNode } from "@/lib/models"
+import { getPreviewManifest, peekPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -23,14 +30,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
-import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
-import { PropertiesPanelContent } from "@/components/shared/PropertiesPanel"
+import { PropertiesPanelContent, usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { type FileNode } from "@/lib/models"
+import { cn } from "@/lib/utils"
+import { PreviewRenderer } from "./preview/PreviewRenderer"
 
 interface FilePreviewModalProps {
-  open: boolean 
+  open: boolean
   file: FileNode | null
+  preloadFiles?: FileNode[]
   currentIndex: number
   totalCount: number
   onClose: () => void
@@ -46,16 +55,17 @@ interface FilePreviewModalProps {
   onNext: () => void
 }
 
-const ICON = 22
+const iconButtonClass = "h-9 w-9 text-muted-foreground hover:bg-accent hover:text-foreground"
 
 export function FilePreviewModal({
   open,
   file,
+  preloadFiles = [],
   currentIndex,
   totalCount,
   onClose,
   onDownload,
-  onProperties,
+  onProperties: _onProperties,
   onCopy,
   onCut,
   onRename,
@@ -66,274 +76,247 @@ export function FilePreviewModal({
   onNext,
 }: FilePreviewModalProps) {
   const { bucketName, formatBytes } = usePropertiesPanel()
-  const [showPanel, setShowPanel] = React.useState(false)
-  const [mediaLoading, setMediaLoading] = React.useState(true)
-  const [mediaFailed, setMediaFailed] = React.useState(false)
-  const mediaRef = React.useRef<HTMLMediaElement | null>(null)
   const isMobile = useIsMobile()
+  const backendId = file?.backendId
+  const cachedManifest = backendId ? peekPreviewManifest(backendId) : null
+  const [showPanel, setShowPanel] = React.useState(false)
+  const [displayMode, setDisplayMode] = React.useState<"window" | "fullscreen" | "minimized">("window")
+  const [manifest, setManifest] = React.useState<PreviewManifest | null>(cachedManifest)
+  const [loading, setLoading] = React.useState(!cachedManifest)
+  const [error, setError] = React.useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = React.useState(0)
+  const [viewport, setViewport] = React.useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
 
   React.useEffect(() => {
-    if (!open) setShowPanel(false)
-  }, [open])
+    const update = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [])
+
+  const loadManifest = React.useCallback(async (signal?: AbortSignal) => {
+    if (!backendId) throw new Error("文件缺少后端标识")
+    return getPreviewManifest(backendId, signal)
+  }, [backendId])
 
   React.useEffect(() => {
-    setMediaLoading(true)
-    setMediaFailed(false)
+    if (!open || !file || !backendId) return
+    const controller = new AbortController()
+    let pollTimer: number | undefined
+    let pollCount = 0
+    let stopped = false
+
+    const refresh = async (prepare = true) => {
+      try {
+        const next = await loadManifest(controller.signal)
+        if (stopped) return
+        const shouldPrepare = next.requires_preparation && next.preparation_available && !next.assets.hls && !next.assets.audio
+        setManifest(prepare && shouldPrepare ? { ...next, status: "processing" } : next)
+        setError(null)
+        setLoading(false)
+
+        if (prepare && shouldPrepare && next.status !== "failed") {
+          await preparePreview(backendId)
+        }
+        if ((next.status === "processing" || shouldPrepare) && next.status !== "failed" && pollCount < 120) {
+          pollCount += 1
+          pollTimer = window.setTimeout(() => void refresh(false), 1500)
+        }
+      } catch (reason) {
+        if (!controller.signal.aborted && !stopped) {
+          setLoading(false)
+          setError(reason instanceof Error ? reason.message : "预览加载失败")
+        }
+      }
+    }
+
+    const cached = peekPreviewManifest(backendId)
+    setManifest(cached)
+    setLoading(!cached)
+    setError(null)
+    void refresh()
 
     return () => {
-      const media = mediaRef.current
-      if (!media) return
-      media.pause()
-      media.removeAttribute("src")
-      media.load()
-      mediaRef.current = null
+      stopped = true
+      controller.abort()
+      if (pollTimer) window.clearTimeout(pollTimer)
     }
-  }, [file?.id, open])
+  }, [backendId, file, loadManifest, open, refreshKey])
+
+  React.useEffect(() => {
+    if (!open) {
+      setShowPanel(false)
+      setDisplayMode("window")
+      return
+    }
+    for (const candidate of preloadFiles) {
+      if (!candidate.backendId || candidate.backendId === backendId) continue
+      void getPreviewManifest(candidate.backendId).then((next) => {
+        const imageUrl = next.assets.thumbnail_2x?.url ?? next.assets.thumbnail?.url
+        if (imageUrl) {
+          const image = new Image()
+          image.src = imageUrl
+        }
+      }).catch(() => undefined)
+    }
+  }, [backendId, open, preloadFiles])
 
   React.useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") onPrev()
-      if (e.key === "ArrowRight") onNext()
-      if (e.key === "Escape") {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const isEditing = target?.closest("input, textarea, [contenteditable='true'], .monaco-editor")
+      if (!isEditing && event.key === "ArrowLeft") onPrev()
+      if (!isEditing && event.key === "ArrowRight") onNext()
+      if (event.key === "Escape") {
         if (showPanel) setShowPanel(false)
         else onClose()
       }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [open, showPanel, onPrev, onNext, onClose])
+  }, [onClose, onNext, onPrev, open, showPanel])
 
   if (!file) return null
 
-  const isVideo = file.mediaType === "video"
-  const isAudio = file.mediaType === "audio"
+  const retry = async () => {
+    setLoading(true)
+    setError(null)
+    if (!backendId) {
+      setLoading(false)
+      setError("文件缺少后端标识")
+      return
+    }
+    try {
+      if (manifest?.status === "failed" && manifest.requires_preparation && manifest.preparation_available) {
+        await preparePreview(backendId)
+      }
+      setRefreshKey((value) => value + 1)
+    } catch (reason) {
+      setLoading(false)
+      setError(reason instanceof Error ? reason.message : "预览重试失败")
+    }
+  }
 
-  const btnCls = "h-9 w-9 text-white hover:bg-white/10 hover:text-white"
-  const btnClsActive = "h-9 w-9 bg-white/10 text-white hover:bg-white/15"
+  const panel = (
+    <PropertiesPanelContent
+      node={file}
+      bucketName={bucketName}
+      formatBytes={formatBytes}
+      previewMetadata={manifest?.metadata}
+      onClose={() => setShowPanel(false)}
+      embedded
+    />
+  )
+  const mediaWidth = typeof manifest?.metadata.width === "number" ? manifest.metadata.width : 0
+  const mediaHeight = typeof manifest?.metadata.height === "number" ? manifest.metadata.height : 0
+  const adaptiveMedia = !isMobile && displayMode === "window" &&
+    (manifest?.kind === "image" || manifest?.kind === "video") && mediaWidth > 0 && mediaHeight > 0
+  const mediaRatio = adaptiveMedia ? mediaWidth / mediaHeight : undefined
+  const imageToolbarHeight = manifest?.kind === "image" ? 48 : 0
+  const availableMediaWidth = Math.max(320, viewport.width * 0.92 - (showPanel ? 340 : 0))
+  const availableMediaStageHeight = Math.max(240, viewport.height * 0.84 - 56 - imageToolbarHeight)
+  const mediaContentWidth = adaptiveMedia && mediaRatio
+    ? Math.min(mediaWidth, availableMediaWidth, availableMediaStageHeight * mediaRatio)
+    : undefined
+  const mediaContentHeight = mediaContentWidth && mediaRatio
+    ? mediaContentWidth / mediaRatio + imageToolbarHeight
+    : undefined
+  const adaptiveDialogHeight = mediaContentHeight ? mediaContentHeight + 56 : undefined
+  const minimized = displayMode === "minimized" && manifest?.kind === "audio"
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} modal={!minimized} onOpenChange={(value) => !value && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[100dvh] w-[100dvw] max-w-none flex-row gap-0 rounded-none border-none bg-black/95 p-0 outline-none focus:outline-none focus-visible:outline-none"
+        disableScaleAnimation
+        hideOverlay={minimized}
+        className={cn(
+          "flex flex-row gap-0 overflow-hidden bg-background p-0 outline-none",
+          minimized
+            ? "right-4 bottom-4 left-auto top-auto h-28 w-[min(28rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 rounded-xl border border-border shadow-xl"
+            : isMobile || displayMode === "fullscreen"
+            ? "h-[100dvh] w-[100dvw] max-w-none rounded-none border-0 shadow-none"
+            : adaptiveMedia
+              ? "h-auto w-auto max-w-none rounded-xl border border-border shadow-xl"
+              : "h-[min(84dvh,54rem)] w-[min(92vw,80rem)] max-w-[80rem] rounded-xl border border-border shadow-xl"
+        )}
+        style={!minimized && adaptiveMedia && adaptiveDialogHeight ? { height: adaptiveDialogHeight } : undefined}
       >
-        {/* Left: toolbar + preview */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top bar */}
-          <div className="flex h-14 shrink-0 items-center justify-between px-4">
+        <div
+          className="flex min-w-0 flex-1 flex-col"
+          style={!minimized && adaptiveMedia && mediaContentWidth ? { width: mediaContentWidth } : undefined}
+        >
+          <header className={cn("flex shrink-0 items-center gap-3 border-b border-border px-3", minimized ? "h-11" : "h-14 md:px-4")}>
+            <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onClose} aria-label="关闭预览"><IconX size={20} /></Button>
             <div className="min-w-0 flex-1">
-              <span className="truncate text-sm text-white/80">{file.name}</span>
+              <p className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</p>
             </div>
-            <div className="flex items-center text-sm text-white/50">
-              {currentIndex + 1} / {totalCount}
-            </div>
-            <div className="flex flex-1 items-center justify-end gap-1.5">
-              <Button variant="ghost" size="icon" className={btnCls} onClick={() => onDownload([file.id])}>
-                <IconDownload size={ICON} />
-              </Button>
-              <Button variant="ghost" size="icon" className={showPanel ? btnClsActive : btnCls} onClick={() => setShowPanel((v) => !v)}>
-                <IconInfoCircle size={ICON} />
-              </Button>
+            {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
+            <div className="flex shrink-0 items-center gap-1">
+              {minimized ? (
+                <Button variant="ghost" size="icon" className={iconButtonClass} onClick={() => setDisplayMode("window")} aria-label="恢复音频播放器" title="恢复播放器"><IconArrowsMaximize size={20} /></Button>
+              ) : (
+                <>
+              {manifest?.kind === "audio" ? (
+                <Button variant="ghost" size="icon" className={iconButtonClass} onClick={() => { setShowPanel(false); setDisplayMode("minimized") }} aria-label="最小化音频播放器" title="最小化"><IconMinus size={20} /></Button>
+              ) : null}
+              {!isMobile ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={iconButtonClass}
+                  onClick={() => setDisplayMode((value) => value === "window" ? "fullscreen" : "window")}
+                  aria-label={displayMode === "fullscreen" ? "切换到中等窗口" : "切换到全屏"}
+                  title={displayMode === "fullscreen" ? "中等窗口" : "全屏"}
+                >
+                  {displayMode === "fullscreen" ? <IconArrowsMinimize size={20} /> : <IconArrowsMaximize size={20} />}
+                </Button>
+              ) : null}
+              <Button variant="ghost" size="icon" className={iconButtonClass} onClick={() => onDownload([file.id])} aria-label="下载"><IconDownload size={20} /></Button>
+              <Button variant="ghost" size="icon" className={cn(iconButtonClass, showPanel && "bg-accent text-foreground")} onClick={() => setShowPanel((value) => !value)} aria-label="文件属性"><IconInfoCircle size={20} /></Button>
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className={btnCls}>
-                    <IconDots size={ICON} />
-                  </Button>
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger className={cn("inline-flex items-center justify-center rounded-md", iconButtonClass)} aria-label="更多操作"><IconDots size={20} /></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onCopy([file.id])}>
-                    <IconCopy size={16} className="mr-2" /> 复制
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onCut([file.id])}>
-                    <IconCut size={16} className="mr-2" /> 剪切
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onRename([file.id])}>
-                    <IconEdit size={16} className="mr-2" /> 重命名
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onMove([file.id])}>
-                    <IconArrowMoveRight size={16} className="mr-2" /> 移动到…
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onShare([file.id])}>
-                    <IconShare3 size={16} className="mr-2" /> 分享
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onCopy([file.id])}><IconCopy />复制</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onCut([file.id])}><IconCut />剪切</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onRename([file.id])}><IconEdit />重命名</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onMove([file.id])}><IconArrowMoveRight />移动到…</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onShare([file.id])}><IconShare3 />分享</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => onDelete([file.id])}>
-                    <IconTrash size={16} className="mr-2" /> 删除
-                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => onDelete([file.id])}><IconTrash />删除</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="ghost" size="icon" className={btnCls} onClick={onClose}>
-                <IconX size={ICON} />
-              </Button>
+                </>
+              )}
             </div>
-          </div>
+          </header>
 
-          {/* Preview area */}
-          <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pb-4 outline-none focus:outline-none focus-visible:outline-none">
-            {totalCount > 1 && (
+          <main
+            className={cn("relative min-h-0 flex-1 overflow-hidden bg-background", adaptiveMedia && "flex-none")}
+            style={adaptiveMedia && mediaContentHeight ? { height: mediaContentHeight } : undefined}
+          >
+            {!minimized && totalCount > 1 ? (
               <>
-                <button
-                  type="button"
-                  onClick={onPrev}
-                  className="absolute left-0 top-0 z-10 flex h-full w-16 items-center justify-center text-2xl text-white/30 transition-colors hover:text-white/70"
-                  aria-label="上一个"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  onClick={onNext}
-                  className="absolute right-0 top-0 z-10 flex h-full w-16 items-center justify-center text-2xl text-white/30 transition-colors hover:text-white/70"
-                  aria-label="下一个"
-                >
-                  ›
-                </button>
+                <Button variant="secondary" size="icon" className="absolute left-3 top-1/2 z-30 h-10 w-10 -translate-y-1/2 rounded-full shadow-sm" onClick={onPrev} aria-label="上一个"><IconChevronLeft size={22} /></Button>
+                <Button variant="secondary" size="icon" className="absolute right-3 top-1/2 z-30 h-10 w-10 -translate-y-1/2 rounded-full shadow-sm" onClick={onNext} aria-label="下一个"><IconChevronRight size={22} /></Button>
               </>
-            )}
-
-            {isVideo ? (
-              file.preview && !mediaFailed ? (
-                <div className="relative flex h-full w-full items-center justify-center">
-                  {mediaLoading ? (
-                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/60">
-                      <IconLoader2 size={24} className="animate-spin" />
-                      <span className="ml-2 text-sm">正在载入视频</span>
-                    </div>
-                  ) : null}
-                  <video
-                    ref={(element) => {
-                      mediaRef.current = element
-                    }}
-                    src={file.preview}
-                    controls
-                    preload="metadata"
-                    playsInline
-                    className="max-h-full max-w-full rounded outline-none focus:outline-none focus-visible:outline-none"
-                    onLoadedMetadata={() => setMediaLoading(false)}
-                    onError={() => {
-                      setMediaLoading(false)
-                      setMediaFailed(true)
-                    }}
-                  >
-                    <track kind="captions" />
-                  </video>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-4 text-white/50">
-                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
-                    <span className="text-3xl">▶</span>
-                  </div>
-                  <span className="text-sm">{file.name}</span>
-                  <span className="text-xs text-white/30">无法预览此视频</span>
-                </div>
-              )
-            ) : isAudio ? (
-              <div className="flex flex-col items-center gap-4 text-white/50">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
-                  <span className="text-3xl">♪</span>
-                </div>
-                <span className="text-sm">{file.name}</span>
-                {file.preview && !mediaFailed ? (
-                  <audio
-                    ref={(element) => {
-                      mediaRef.current = element
-                    }}
-                    src={file.preview}
-                    controls
-                    preload="metadata"
-                    className="mt-2 w-80"
-                    onLoadedMetadata={() => setMediaLoading(false)}
-                    onError={() => {
-                      setMediaLoading(false)
-                      setMediaFailed(true)
-                    }}
-                  >
-                    <track kind="captions" />
-                  </audio>
-                ) : (
-                  <span className="text-xs text-white/30">无法预览此音频</span>
-                )}
-              </div>
-            ) : file.preview && !mediaFailed ? (
-              <div className="relative flex h-full w-full items-center justify-center">
-                {mediaLoading ? (
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/60">
-                    <IconLoader2 size={24} className="animate-spin" />
-                    <span className="ml-2 text-sm">正在载入图片</span>
-                  </div>
-                ) : null}
-                <img
-                  src={file.preview}
-                  alt={file.name}
-                  className="max-h-full max-w-full rounded object-contain outline-none focus:outline-none focus-visible:outline-none"
-                  decoding="async"
-                  fetchPriority="high"
-                  draggable={false}
-                  onLoad={() => setMediaLoading(false)}
-                  onError={() => {
-                    setMediaLoading(false)
-                    setMediaFailed(true)
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 text-white/50">
-                <span className="text-sm">{file.name}</span>
-                <span className="text-xs text-white/30">{mediaFailed ? "预览加载失败" : "暂无预览"}</span>
-              </div>
-            )}
-          </div>
+            ) : null}
+            {loading ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在准备预览</div>
+            ) : error ? (
+              <div className="flex h-full flex-col items-center justify-center px-6 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="outline" size="sm" className="mt-4" onClick={retry}><IconRefresh size={15} className="mr-1.5" />重试</Button></div>
+            ) : manifest ? (
+              <PreviewRenderer manifest={manifest} onRetry={() => void retry()} compactAudio={minimized} />
+            ) : null}
+          </main>
         </div>
 
-        {/* Right: full-height properties panel */}
-        {isMobile ? (
-          <AnimatePresence>
-            {showPanel && (
-              <motion.div
-                key="preview-props-mobile"
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-                className="absolute inset-0 z-50 bg-[#1a1a1a]"
-              >
-                <PropertiesPanelContent
-                  node={file}
-                  bucketName={bucketName}
-                  formatBytes={formatBytes}
-                  onClose={() => setShowPanel(false)}
-                  dark
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {minimized ? null : isMobile ? (
+          <AnimatePresence>{showPanel ? <motion.div key="preview-properties-mobile" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }} className="absolute inset-0 z-50 bg-background">{panel}</motion.div> : null}</AnimatePresence>
         ) : (
-          <AnimatePresence>
-            {showPanel && (
-              <motion.div
-                key="preview-props"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 360, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
-                className="shrink-0 overflow-hidden"
-              >
-                <div className="h-full w-[360px]">
-                  <PropertiesPanelContent
-                    node={file}
-                    bucketName={bucketName}
-                    formatBytes={formatBytes}
-                    onClose={() => setShowPanel(false)}
-                    dark
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <AnimatePresence>{showPanel ? <motion.aside key="preview-properties" initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }} className="min-h-0 shrink-0 self-stretch overflow-hidden border-l border-border bg-card"><div className="h-full min-h-0 w-[340px]">{panel}</div></motion.aside> : null}</AnimatePresence>
         )}
       </DialogContent>
     </Dialog>
   )
 }
-

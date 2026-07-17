@@ -48,7 +48,7 @@ export type CreateUploadSessionInput = {
   parent_id?: number | null
   file_name: string
   relative_path?: string | null
-  checksum?: string | null
+  checksum?: string | null | undefined
   object_key?: string | null
   mode?: UploadMode
   size: number
@@ -56,9 +56,13 @@ export type CreateUploadSessionInput = {
   content_type?: string | null
 }
 
-export async function sha256File(file: File): Promise<string> {
+export async function sha256File(file: File): Promise<string | null> {
+  const subtle = typeof crypto !== "undefined" ? crypto.subtle : undefined
+  if (!subtle) {
+    return null
+  }
   const buffer = await file.arrayBuffer()
-  const digest = await crypto.subtle.digest("SHA-256", buffer)
+  const digest = await subtle.digest("SHA-256", buffer)
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
