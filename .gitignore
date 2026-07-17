@@ -11,3 +11,4 @@ coverage/
 src_old
 package-lock.json
 SKELETON.md
+pnpm-lock.yaml
