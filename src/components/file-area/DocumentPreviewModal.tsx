@@ -8,7 +8,7 @@ import {
   IconX,
 } from "@tabler/icons-react"
 
-import { buildDownloadUrl } from "@/api/files"
+import { buildDownloadUrl, buildPreviewUrl } from "@/api/files"
 import { requestResponse } from "@/api/client"
 import { type FileNode } from "@/lib/models"
 import { useAppState } from "@/lib/app-state"
@@ -70,7 +70,7 @@ export function DocumentPreviewModal({
     }
 
     setLoading(true)
-    requestResponse(buildDownloadUrl(file.backendId))
+    requestResponse(buildPreviewUrl(file.backendId))
       .then(async (response) => {
         const text = await response.text()
         setContent(text)
@@ -94,7 +94,7 @@ export function DocumentPreviewModal({
   const isPdf = file.ext?.toLowerCase() === "pdf"
   const isEditable = isText || isCode
   const canDownload = Boolean(file.backendId)
-  const downloadUrl = file.backendId ? buildDownloadUrl(file.backendId) : ""
+  const previewUrl = file.backendId ? buildPreviewUrl(file.backendId) : ""
 
   const handleSave = () => {
     if (!file) return
@@ -267,9 +267,10 @@ export function DocumentPreviewModal({
             )
           ) : isPdf && canDownload ? (
             <iframe
-              src={downloadUrl}
+              src={previewUrl}
               title={file.name}
               className="h-full w-full border-0"
+              loading="eager"
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">

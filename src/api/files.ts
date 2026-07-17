@@ -187,6 +187,10 @@ export function buildDownloadUrl(nodeId: number) {
   return `/api/v1/explorer/download/${nodeId}`
 }
 
+export function buildPreviewUrl(nodeId: number) {
+  return `/api/v1/explorer/preview/${nodeId}`
+}
+
 export function buildFolderDownloadUrl(nodeId: number) {
   return `/api/v1/explorer/download/folder/${nodeId}`
 }

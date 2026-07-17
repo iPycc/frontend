@@ -10,6 +10,7 @@ import {
   IconShare3,
   IconTrash,
   IconArrowMoveRight,
+  IconLoader2,
 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
@@ -66,11 +67,28 @@ export function FilePreviewModal({
 }: FilePreviewModalProps) {
   const { bucketName, formatBytes } = usePropertiesPanel()
   const [showPanel, setShowPanel] = React.useState(false)
+  const [mediaLoading, setMediaLoading] = React.useState(true)
+  const [mediaFailed, setMediaFailed] = React.useState(false)
+  const mediaRef = React.useRef<HTMLMediaElement | null>(null)
   const isMobile = useIsMobile()
 
   React.useEffect(() => {
     if (!open) setShowPanel(false)
   }, [open])
+
+  React.useEffect(() => {
+    setMediaLoading(true)
+    setMediaFailed(false)
+
+    return () => {
+      const media = mediaRef.current
+      if (!media) return
+      media.pause()
+      media.removeAttribute("src")
+      media.load()
+      mediaRef.current = null
+    }
+  }, [file?.id, open])
 
   React.useEffect(() => {
     if (!open) return
@@ -175,15 +193,32 @@ export function FilePreviewModal({
             )}
 
             {isVideo ? (
-              file.preview ? (
-                <video
-                  src={file.preview}
-                  controls
-                  autoPlay
-                  className="max-h-full max-w-full rounded outline-none focus:outline-none focus-visible:outline-none"
-                >
-                  <track kind="captions" />
-                </video>
+              file.preview && !mediaFailed ? (
+                <div className="relative flex h-full w-full items-center justify-center">
+                  {mediaLoading ? (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/60">
+                      <IconLoader2 size={24} className="animate-spin" />
+                      <span className="ml-2 text-sm">正在载入视频</span>
+                    </div>
+                  ) : null}
+                  <video
+                    ref={(element) => {
+                      mediaRef.current = element
+                    }}
+                    src={file.preview}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    className="max-h-full max-w-full rounded outline-none focus:outline-none focus-visible:outline-none"
+                    onLoadedMetadata={() => setMediaLoading(false)}
+                    onError={() => {
+                      setMediaLoading(false)
+                      setMediaFailed(true)
+                    }}
+                  >
+                    <track kind="captions" />
+                  </video>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-4 text-white/50">
                   <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10">
@@ -199,25 +234,53 @@ export function FilePreviewModal({
                   <span className="text-3xl">♪</span>
                 </div>
                 <span className="text-sm">{file.name}</span>
-                {file.preview ? (
-                  <audio src={file.preview} controls autoPlay className="mt-2 w-80">
+                {file.preview && !mediaFailed ? (
+                  <audio
+                    ref={(element) => {
+                      mediaRef.current = element
+                    }}
+                    src={file.preview}
+                    controls
+                    preload="metadata"
+                    className="mt-2 w-80"
+                    onLoadedMetadata={() => setMediaLoading(false)}
+                    onError={() => {
+                      setMediaLoading(false)
+                      setMediaFailed(true)
+                    }}
+                  >
                     <track kind="captions" />
                   </audio>
                 ) : (
                   <span className="text-xs text-white/30">无法预览此音频</span>
                 )}
               </div>
-            ) : file.preview ? (
-              <img
-                src={file.preview}
-                alt={file.name}
-                className="max-h-full max-w-full rounded object-contain outline-none focus:outline-none focus-visible:outline-none"
-                draggable={false}
-              />
+            ) : file.preview && !mediaFailed ? (
+              <div className="relative flex h-full w-full items-center justify-center">
+                {mediaLoading ? (
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/60">
+                    <IconLoader2 size={24} className="animate-spin" />
+                    <span className="ml-2 text-sm">正在载入图片</span>
+                  </div>
+                ) : null}
+                <img
+                  src={file.preview}
+                  alt={file.name}
+                  className="max-h-full max-w-full rounded object-contain outline-none focus:outline-none focus-visible:outline-none"
+                  decoding="async"
+                  fetchPriority="high"
+                  draggable={false}
+                  onLoad={() => setMediaLoading(false)}
+                  onError={() => {
+                    setMediaLoading(false)
+                    setMediaFailed(true)
+                  }}
+                />
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-4 text-white/50">
                 <span className="text-sm">{file.name}</span>
-                <span className="text-xs text-white/30">暂无预览</span>
+                <span className="text-xs text-white/30">{mediaFailed ? "预览加载失败" : "暂无预览"}</span>
               </div>
             )}
           </div>

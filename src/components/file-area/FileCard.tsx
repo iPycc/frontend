@@ -1,6 +1,6 @@
 ﻿import { useState } from "react"
 import type { MouseEvent } from "react"
-import { IconCheck, IconCircle } from "@tabler/icons-react"
+import { IconCheck, IconCircle, IconPlayerPlay } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/models"
 import { useAppState } from "@/lib/app-state"
@@ -52,8 +52,9 @@ export function FileCard({
   const hasThumbnail = showThumbnail && canShowThumbnail(item)
   const isText = isTextFile(item)
   const previewUrl = item.preview || null
-  const hasPreviewImage = hasThumbnail && !!previewUrl && !isText
+  const hasPreviewImage = hasThumbnail && item.mediaType === "image" && !!previewUrl && !isText
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageFailed, setImageFailed] = useState(false)
 
   if (!showThumbnail || item.kind === "folder") {
     return (
@@ -149,7 +150,7 @@ export function FileCard({
             }}
             className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-muted-foreground/5"
           >
-            {hasPreviewImage ? (
+            {hasPreviewImage && !imageFailed ? (
               <>
                 {!imageLoaded && <Skeleton className="absolute inset-0 h-full w-full" />}
                 <img
@@ -157,8 +158,11 @@ export function FileCard({
                   alt={item.name}
                   className={cn("h-full w-full object-cover transition-opacity duration-300", imageLoaded ? "opacity-100" : "opacity-0")}
                   loading="lazy"
+                  decoding="async"
+                  fetchPriority="low"
                   draggable={false}
                   onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageFailed(true)}
                 />
               </>
             ) : hasThumbnail && isText ? (
@@ -178,7 +182,9 @@ export function FileCard({
 
             {item.mediaType === "video" ? (
               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white">▶</div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white">
+                  <IconPlayerPlay size={20} stroke={2} />
+                </div>
               </div>
             ) : null}
           </button>
@@ -232,4 +238,3 @@ export function FileCard({
     </ContextMenu>
   )
 }
-

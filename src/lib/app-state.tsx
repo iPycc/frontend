@@ -11,6 +11,7 @@ import {
 } from "@/api/auth"
 import { configureAuthClient } from "@/api/client"
 import {
+  buildPreviewUrl,
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
   listCategoryNodePage,
@@ -437,7 +438,7 @@ function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: strin
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
   let preview: string | undefined
   if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
-    preview = `/api/v1/explorer/preview/${node.id}`
+    preview = buildPreviewUrl(node.id)
   }
   return {
     id: String(node.id),
