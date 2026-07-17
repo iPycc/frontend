@@ -1,14 +1,24 @@
+import * as React from "react"
+
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { IconRestore, IconTrashX } from "@tabler/icons-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
 
 export function Recycle() {
   usePageTitle("回收站")
-  const { getRecycleNodes, restoreNodes, permanentlyDeleteNodes, formatBytes } = useAppState()
+  const { getRecycleNodes, loadRecycle, recycleLoading, restoreNodes, permanentlyDeleteNodes, formatBytes } = useAppState()
   const items = getRecycleNodes()
+
+  React.useEffect(() => {
+    void loadRecycle().catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "回收站加载失败")
+    })
+  }, [loadRecycle])
 
   return (
     <PageShell title="回收站" description="已删除对象会先进入回收站，可恢复或彻底删除。">
@@ -23,6 +33,17 @@ export function Recycle() {
           </TableRow>
         </TableHeader>
         <TableBody>
+          {recycleLoading && items.length === 0
+            ? Array.from({ length: 4 }, (_, index) => (
+                <TableRow key={index}>
+                  {Array.from({ length: 5 }, (__, cellIndex) => (
+                    <TableCell key={cellIndex}>
+                      <Skeleton className="h-5 w-full rounded-md" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            : null}
           {items.map((item) => (
             <TableRow key={item.id}>
               <TableCell>{item.name}</TableCell>

@@ -4,6 +4,7 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import { getWebsiteSettings, updateWebsiteSettings, type WebsiteSettings } from "@/api/site"
+import { cacheWebsiteSettings } from "@/components/shared/useWebsiteSettings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -39,6 +40,7 @@ export function WebsiteSettingsPage() {
         const merged = { ...defaultSettings, ...response.settings }
         setSettings(merged)
         setInitialSettings(merged)
+        cacheWebsiteSettings(merged)
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -71,6 +73,7 @@ export function WebsiteSettingsPage() {
       const merged = { ...defaultSettings, ...response.settings }
       setSettings(merged)
       setInitialSettings(merged)
+      cacheWebsiteSettings(merged)
       toast.success("站点设置已保存")
     } catch (error: unknown) {
       toast.error("保存失败", {

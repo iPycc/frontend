@@ -35,6 +35,12 @@ export function ViewSettingsPopover({
   onPageSizeChange,
   children,
 }: ViewSettingsPopoverProps) {
+  const [draftPageSize, setDraftPageSize] = React.useState(pageSize)
+
+  React.useEffect(() => {
+    setDraftPageSize(pageSize)
+  }, [pageSize])
+
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
@@ -87,8 +93,9 @@ export function ViewSettingsPopover({
           <div className="space-y-2.5">
             <p className="text-sm font-medium text-foreground">分页大小</p>
             <Slider
-              value={[pageSize]}
-              onValueChange={([v]) => onPageSizeChange(v)}
+              value={[draftPageSize]}
+              onValueChange={([value]) => setDraftPageSize(value)}
+              onValueCommit={([value]) => onPageSizeChange(value)}
               min={50}
               max={2000}
               step={50}

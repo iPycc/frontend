@@ -51,6 +51,11 @@ export function AppFiles() {
     getFoldersForBucket,
     getNodeById,
     getNodesInFolder,
+    loadDirectory,
+    resolveFolderPath,
+    getDirectoryPageState,
+    loadCategory,
+    getCategoryPageState,
     createFolder,
     renameNode,
     moveNodes,
@@ -85,18 +90,23 @@ export function AppFiles() {
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
   const [mediaPreviewFile, setMediaPreviewFile] = React.useState<FileNode | null>(null)
   const [docPreviewFile, setDocPreviewFile] = React.useState<FileNode | null>(null)
+  const [resolvedFolderId, setResolvedFolderId] = React.useState<string | null>(null)
+  const [routeLoading, setRouteLoading] = React.useState(true)
 
   const searchParams = new URLSearchParams(location.search)
-  const category = searchParams.get("type") as keyof typeof categoryMap | null
+  const rawCategory = searchParams.get("type")
+  const category = rawCategory && rawCategory in categoryMap ? (rawCategory as keyof typeof categoryMap) : null
   const currentPath = searchParams.get("folder") ?? ""
-  const currentFolderId = getFolderPathId(currentPath)
+  const currentFolderId = resolvedFolderId ?? getFolderPathId(currentPath)
+  const pageState = category
+    ? getCategoryPageState(category)
+    : getDirectoryPageState(currentFolderId)
 
   usePageTitle(getPageTitle(category, currentPath))
 
   const items = React.useMemo(() => {
-    const source = category && category in categoryMap ? getCategoryNodes(category) : getNodesInFolder(currentPath)
-    return [...source].sort((left, right) => compareNodes(left, right, sortValue))
-  }, [category, currentPath, getCategoryNodes, getNodesInFolder, sortValue])
+    return category && category in categoryMap ? getCategoryNodes(category) : getNodesInFolder(currentPath)
+  }, [category, currentPath, getCategoryNodes, getNodesInFolder])
 
   const selectedNodes = React.useMemo(
     () => selectedIds.map(getNodeById).filter(Boolean) as FileNode[],
@@ -121,6 +131,49 @@ export function AppFiles() {
     const root = { id: activeBucket.rootNodeId, name: `${activeBucket.name} /` }
     return [root, ...getFoldersForBucket(undefined, false).map((node) => ({ id: node.id, name: node.name }))]
   }, [activeBucket.name, activeBucket.rootNodeId, getFoldersForBucket])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setRouteLoading(true)
+
+    const loadRoute = async () => {
+      try {
+        if (category) {
+          setResolvedFolderId(null)
+          await loadCategory(category, activeBucket.id, {
+            reset: true,
+            limit: pageSize,
+            sort: sortValue,
+          })
+          return
+        }
+
+        const folderId = await resolveFolderPath(currentPath, activeBucket.id, { limit: pageSize })
+        if (cancelled) return
+        setResolvedFolderId(folderId)
+        if (folderId) {
+          await loadDirectory(folderId, activeBucket.id, {
+            reset: true,
+            limit: pageSize,
+            sort: sortValue,
+          })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "目录加载失败")
+        }
+      } finally {
+        if (!cancelled) {
+          setRouteLoading(false)
+        }
+      }
+    }
+
+    void loadRoute()
+    return () => {
+      cancelled = true
+    }
+  }, [activeBucket.id, category, currentPath, loadCategory, loadDirectory, pageSize, resolveFolderPath, sortValue])
 
   React.useEffect(() => {
     setSelectedIds([])
@@ -172,8 +225,32 @@ export function AppFiles() {
     requestUpload(currentFolderId)
   }
 
-  const handleRefresh = () => {
-    // startFileAreaLoading("正在同步目录", 420)
+  const handleRefresh = async () => {
+    if (category) {
+      await loadCategory(category, activeBucket.id, {
+        reset: true,
+        limit: pageSize,
+        sort: sortValue,
+      })
+      return
+    }
+    if (currentFolderId) {
+      await loadDirectory(currentFolderId, activeBucket.id, {
+        reset: true,
+        limit: pageSize,
+        sort: sortValue,
+      })
+    }
+  }
+
+  const handleLoadMore = async () => {
+    if (category) {
+      await loadCategory(category, activeBucket.id, { limit: pageSize, sort: sortValue })
+      return
+    }
+    if (currentFolderId) {
+      await loadDirectory(currentFolderId, activeBucket.id, { limit: pageSize, sort: sortValue })
+    }
   }
 
   const handleRenameRequest = (ids: string[]) => {
@@ -364,6 +441,8 @@ export function AppFiles() {
         >
           <FileArea
             items={items}
+            loading={routeLoading || pageState.loading}
+            hasMore={Boolean(pageState.nextCursor)}
             currentPath={currentPath}
             selectedIds={selectedIds}
             viewMode={viewMode}
@@ -385,7 +464,8 @@ export function AppFiles() {
             onCreateFolder={() => handleCreateFolder()}
             onCreateChildFolder={handleCreateFolder}
             onUploadRequest={handleUpload}
-            onRefresh={handleRefresh}
+            onRefresh={() => void handleRefresh()}
+            onLoadMore={() => void handleLoadMore()}
             onPaste={() => void handlePaste()}
             onViewModeChange={setViewMode}
             onSortChange={setSortValue}
@@ -463,24 +543,4 @@ export function AppFiles() {
       />
     </>
   )
-}
-
-function compareNodes(left: FileNode, right: FileNode, sortValue: SortValue) {
-  if (left.kind !== right.kind) {
-    return left.kind === "folder" ? -1 : 1
-  }
-
-  switch (sortValue) {
-    case "updated-desc":
-      return right.updatedAt.localeCompare(left.updatedAt)
-    case "updated-asc":
-      return left.updatedAt.localeCompare(right.updatedAt)
-    case "name-desc":
-      return right.name.localeCompare(left.name, "zh-CN")
-    case "size-desc":
-      return (right.size ?? 0) - (left.size ?? 0)
-    case "name-asc":
-    default:
-      return left.name.localeCompare(right.name, "zh-CN")
-  }
 }

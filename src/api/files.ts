@@ -1,4 +1,5 @@
 import { requestJson } from "./client"
+import type { SortValue } from "@/lib/models"
 
 export type ExplorerMount = {
   id: number
@@ -49,6 +50,25 @@ export type RestoreNodesInput = {
   node_ids: number[]
 }
 
+export type ExplorerNodePage = {
+  items: ExplorerNode[]
+  next_cursor: string | null
+}
+
+export type ListNodePageOptions = {
+  mountId: number
+  parentId?: number | null
+  limit: number
+  cursor?: string | null
+  sort?: SortValue
+  foldersOnly?: boolean
+}
+
+export type ExplorerNodeSearchResult = {
+  node: ExplorerNode
+  parent_path: string
+}
+
 export async function listUserMounts(token: string) {
   return requestJson<ExplorerMount[]>("/explorer/mount", {
     token,
@@ -62,6 +82,61 @@ export async function listNodes(token: string, mountId: number, parentId?: numbe
   }
 
   return requestJson<ExplorerNode[]>(`/explorer/node?${query.toString()}`, { token })
+}
+
+export async function listNodePage(token: string, options: ListNodePageOptions) {
+  const query = new URLSearchParams({
+    mount_id: String(options.mountId),
+    limit: String(options.limit),
+    sort: options.sort ?? "name-asc",
+  })
+  if (options.parentId !== undefined && options.parentId !== null) {
+    query.set("parent_id", String(options.parentId))
+  }
+  if (options.cursor) {
+    query.set("cursor", options.cursor)
+  }
+  if (options.foldersOnly) {
+    query.set("folders_only", "true")
+  }
+
+  return requestJson<ExplorerNodePage>(`/explorer/node/page?${query.toString()}`, { token })
+}
+
+export async function listCategoryNodePage(
+  token: string,
+  options: Omit<ListNodePageOptions, "parentId" | "foldersOnly"> & {
+    category: "image" | "video" | "audio" | "document"
+  }
+) {
+  const query = new URLSearchParams({
+    mount_id: String(options.mountId),
+    category: options.category,
+    limit: String(options.limit),
+    sort: options.sort ?? "name-asc",
+  })
+  if (options.cursor) {
+    query.set("cursor", options.cursor)
+  }
+
+  return requestJson<ExplorerNodePage>(`/explorer/node/category?${query.toString()}`, { token })
+}
+
+export async function searchNodes(
+  token: string,
+  mountId: number,
+  queryText: string,
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams({
+    mount_id: String(mountId),
+    q: queryText,
+    limit: "20",
+  })
+  return requestJson<ExplorerNodeSearchResult[]>(`/explorer/node/search?${query.toString()}`, {
+    token,
+    signal,
+  })
 }
 
 export async function createFolder(token: string, body: CreateFolderInput) {

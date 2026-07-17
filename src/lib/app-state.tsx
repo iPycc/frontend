@@ -13,7 +13,8 @@ import { configureAuthClient } from "@/api/client"
 import {
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
-  listNodes,
+  listCategoryNodePage,
+  listNodePage,
   listRecycle,
   listUserMounts,
   renameNode as apiRenameNode,
@@ -31,7 +32,7 @@ import {
   type ShareRead,
 } from "@/api/share"
 import { abortUpload, completeUpload, createUploadSession, recordRemotePart, sha256File, uploadLocalPart } from "@/api/uploads"
-import { getCurrentProfile, getLoginActivity, getTwoFactorStatus } from "@/api/user"
+import { getCurrentProfile } from "@/api/user"
 import {
   createId,
   defaultAppSnapshot,
@@ -51,6 +52,7 @@ import {
   type OfflineTask,
   type SecurityState,
   type ShareRecord,
+  type SortValue,
   type ThemeMode,
   type UploadQueueItem,
   type UserProfile,
@@ -99,6 +101,36 @@ type UploadTarget = {
   parentId: string | null
 }
 
+type NodeCategory = "image" | "video" | "audio" | "document"
+
+type PageLoadState = {
+  loading: boolean
+  loaded: boolean
+  nextCursor: string | null
+  queryKey: string
+}
+
+type PageLoadOptions = {
+  reset?: boolean
+  limit?: number
+  sort?: SortValue
+}
+
+const EMPTY_PAGE_STATE: PageLoadState = {
+  loading: false,
+  loaded: false,
+  nextCursor: null,
+  queryKey: "",
+}
+
+function directoryPageKey(mode: "content" | "folders", bucketId: string, parentId: string) {
+  return `directory:${mode}:${bucketId}:${parentId}`
+}
+
+function categoryPageKey(category: NodeCategory, bucketId: string) {
+  return `category:${category}:${bucketId}`
+}
+
 type AppStateValue = {
   auth: AuthState
   authSession: AuthSession | null
@@ -142,7 +174,18 @@ type AppStateValue = {
   getNodesInFolder: (path: string, bucketId?: string) => FileNode[]
   getTreeNodes: (bucketId?: string) => FileNode[]
   getFoldersForBucket: (bucketId?: string, includeRoot?: boolean) => FileNode[]
-  getCategoryNodes: (category: "image" | "video" | "audio" | "document", bucketId?: string) => FileNode[]
+  getCategoryNodes: (category: NodeCategory, bucketId?: string) => FileNode[]
+  loadDirectory: (parentId: string | null, bucketId?: string, options?: PageLoadOptions) => Promise<void>
+  loadDirectoryFolders: (parentId: string | null, bucketId?: string) => Promise<void>
+  resolveFolderPath: (path: string, bucketId?: string, options?: PageLoadOptions) => Promise<string | null>
+  getDirectoryPageState: (parentId: string | null, bucketId?: string) => PageLoadState
+  getFolderTreePageState: (parentId: string | null, bucketId?: string) => PageLoadState
+  loadCategory: (category: NodeCategory, bucketId?: string, options?: PageLoadOptions) => Promise<void>
+  getCategoryPageState: (category: NodeCategory, bucketId?: string) => PageLoadState
+  loadRecycle: () => Promise<void>
+  recycleLoading: boolean
+  loadShares: () => Promise<void>
+  sharesLoading: boolean
   getSharedWithMeNodes: () => FileNode[]
   getRecycleNodes: () => FileNode[]
   getShareRecords: () => Array<ShareRecord & { node?: FileNode }>
@@ -416,8 +459,75 @@ function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: strin
   }
 }
 
-async function loadMountNodes(token: string, bucket: BucketMount, timezone?: string) {
-  const rootNode: FileNode = {
+function mapShareRead(share: ShareRead): ShareRecord {
+  const nodeName = share.node_name ?? undefined
+  const nodeKind = share.node_type ?? undefined
+  const nodeMediaType = nodeName && nodeKind === "file" ? inferMediaType(nodeName, "file") : undefined
+
+  return {
+    id: share.id,
+    nodeId: String(share.node_id),
+    access: share.access === ShareAccess.PASSWORD ? "密码访问" : "公开访问",
+    expiresAt: share.expires_at ?? "",
+    createdAt: share.created_at,
+    views: share.view_count,
+    downloads: share.download_count,
+    maxDownloads: share.max_downloads,
+    nodeName,
+    nodeKind,
+    nodeExt: nodeName && nodeKind === "file" ? extractExtension(nodeName) : undefined,
+    nodeSize: share.node_size ?? undefined,
+    nodeMediaType,
+  }
+}
+
+function removeCachedSubtrees(nodes: FileNode[], directIds: Set<string>) {
+  if (directIds.size === 0) {
+    return nodes
+  }
+
+  const removedIds = new Set(directIds)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const node of nodes) {
+      if (node.parentId && removedIds.has(node.parentId) && !removedIds.has(node.id)) {
+        removedIds.add(node.id)
+        changed = true
+      }
+    }
+  }
+  return nodes.filter((node) => !removedIds.has(node.id))
+}
+
+type WorkspaceBasics = {
+  profilePayload: Awaited<ReturnType<typeof getCurrentProfile>>
+  rawMounts: ExplorerMount[]
+}
+
+let workspaceBasicsRequest: { token: string; promise: Promise<WorkspaceBasics> } | null = null
+
+async function fetchWorkspaceBasics(token: string): Promise<WorkspaceBasics> {
+  if (workspaceBasicsRequest?.token === token) {
+    return workspaceBasicsRequest.promise
+  }
+
+  const promise = Promise.all([getCurrentProfile(token), listUserMounts(token)]).then(
+    ([profilePayload, rawMounts]) => ({ profilePayload, rawMounts })
+  )
+  workspaceBasicsRequest = { token, promise }
+
+  try {
+    return await promise
+  } finally {
+    if (workspaceBasicsRequest?.promise === promise) {
+      workspaceBasicsRequest = null
+    }
+  }
+}
+
+function createMountRootNode(bucket: BucketMount): FileNode {
+  return {
     id: bucket.rootNodeId,
     bucketId: bucket.id,
     parentId: null,
@@ -427,31 +537,6 @@ async function loadMountNodes(token: string, bucket: BucketMount, timezone?: str
     createdAt: bucket.createdAt,
     isSystemRoot: true,
   }
-
-  if (!bucket.backendId) {
-    return [rootNode]
-  }
-
-  const nodes: FileNode[] = [rootNode]
-  const queue: Array<{ backendParentId?: number | null; uiParentId: string }> = [{ backendParentId: undefined, uiParentId: rootNode.id }]
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) {
-      continue
-    }
-
-    const children = await listNodes(token, bucket.backendId, current.backendParentId)
-    for (const child of children) {
-      const mapped = mapNodeToFileNode(child, bucket.id, current.uiParentId, timezone)
-      nodes.push(mapped)
-      if (mapped.kind === "folder" && mapped.backendId) {
-        queue.push({ backendParentId: mapped.backendId, uiParentId: mapped.id })
-      }
-    }
-  }
-
-  return nodes
 }
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
@@ -460,6 +545,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = React.useState(false)
   const [uploadQueue, setUploadQueue] = React.useState<UploadQueueItem[]>([])
   const [uploadQueueOpen, setUploadQueueOpen] = React.useState(false)
+  const [pageStates, setPageStates] = React.useState<Record<string, PageLoadState>>({})
+  const [categoryNodesByKey, setCategoryNodesByKey] = React.useState<Record<string, FileNode[]>>({})
+  const [treeFolderNodes, setTreeFolderNodes] = React.useState<FileNode[]>([])
+  const [recycleNodes, setRecycleNodes] = React.useState<FileNode[]>([])
+  const [recycleLoading, setRecycleLoading] = React.useState(false)
+  const [sharesLoading, setSharesLoading] = React.useState(false)
   const backendHealthNotifiedRef = React.useRef(false)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const folderInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -467,10 +558,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const uploadControllersRef = React.useRef(new Map<string, AbortController>())
   const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget; relativePath?: string }>())
   const snapshotRef = React.useRef(snapshot)
+  const pageStatesRef = React.useRef(pageStates)
+  const pageRequestsRef = React.useRef(new Map<string, Promise<void>>())
 
   React.useEffect(() => {
     snapshotRef.current = snapshot
   }, [snapshot])
+
+  React.useEffect(() => {
+    pageStatesRef.current = pageStates
+  }, [pageStates])
 
   React.useEffect(() => {
     if (typeof window === "undefined") {
@@ -550,20 +647,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = Boolean(authSession && currentUser && !isExpired(authSession.tokens.accessExpiresAt))
 
   const updateSnapshot = React.useCallback((recipe: (current: AppSnapshot) => AppSnapshot) => {
-    setSnapshot((current) => recipe(current))
+    const next = recipe(snapshotRef.current)
+    snapshotRef.current = next
+    setSnapshot(next)
+  }, [])
+
+  const updatePageState = React.useCallback((key: string, recipe: (current: PageLoadState) => PageLoadState) => {
+    const current = pageStatesRef.current
+    const nextState = recipe(current[key] ?? EMPTY_PAGE_STATE)
+    const next = { ...current, [key]: nextState }
+    pageStatesRef.current = next
+    setPageStates(next)
   }, [])
 
   const hydrateWorkspace = React.useCallback(
-    async (session: AuthSession) => {
+    async (session: AuthSession, prefetchedBasics?: WorkspaceBasics) => {
       const token = session.tokens.accessToken
-      const profilePayload = await getCurrentProfile(token)
+      const { profilePayload, rawMounts } = prefetchedBasics ?? await fetchWorkspaceBasics(token)
       const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
-      const [loginActivityEntries, rawMounts, recycleEntries, rawShares] = await Promise.all([
-        getLoginActivity(token, timezone),
-        listUserMounts(token),
-        listRecycle(token),
-        apiListMyShares(token).catch(() => [] as ShareRead[]),
-      ])
 
       const nextSession: AuthSession = {
         ...session,
@@ -580,24 +681,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
       const tz = timezone
       const buckets = rawMounts.map((mount) => mapMountToBucket(mount, nextSession.user, tz))
-      const bucketNodeLists = await Promise.all(buckets.map((bucket) => loadMountNodes(token, bucket, tz)))
-      const nodesMap = new Map<string, FileNode>()
-
-      for (const list of bucketNodeLists) {
-        for (const node of list) {
-          nodesMap.set(node.id, node)
-        }
-      }
-
-      for (const recycledNode of recycleEntries) {
-        const mapped = mapNodeToFileNode(
-          recycledNode,
-          String(recycledNode.mount_id),
-          recycledNode.parent_id ? String(recycledNode.parent_id) : `root:${recycledNode.mount_id}`,
-          tz
-        )
-        nodesMap.set(mapped.id, mapped)
-      }
+      const rootNodes = buckets.map(createMountRootNode)
 
       updateSnapshot((current) => ({
         ...current,
@@ -617,27 +701,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         auth: {
           session: nextSession,
         },
-        loginActivity: loginActivityEntries,
+        loginActivity: [],
         buckets,
         activeBucketId:
           buckets.find((bucket) => bucket.id === current.activeBucketId)?.id ??
           buckets[0]?.id ??
           "",
-        nodes: Array.from(nodesMap.values()),
-        shares: rawShares.map((share) => {
-          const node = nodesMap.get(String(share.node_id))
-          return {
-            ...mapShareRead(share),
-            nodeName: node?.name,
-            nodeKind: node?.kind,
-            nodeExt: node?.ext,
-            nodeSize: node?.size,
-            nodeMediaType: node?.mediaType,
-            nodePreview: node?.preview,
-          }
-        }),
+        nodes: rootNodes,
+        shares: [],
         fileContents: {},
       }))
+      setPageStates({})
+      pageStatesRef.current = {}
+      pageRequestsRef.current.clear()
+      setCategoryNodesByKey({})
+      setTreeFolderNodes([])
+      setRecycleNodes([])
     },
     [updateSnapshot]
   )
@@ -665,6 +744,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       clipboard: null,
       fileContents: {},
     }))
+    setPageStates({})
+    pageStatesRef.current = {}
+    pageRequestsRef.current.clear()
+    setCategoryNodesByKey({})
+    setTreeFolderNodes([])
+    setRecycleNodes([])
   }, [updateSnapshot])
 
   const refreshAuthSession = React.useCallback(
@@ -672,17 +757,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const currentSession = snapshotRef.current.auth.session
       const refreshedTokens = await apiRefreshToken()
       let nextSession = currentSession ? mergeSessionTokens(currentSession, refreshedTokens) : null
+      let prefetchedBasics: WorkspaceBasics | undefined
 
       if (!nextSession) {
-        const profilePayload = await getCurrentProfile(refreshedTokens.accessToken)
+        prefetchedBasics = await fetchWorkspaceBasics(refreshedTokens.accessToken)
         nextSession = {
-          user: profilePayload.account,
+          user: prefetchedBasics.profilePayload.account,
           tokens: refreshedTokens,
         }
       }
 
       if (hydrate) {
-        await hydrateWorkspace(nextSession)
+        await hydrateWorkspace(nextSession, prefetchedBasics)
       } else {
         updateSnapshot((current) => ({
           ...current,
@@ -774,7 +860,396 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const defaultBucketId = activeBucket.id
 
-  const getNodeById = React.useCallback((nodeId: string) => snapshot.nodes.find((node) => node.id === nodeId), [snapshot.nodes])
+  const loadDirectoryPage = React.useCallback(
+    async (
+      mode: "content" | "folders",
+      parentId: string | null,
+      bucketId = snapshotRef.current.activeBucketId,
+      options: PageLoadOptions = {}
+    ) => {
+      const session = snapshotRef.current.auth.session
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!session || !bucket?.backendId) {
+        return
+      }
+
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      const apiParentId = uiParentId.startsWith("root:") ? undefined : Number(uiParentId)
+      if (apiParentId !== undefined && Number.isNaN(apiParentId)) {
+        return
+      }
+
+      const limit = Math.min(Math.max(options.limit ?? (mode === "folders" ? 2000 : 200), 1), 2000)
+      const sort = options.sort ?? "name-asc"
+      const queryKey = `${sort}:${limit}`
+      const stateKey = directoryPageKey(mode, bucket.id, uiParentId)
+      const currentState = pageStatesRef.current[stateKey] ?? EMPTY_PAGE_STATE
+      const reset = Boolean(options.reset || currentState.queryKey !== queryKey)
+
+      if (!reset && currentState.loaded && !currentState.nextCursor) {
+        return
+      }
+
+      const cursor = reset ? null : currentState.nextCursor
+      const requestKey = `${stateKey}:${queryKey}:${cursor ?? "first"}`
+      const inFlight = pageRequestsRef.current.get(requestKey)
+      if (inFlight) {
+        return inFlight
+      }
+
+      updatePageState(stateKey, (current) => ({
+        ...current,
+        loading: true,
+        nextCursor: reset ? null : current.nextCursor,
+        queryKey,
+      }))
+
+      const request = (async () => {
+        try {
+          const response = await listNodePage(session.tokens.accessToken, {
+            mountId: bucket.backendId,
+            parentId: apiParentId,
+            limit,
+            cursor,
+            sort,
+            foldersOnly: mode === "folders",
+          })
+          const mapped = response.items.map((node) =>
+            mapNodeToFileNode(node, bucket.id, uiParentId, snapshotRef.current.settings.timezone)
+          )
+
+          if (mode === "folders") {
+            setTreeFolderNodes((current) => {
+              let baseNodes = current
+              if (reset) {
+                const directIds = new Set<string>(
+                  current
+                    .filter((node) => node.bucketId === bucket.id && node.parentId === uiParentId)
+                    .map((node) => node.id)
+                )
+                baseNodes = removeCachedSubtrees(current, directIds)
+              }
+              const nodesById = new Map(baseNodes.map((node) => [node.id, node]))
+              for (const node of mapped) {
+                nodesById.set(node.id, node)
+              }
+              return Array.from(nodesById.values())
+            })
+          } else {
+            updateSnapshot((current) => {
+              let baseNodes = current.nodes
+              if (reset) {
+                const directIds = new Set<string>(
+                  current.nodes
+                    .filter((node) => node.bucketId === bucket.id && node.parentId === uiParentId)
+                    .map((node) => node.id)
+                )
+                baseNodes = removeCachedSubtrees(current.nodes, directIds)
+              }
+
+              const nodesById = new Map(baseNodes.map((node) => [node.id, node]))
+              for (const node of mapped) {
+                nodesById.set(node.id, node)
+              }
+              return { ...current, nodes: Array.from(nodesById.values()) }
+            })
+          }
+
+          updatePageState(stateKey, () => ({
+            loading: false,
+            loaded: true,
+            nextCursor: response.next_cursor,
+            queryKey,
+          }))
+        } catch (error) {
+          updatePageState(stateKey, (current) => ({ ...current, loading: false }))
+          throw error
+        } finally {
+          pageRequestsRef.current.delete(requestKey)
+        }
+      })()
+
+      pageRequestsRef.current.set(requestKey, request)
+      return request
+    },
+    [updatePageState, updateSnapshot]
+  )
+
+  const loadDirectory = React.useCallback(
+    (parentId: string | null, bucketId = defaultBucketId, options: PageLoadOptions = {}) =>
+      loadDirectoryPage("content", parentId, bucketId, options),
+    [defaultBucketId, loadDirectoryPage]
+  )
+
+  const refreshCachedDirectory = React.useCallback(
+    async (parentId: string | null, bucketId: string) => {
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!bucket) return
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      const state = pageStatesRef.current[directoryPageKey("content", bucket.id, uiParentId)]
+      if (!state?.loaded) return
+      const [sort, rawLimit] = state.queryKey.split(":") as [SortValue, string]
+      await loadDirectory(uiParentId, bucket.id, {
+        reset: true,
+        sort,
+        limit: Number(rawLimit) || 200,
+      })
+    },
+    [loadDirectory]
+  )
+
+  const loadDirectoryFolders = React.useCallback(
+    async (parentId: string | null, bucketId = defaultBucketId) => {
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!bucket) {
+        return
+      }
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      const stateKey = directoryPageKey("folders", bucket.id, uiParentId)
+      let reset = (pageStatesRef.current[stateKey]?.queryKey ?? "") !== "name-asc:2000"
+
+      do {
+        await loadDirectoryPage("folders", uiParentId, bucket.id, {
+          limit: 2000,
+          sort: "name-asc",
+          reset,
+        })
+        reset = false
+      } while (pageStatesRef.current[stateKey]?.nextCursor)
+    },
+    [defaultBucketId, loadDirectoryPage]
+  )
+
+  const resolveFolderPath = React.useCallback(
+    async (path: string, bucketId = defaultBucketId, options: PageLoadOptions = {}) => {
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!bucket) {
+        return null
+      }
+
+      const parts = path.split("/").filter(Boolean)
+      let parentId = bucket.rootNodeId
+      for (const part of parts) {
+        let match = snapshotRef.current.nodes.find(
+          (node) =>
+            node.bucketId === bucket.id &&
+            node.parentId === parentId &&
+            node.kind === "folder" &&
+            !node.deletedAt &&
+            node.name === part
+        )
+
+        while (!match) {
+          const stateKey = directoryPageKey("content", bucket.id, parentId)
+          const before = pageStatesRef.current[stateKey]
+          if (before?.loaded && !before.nextCursor && before.queryKey === `name-asc:${options.limit ?? 200}`) {
+            break
+          }
+          await loadDirectoryPage("content", parentId, bucket.id, {
+            limit: options.limit,
+            sort: "name-asc",
+            reset: before?.queryKey !== `name-asc:${options.limit ?? 200}`,
+          })
+          match = snapshotRef.current.nodes.find(
+            (node) =>
+              node.bucketId === bucket.id &&
+              node.parentId === parentId &&
+              node.kind === "folder" &&
+              !node.deletedAt &&
+              node.name === part
+          )
+          const after = pageStatesRef.current[stateKey]
+          if (!match && after?.loaded && !after.nextCursor) {
+            break
+          }
+        }
+
+        if (!match) {
+          return null
+        }
+        parentId = match.id
+      }
+      return parentId
+    },
+    [defaultBucketId, loadDirectoryPage]
+  )
+
+  const getDirectoryPageState = React.useCallback(
+    (parentId: string | null, bucketId = defaultBucketId) => {
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!bucket) {
+        return EMPTY_PAGE_STATE
+      }
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      return pageStates[directoryPageKey("content", bucket.id, uiParentId)] ?? EMPTY_PAGE_STATE
+    },
+    [defaultBucketId, pageStates]
+  )
+
+  const getFolderTreePageState = React.useCallback(
+    (parentId: string | null, bucketId = defaultBucketId) => {
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!bucket) {
+        return EMPTY_PAGE_STATE
+      }
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      return pageStates[directoryPageKey("folders", bucket.id, uiParentId)] ?? EMPTY_PAGE_STATE
+    },
+    [defaultBucketId, pageStates]
+  )
+
+  const loadCategory = React.useCallback(
+    async (category: NodeCategory, bucketId = defaultBucketId, options: PageLoadOptions = {}) => {
+      const session = snapshotRef.current.auth.session
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!session || !bucket?.backendId) {
+        return
+      }
+
+      const limit = Math.min(Math.max(options.limit ?? 200, 1), 2000)
+      const sort = options.sort ?? "name-asc"
+      const queryKey = `${sort}:${limit}`
+      const stateKey = categoryPageKey(category, bucket.id)
+      const currentState = pageStatesRef.current[stateKey] ?? EMPTY_PAGE_STATE
+      const reset = Boolean(options.reset || currentState.queryKey !== queryKey)
+      if (!reset && currentState.loaded && !currentState.nextCursor) {
+        return
+      }
+
+      const cursor = reset ? null : currentState.nextCursor
+      const requestKey = `${stateKey}:${queryKey}:${cursor ?? "first"}`
+      const inFlight = pageRequestsRef.current.get(requestKey)
+      if (inFlight) {
+        return inFlight
+      }
+
+      updatePageState(stateKey, (current) => ({
+        ...current,
+        loading: true,
+        nextCursor: reset ? null : current.nextCursor,
+        queryKey,
+      }))
+
+      const request = (async () => {
+        try {
+          const response = await listCategoryNodePage(session.tokens.accessToken, {
+            mountId: bucket.backendId,
+            category,
+            limit,
+            cursor,
+            sort,
+          })
+          const mapped = response.items.map((node) =>
+            mapNodeToFileNode(
+              node,
+              bucket.id,
+              node.parent_id ? String(node.parent_id) : bucket.rootNodeId,
+              snapshotRef.current.settings.timezone
+            )
+          )
+          updateSnapshot((current) => {
+            const nodesById = new Map(current.nodes.map((node) => [node.id, node]))
+            for (const node of mapped) {
+              nodesById.set(node.id, node)
+            }
+            return { ...current, nodes: Array.from(nodesById.values()) }
+          })
+          setCategoryNodesByKey((current) => ({
+            ...current,
+            [stateKey]: reset
+              ? mapped
+              : Array.from(new Map([...(current[stateKey] ?? []), ...mapped].map((node) => [node.id, node])).values()),
+          }))
+          updatePageState(stateKey, () => ({
+            loading: false,
+            loaded: true,
+            nextCursor: response.next_cursor,
+            queryKey,
+          }))
+        } catch (error) {
+          updatePageState(stateKey, (current) => ({ ...current, loading: false }))
+          throw error
+        } finally {
+          pageRequestsRef.current.delete(requestKey)
+        }
+      })()
+
+      pageRequestsRef.current.set(requestKey, request)
+      return request
+    },
+    [defaultBucketId, updatePageState, updateSnapshot]
+  )
+
+  const getCategoryPageState = React.useCallback(
+    (category: NodeCategory, bucketId = defaultBucketId) =>
+      pageStates[categoryPageKey(category, bucketId)] ?? EMPTY_PAGE_STATE,
+    [defaultBucketId, pageStates]
+  )
+
+  const refreshLoadedCategories = React.useCallback(
+    async (bucketId: string) => {
+      const categories: NodeCategory[] = ["image", "video", "audio", "document"]
+      await Promise.all(
+        categories.map(async (category) => {
+          const state = pageStatesRef.current[categoryPageKey(category, bucketId)]
+          if (!state?.loaded) return
+          const [sort, rawLimit] = state.queryKey.split(":") as [SortValue, string]
+          await loadCategory(category, bucketId, {
+            reset: true,
+            sort,
+            limit: Number(rawLimit) || 200,
+          })
+        })
+      )
+    },
+    [loadCategory]
+  )
+
+  const loadRecycle = React.useCallback(async () => {
+    const session = snapshotRef.current.auth.session
+    if (!session) {
+      return
+    }
+    setRecycleLoading(true)
+    try {
+      const entries = await listRecycle(session.tokens.accessToken)
+      setRecycleNodes(
+        entries.map((node) =>
+          mapNodeToFileNode(
+            node,
+            String(node.mount_id),
+            node.parent_id ? String(node.parent_id) : `root:${node.mount_id}`,
+            snapshotRef.current.settings.timezone
+          )
+        )
+      )
+    } finally {
+      setRecycleLoading(false)
+    }
+  }, [])
+
+  const loadShares = React.useCallback(async () => {
+    const session = snapshotRef.current.auth.session
+    if (!session) {
+      return
+    }
+    setSharesLoading(true)
+    try {
+      const entries = await apiListMyShares(session.tokens.accessToken)
+      updateSnapshot((current) => ({ ...current, shares: entries.map(mapShareRead) }))
+    } finally {
+      setSharesLoading(false)
+    }
+  }, [updateSnapshot])
+
+  const getNodeById = React.useCallback(
+    (nodeId: string) =>
+      snapshot.nodes.find((node) => node.id === nodeId) ??
+      (Object.values(categoryNodesByKey) as FileNode[][]).flat().find((node) => node.id === nodeId) ??
+      recycleNodes.find((node) => node.id === nodeId) ??
+      treeFolderNodes.find((node) => node.id === nodeId),
+    [categoryNodesByKey, recycleNodes, snapshot.nodes, treeFolderNodes]
+  )
 
   const getFolderPathId = React.useCallback(
     (path: string, bucketId = defaultBucketId) => {
@@ -825,19 +1300,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const getFoldersForBucket = React.useCallback(
     (bucketId = defaultBucketId, includeRoot = false) => {
       const rootId = getBucketRoot(snapshot, bucketId)
-      return snapshot.nodes.filter((node) => {
-        if (node.bucketId !== bucketId || node.kind !== "folder" || node.deletedAt) {
-          return false
-        }
+      const foldersById = new Map(
+        [...snapshot.nodes, ...treeFolderNodes]
+          .filter((node) => node.kind === "folder")
+          .map((node) => [node.id, node])
+      )
+      return Array.from(foldersById.values())
+        .filter((node) => {
+          if (node.bucketId !== bucketId || node.kind !== "folder" || node.deletedAt) {
+            return false
+          }
 
-        if (includeRoot) {
-          return true
-        }
+          if (includeRoot) {
+            return true
+          }
 
-        return node.id !== rootId
-      })
+          return node.id !== rootId
+        })
+        .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
     },
-    [defaultBucketId, snapshot]
+    [defaultBucketId, snapshot, treeFolderNodes]
   )
 
   const getTreeNodes = React.useCallback(
@@ -855,21 +1337,33 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   )
 
   const getCategoryNodes = React.useCallback(
-    (category: "image" | "video" | "audio" | "document", bucketId = defaultBucketId) => {
-      return snapshot.nodes.filter(
-        (node) => node.bucketId === bucketId && node.kind === "file" && node.mediaType === category && isVisibleNode(node)
-      )
-    },
-    [defaultBucketId, snapshot.nodes]
+    (category: NodeCategory, bucketId = defaultBucketId) =>
+      categoryNodesByKey[categoryPageKey(category, bucketId)] ?? [],
+    [categoryNodesByKey, defaultBucketId]
   )
 
   const getSharedWithMeNodes = React.useCallback(() => [] as FileNode[], [])
-  const getRecycleNodes = React.useCallback(() => snapshot.nodes.filter((node) => Boolean(node.deletedAt)), [snapshot.nodes])
+  const getRecycleNodes = React.useCallback(() => recycleNodes, [recycleNodes])
   const getShareRecords = React.useCallback(
     () =>
       snapshot.shares.map((record) => ({
         ...record,
-        node: getNodeById(record.nodeId),
+        node:
+          getNodeById(record.nodeId) ??
+          (record.nodeName
+            ? {
+                id: record.nodeId,
+                bucketId: "",
+                parentId: null,
+                kind: record.nodeKind ?? "file",
+                name: record.nodeName,
+                ext: record.nodeExt,
+                size: record.nodeSize,
+                updatedAt: record.createdAt,
+                mediaType: record.nodeMediaType,
+                preview: record.nodePreview,
+              }
+            : undefined),
       })),
     [snapshot.shares, getNodeById]
   )
@@ -1122,6 +1616,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           ...current,
           nodes: current.nodes.map((node) => (node.id === tempId ? realNode : node)),
         }))
+        if (pageStatesRef.current[directoryPageKey("folders", bucket.id, uiParentId)]?.loaded) {
+          setTreeFolderNodes((current) => [
+            ...current.filter((node) => node.id !== realNode.id),
+            realNode,
+          ])
+        }
+        await refreshCachedDirectory(uiParentId, bucket.id)
         return realNode
       } catch (error) {
         updateSnapshot((current) => ({
@@ -1132,7 +1633,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return null
       }
     },
-    [defaultBucketId, updateSnapshot]
+    [defaultBucketId, refreshCachedDirectory, updateSnapshot]
   )
 
   const renameNode = React.useCallback(async (nodeId: string, name: string) => {
@@ -1142,9 +1643,37 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    await apiRenameNode(session.tokens.accessToken, backendId, { name: name.trim() })
-    await reloadWorkspace()
-  }, [reloadWorkspace])
+    const existing = snapshotRef.current.nodes.find((node) => node.id === nodeId)
+    const renamed = await apiRenameNode(session.tokens.accessToken, backendId, { name: name.trim() })
+    if (!existing) {
+      return
+    }
+    const mapped = mapNodeToFileNode(
+      renamed,
+      existing.bucketId,
+      existing.parentId,
+      snapshotRef.current.settings.timezone
+    )
+    updateSnapshot((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => (node.id === nodeId ? mapped : node)),
+    }))
+    setTreeFolderNodes((current) => current.map((node) => (node.id === nodeId ? mapped : node)))
+    setCategoryNodesByKey((current) =>
+      Object.fromEntries(
+        (Object.entries(current) as Array<[string, FileNode[]]>).map(([key, nodes]) => [
+          key,
+          nodes
+            .map((node) => (node.id === nodeId ? mapped : node))
+            .filter((node) => !key.startsWith("category:") || key.startsWith(`category:${node.mediaType}:`)),
+        ])
+      )
+    )
+    await Promise.all([
+      refreshCachedDirectory(existing.parentId, existing.bucketId),
+      refreshLoadedCategories(existing.bucketId),
+    ])
+  }, [refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 
   const moveNodes = React.useCallback(async () => {
     toast.info("当前 MVP 暂不支持真实移动操作")
@@ -1160,6 +1689,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (!session || backendIds.length === 0) {
       return
     }
+    const selectedNodes = nodeIds.map(getNodeById).filter(Boolean) as FileNode[]
+    const deletingFolder = selectedNodes.some((node) => node.kind === "folder")
+    const affectedDirectories = Array.from(
+      new Map(selectedNodes.map((node) => [`${node.bucketId}:${node.parentId ?? ""}`, node])).values()
+    )
+    const affectedBucketIds = Array.from(new Set(selectedNodes.map((node) => node.bucketId)))
 
     // Collect the selected nodes and all their descendants for optimistic removal.
     const idsToRemove = new Set(nodeIds)
@@ -1196,6 +1731,31 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         node_ids: backendIds,
         hard_delete: hardDelete,
       })
+      if (deletingFolder) {
+        setCategoryNodesByKey({})
+        const nextPageStates = Object.fromEntries(
+          Object.entries(pageStatesRef.current).filter(([key]) => !key.startsWith("category:"))
+        )
+        pageStatesRef.current = nextPageStates
+        setPageStates(nextPageStates)
+      } else {
+        setCategoryNodesByKey((current) =>
+          Object.fromEntries(
+            (Object.entries(current) as Array<[string, FileNode[]]>).map(([key, nodes]) => [
+              key,
+              nodes.filter((node) => !idsToRemove.has(node.id)),
+            ])
+          )
+        )
+      }
+      setTreeFolderNodes((current) => removeCachedSubtrees(current, idsToRemove))
+      setRecycleNodes((current) => current.filter((node) => !idsToRemove.has(node.id)))
+      await Promise.all(
+        affectedDirectories.map((node) => refreshCachedDirectory(node.parentId, node.bucketId))
+      )
+      if (!deletingFolder) {
+        await Promise.all(affectedBucketIds.map(refreshLoadedCategories))
+      }
     } catch (error) {
       updateSnapshot((current) => ({
         ...current,
@@ -1203,7 +1763,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }))
       toast.error(error instanceof Error ? error.message : "删除失败")
     }
-  }, [updateSnapshot])
+  }, [getNodeById, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 
   const restoreNodes = React.useCallback(async (nodeIds: string[]) => {
     const session = snapshotRef.current.auth.session
@@ -1211,33 +1771,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (!session || backendIds.length === 0) {
       return
     }
+    const restoringNodes = nodeIds.map(getNodeById).filter(Boolean) as FileNode[]
 
     await apiRestoreNodes(session.tokens.accessToken, {
       node_ids: backendIds,
     })
-    await reloadWorkspace()
-  }, [reloadWorkspace])
+    setRecycleNodes((current) => current.filter((node) => !nodeIds.includes(node.id)))
+    await Promise.all([
+      ...restoringNodes.map((node) => refreshCachedDirectory(node.parentId, node.bucketId)),
+      ...Array.from(new Set(restoringNodes.map((node) => node.bucketId))).map(refreshLoadedCategories),
+      loadRecycle(),
+    ])
+  }, [getNodeById, loadRecycle, refreshCachedDirectory, refreshLoadedCategories])
 
   const permanentlyDeleteNodes = React.useCallback(async (nodeIds: string[]) => {
     await deleteNodes(nodeIds, true)
   }, [deleteNodes])
 
-  const mapShareRead = (share: ShareRead): ShareRecord => ({
-    id: share.id,
-    nodeId: String(share.node_id),
-    access: share.access === ShareAccess.PASSWORD ? "密码访问" : "公开访问",
-    expiresAt: share.expires_at ?? "",
-    createdAt: share.created_at,
-    views: share.view_count,
-    downloads: share.download_count,
-    maxDownloads: share.max_downloads,
-  })
-
   const shareNodes = React.useCallback(
     async (nodeIds: string[], options: ShareCreateOptions = {}) => {
       const session = snapshotRef.current.auth.session
       const nodes = nodeIds
-        .map((id) => snapshotRef.current.nodes.find((node) => node.id === id))
+        .map(getNodeById)
         .filter(Boolean) as FileNode[]
 
       if (!session || nodes.length === 0) {
@@ -1282,7 +1837,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return [] as ShareRecord[]
       }
     },
-    [updateSnapshot]
+    [getNodeById, updateSnapshot]
   )
 
   const deleteShares = React.useCallback(
@@ -1423,7 +1978,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             uploadedBytes: saved.file.size,
             speedText: "秒传完成",
           })
-          await reloadWorkspace()
+          await Promise.all([
+            refreshCachedDirectory(saved.target.parentId, bucket.id),
+            refreshLoadedCategories(bucket.id),
+          ])
           return
         }
         updateUploadQueueItem(id, {
@@ -1510,7 +2068,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           uploadedBytes: saved.file.size,
           speedText: "已上传",
         })
-        await reloadWorkspace()
+        await Promise.all([
+          refreshCachedDirectory(saved.target.parentId, bucket.id),
+          refreshLoadedCategories(bucket.id),
+        ])
       } catch (error) {
         const aborted = error instanceof DOMException && error.name === "AbortError"
         if (sessionId) {
@@ -1529,7 +2090,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         uploadControllersRef.current.delete(id)
       }
     },
-    [reloadWorkspace, updateUploadQueueItem]
+    [refreshCachedDirectory, refreshLoadedCategories, updateUploadQueueItem]
   )
 
   const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
@@ -1698,6 +2259,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getTreeNodes,
     getFoldersForBucket,
     getCategoryNodes,
+    loadDirectory,
+    loadDirectoryFolders,
+    resolveFolderPath,
+    getDirectoryPageState,
+    getFolderTreePageState,
+    loadCategory,
+    getCategoryPageState,
+    loadRecycle,
+    recycleLoading,
+    loadShares,
+    sharesLoading,
     getSharedWithMeNodes,
     getRecycleNodes,
     getShareRecords,
@@ -1735,6 +2307,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     recordShareDownload,
     recordShareView,
     getCategoryNodes,
+    getCategoryPageState,
+    getDirectoryPageState,
     getFileContent,
     getFolderPathId,
     getFoldersForBucket,
@@ -1743,10 +2317,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getRecycleNodes,
     getShareRecords,
     getSharedWithMeNodes,
+    getFolderTreePageState,
     getTreeNodes,
     isAuthenticated,
     login,
     loginWithPasskey,
+    loadCategory,
+    loadDirectory,
+    loadDirectoryFolders,
+    loadRecycle,
+    loadShares,
     verifyTwoFactor,
     logout,
     moveNodes,
@@ -1754,12 +2334,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     pasteNodes,
     permanentlyDeleteNodes,
     register,
+    recycleLoading,
     reloadWorkspace,
     removeUpload,
     renameNode,
     requestFolderUpload,
     requestUpload,
     resetPasswordVerification,
+    resolveFolderPath,
     restoreNodes,
     retryUpload,
     setActiveBucket,
@@ -1773,6 +2355,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     snapshot.security,
     snapshot.settings,
     snapshot.shares,
+    sharesLoading,
     updateFileContent,
     updateProfile,
     updateSecurity,

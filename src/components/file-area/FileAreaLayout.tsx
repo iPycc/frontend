@@ -4,6 +4,8 @@ import { IconChevronRight, IconFolder, IconLoader2 } from "@tabler/icons-react"
 
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { EmptyState } from "@/components/ui/empty-state"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,6 +22,8 @@ import { FileList } from "./FileList"
 
 interface FileAreaProps {
   items: FileNode[]
+  loading: boolean
+  hasMore: boolean
   currentPath: string
   selectedIds: string[]
   viewMode: ViewMode
@@ -42,6 +46,7 @@ interface FileAreaProps {
   onCreateChildFolder: (parentId: string) => void
   onUploadRequest: () => void
   onRefresh: () => void
+  onLoadMore: () => void
   onPaste: () => void
   onViewModeChange: (value: ViewMode) => void
   onSortChange: (value: SortValue) => void
@@ -57,6 +62,8 @@ const sortLabels: Array<{ value: SortValue; label: string }> = [
 
 export function FileArea({
   items,
+  loading,
+  hasMore,
   currentPath,
   selectedIds,
   viewMode,
@@ -79,6 +86,7 @@ export function FileArea({
   onCreateChildFolder,
   onUploadRequest,
   onRefresh,
+  onLoadMore,
   onPaste,
   onViewModeChange,
   onSortChange,
@@ -113,7 +121,9 @@ export function FileArea({
           onClick={handleBackgroundClick}
         >
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
-            {items.length === 0 ? (
+            {loading && items.length === 0 ? (
+              <DirectorySkeleton viewMode={viewMode} />
+            ) : items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
               </div>
@@ -180,6 +190,14 @@ export function FileArea({
                 getContextIds={getContextIds}
               />
             )}
+            {hasMore ? (
+              <div className="flex justify-center py-6">
+                <Button variant="outline" disabled={loading} onClick={onLoadMore}>
+                  {loading ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : null}
+                  {loading ? "正在加载" : "加载更多"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </ContextMenuTrigger>
@@ -213,5 +231,25 @@ export function FileArea({
         </ContextMenuSub>
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+function DirectorySkeleton({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === "list") {
+    return (
+      <div className="flex flex-col gap-3" aria-label="正在加载目录">
+        {Array.from({ length: 6 }, (_, index) => (
+          <Skeleton key={index} className="h-11 w-full rounded-lg" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="file-section-grid" aria-label="正在加载目录">
+      {Array.from({ length: 8 }, (_, index) => (
+        <Skeleton key={index} className="h-28 w-full rounded-xl" />
+      ))}
+    </div>
   )
 }

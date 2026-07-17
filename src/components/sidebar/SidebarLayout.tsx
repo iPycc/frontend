@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import {
   IconActivity,
@@ -47,7 +47,14 @@ const utilityPaths = [
 ]
 
 export function SidebarLayout() {
-  const { activeBucket, formatBytes, getFoldersForBucket, settings } = useAppState()
+  const {
+    activeBucket,
+    formatBytes,
+    getFoldersForBucket,
+    settings,
+    loadDirectoryFolders,
+    getFolderTreePageState,
+  } = useAppState()
   const { open, toggleSidebar } = useSidebar()
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
@@ -70,11 +77,27 @@ export function SidebarLayout() {
     ? Math.min(activeBucket.quota.used / activeBucket.quota.total, 1)
     : 0
 
+  const handleExpandFolder = useCallback(
+    async (folderId: string) => {
+      try {
+        await loadDirectoryFolders(folderId, activeBucket.id)
+      } catch {
+        // Keep the cached tree visible when a lazy request fails.
+      }
+    },
+    [activeBucket.id, loadDirectoryFolders]
+  )
+
   useEffect(() => {
     if (isInFolder) {
       setIsTreeOpen(true)
     }
   }, [isInFolder, folderParam])
+
+  useEffect(() => {
+    if (!isTreeOpen || !activeBucket.id) return
+    void handleExpandFolder(activeBucket.rootNodeId)
+  }, [activeBucket.id, activeBucket.rootNodeId, handleExpandFolder, isTreeOpen])
 
   return (
     <Sidebar className="border-none bg-transparent">
@@ -131,7 +154,13 @@ export function SidebarLayout() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                   className="mt-1 overflow-hidden"
                 >
-                  <SidebarFolderTree items={rootFolders} level={1} followTree={settings.showSidebarTree} />
+                  <SidebarFolderTree
+                    items={rootFolders}
+                    level={1}
+                    followTree={settings.showSidebarTree}
+                    onExpand={handleExpandFolder}
+                    getLoadState={(folderId) => getFolderTreePageState(folderId, activeBucket.id)}
+                  />
                 </motion.div>
               ) : null}
             </AnimatePresence>

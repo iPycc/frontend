@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, type MouseEvent } from "react"
 import { useLocation } from "react-router-dom"
-import { IconChevronDown, IconChevronRight, IconFolderFilled } from "@tabler/icons-react"
+import { IconChevronDown, IconChevronRight, IconFolderFilled, IconLoader2 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
 import { useAppState } from "@/lib/app-state"
@@ -29,11 +29,15 @@ export function SidebarFolderTree({
   parentFolderPath = "",
   level = 0,
   followTree = true,
+  onExpand,
+  getLoadState,
 }: {
   items: FolderTreeNode[]
   parentFolderPath?: string
   level?: number
   followTree?: boolean
+  onExpand: (folderId: string) => Promise<void>
+  getLoadState: (folderId: string) => { loading: boolean; loaded: boolean }
 }) {
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
   const location = useLocation()
@@ -74,10 +78,29 @@ export function SidebarFolderTree({
     })
   }, [parentFolderPath, items, currentFolderParam, followTree])
 
-  const toggle = (id: string, event: MouseEvent) => {
+  useEffect(() => {
+    if (!followTree) return
+    for (const folder of items) {
+      const folderPath = parentFolderPath ? `${parentFolderPath}/${folder.name}` : `/${folder.name}`
+      const isInCurrentBranch =
+        currentFolderParam === folderPath || currentFolderParam.startsWith(`${folderPath}/`)
+      const state = getLoadState(folder.id)
+      if (isInCurrentBranch && !state.loaded && !state.loading) {
+        void onExpand(folder.id)
+      }
+    }
+  }, [currentFolderParam, followTree, getLoadState, items, onExpand, parentFolderPath])
+
+  const toggle = (id: string, opening: boolean, event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    setOpenStates((current) => ({ ...current, [id]: !current[id] }))
+    setOpenStates((current) => {
+      const state = getLoadState(id)
+      if (opening && !state.loaded && !state.loading) {
+        void onExpand(id)
+      }
+      return { ...current, [id]: opening }
+    })
   }
 
   return (
@@ -87,7 +110,8 @@ export function SidebarFolderTree({
           ? `${parentFolderPath}/${folder.name}`
           : `/${folder.name}`
         const linkTo = `/app?folder=${encodeURIComponent(folderPath)}`
-        const hasChildren = folder.children.length > 0
+        const childState = getLoadState(folder.id)
+        const hasChildren = folder.children.length > 0 || !childState.loaded
         const isCurrent = currentFolderParam === folderPath
         const isInCurrentBranch =
           isCurrent || currentFolderParam.startsWith(`${folderPath}/`)
@@ -111,10 +135,12 @@ export function SidebarFolderTree({
                   hasChildren ? (
                     <button
                       type="button"
-                      onClick={(event) => toggle(folder.id, event)}
+                      onClick={(event) => toggle(folder.id, !isOpen, event)}
                       className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors"
                     >
-                      {isOpen ? (
+                      {childState.loading ? (
+                        <IconLoader2 size={12} className="animate-spin" />
+                      ) : isOpen ? (
                         <IconChevronDown size={12} />
                       ) : (
                         <IconChevronRight size={12} />
@@ -147,6 +173,8 @@ export function SidebarFolderTree({
                     parentFolderPath={folderPath}
                     level={level + 1}
                     followTree={followTree}
+                    onExpand={onExpand}
+                    getLoadState={getLoadState}
                   />
                 </motion.div>
               ) : null}

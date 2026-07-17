@@ -19,6 +19,7 @@ import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type SortOption = "newest" | "oldest" | "views"
 
@@ -41,7 +42,7 @@ function formatRelativeTime(value?: string) {
 export function Shares() {
   usePageTitle("我的分享")
   const navigate = useNavigate()
-  const { getShareRecords, deleteShares, reloadWorkspace, isAuthenticated } = useAppState()
+  const { getShareRecords, deleteShares, loadShares, sharesLoading, isAuthenticated } = useAppState()
   const shares = getShareRecords()
   const [sortBy, setSortBy] = useState<SortOption>("newest")
   const [sortOpen, setSortOpen] = useState(false)
@@ -49,6 +50,14 @@ export function Shares() {
   const [refreshing, setRefreshing] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const sortRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void loadShares().catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : "分享加载失败")
+      })
+    }
+  }, [isAuthenticated, loadShares])
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -97,8 +106,13 @@ export function Shares() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await reloadWorkspace()
-    setRefreshing(false)
+    try {
+      await loadShares()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "分享加载失败")
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const handleContextMenu = (e: ReactMouseEvent, id: string) => {
@@ -183,7 +197,13 @@ export function Shares() {
         </div>
       </div>
 
-      {sortedShares.length === 0 ? (
+      {sharesLoading && sortedShares.length === 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="正在加载分享">
+          {Array.from({ length: 8 }, (_, index) => (
+            <Skeleton key={index} className="h-[74px] w-full rounded-xl" />
+          ))}
+        </div>
+      ) : sortedShares.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-border/60 bg-card p-12 text-center shadow-sm">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
             <IconFolderOff size={36} className="text-muted-foreground" />

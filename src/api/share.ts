@@ -23,6 +23,9 @@ export type ShareRead = {
   view_count: number
   is_active: boolean
   created_at: string
+  node_name: string | null
+  node_type: "folder" | "file" | null
+  node_size: number | null
 }
 
 export type ShareVerifyInput = {
