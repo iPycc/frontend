@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { useWebsiteSettings } from "./useWebsiteSettings"
 
-const FILING_LOGO_URL = "https://beian.mps.gov.cn/img/logo01.dd7ff50e.png"
+const FILING_LOGO_URL = "./beian.png"
 
 export function SidebarFooterContent({ className }: { className?: string }) {
   const settings = useWebsiteSettings()
