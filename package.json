@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port=9130 --host=0.0.0.0",
     "build": "vite build",
+    "build:fullstack": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
