@@ -5,6 +5,7 @@ import { SidebarLayout } from "@/components/sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { useAppState } from "@/lib/app-state"
 import { PropertiesPanelProvider, PropertiesPanel } from "./PropertiesPanel"
+import { SiteUrlMismatchAlert } from "./SiteUrlMismatchAlert"
 
 export function MainLayout() {
   const { activeBucket, formatBytes } = useAppState()
@@ -24,6 +25,7 @@ export function MainLayout() {
             </main>
           </div>
         </div>
+        <SiteUrlMismatchAlert />
       </PropertiesPanelProvider>
     </SidebarProvider>
   )

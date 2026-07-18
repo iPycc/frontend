@@ -1,9 +1,14 @@
-import { IconDeviceFloppy } from "@tabler/icons-react"
+import { IconDeviceFloppy, IconRefresh } from "@tabler/icons-react"
 import type { ReactNode } from "react"
 import * as React from "react"
 import { toast } from "sonner"
 
-import { getWebsiteSettings, updateWebsiteSettings, type WebsiteSettings } from "@/api/site"
+import {
+  getDetectedSiteUrl,
+  getWebsiteSettings,
+  updateWebsiteSettings,
+  type WebsiteSettings,
+} from "@/api/site"
 import { cacheWebsiteSettings } from "@/components/shared/useWebsiteSettings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAppState } from "@/lib/app-state"
 
 const defaultSettings: WebsiteSettings = {
+  site_url: "",
   site_title: "",
   site_logo_url: "",
   site_description: "",
@@ -31,6 +37,7 @@ export function WebsiteSettingsPage() {
   const [initialSettings, setInitialSettings] = React.useState<WebsiteSettings>(defaultSettings)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [detecting, setDetecting] = React.useState(false)
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -62,6 +69,23 @@ export function WebsiteSettingsPage() {
     setSettings((current) => ({ ...current, [key]: value }))
   }
 
+  const handleDetectSiteUrl = async () => {
+    setDetecting(true)
+    try {
+      const response = await getDetectedSiteUrl()
+      updateField("site_url", response.site_url)
+      toast.success("已获取当前网站地址", {
+        description: response.site_url,
+      })
+    } catch (error: unknown) {
+      toast.error("获取网站地址失败", {
+        description: error instanceof Error ? error.message : "请稍后再试",
+      })
+    } finally {
+      setDetecting(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!token) {
       toast.error("保存失败", { description: "请先登录" })
@@ -86,6 +110,31 @@ export function WebsiteSettingsPage() {
 
   return (
     <div className="relative max-w-[760px] space-y-9">
+      <FieldBlock
+        label="网站链接"
+        hint="站点对外访问地址，用于分享链接、通行密钥与外部预览。留空则使用当前浏览器地址"
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            value={settings.site_url}
+            onChange={(e) => updateField("site_url", e.target.value)}
+            placeholder="https://cloud.example.com"
+            disabled={loading}
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleDetectSiteUrl()}
+            disabled={loading || detecting}
+            className="gap-2"
+          >
+            <IconRefresh size={16} className={detecting ? "animate-spin" : ""} />
+            {detecting ? "检测中..." : "自动检测"}
+          </Button>
+        </div>
+      </FieldBlock>
+
       <FieldBlock label="网站标题" hint="显示在浏览器标签页与顶部导航，留空使用默认名称">
         <Input
           value={settings.site_title}

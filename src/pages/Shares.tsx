@@ -20,6 +20,7 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
+import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 
 type SortOption = "newest" | "oldest" | "views"
 
@@ -83,7 +84,7 @@ export function Shares() {
   })
 
   const handleCopy = async (slug: string) => {
-    const url = `${window.location.origin}/share/${slug}`
+    const url = `${getSiteUrl()}/share/${slug}`
     try {
       await navigator.clipboard.writeText(url)
       toast.success("分享链接已复制到剪贴板")

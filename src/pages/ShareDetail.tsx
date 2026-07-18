@@ -30,6 +30,7 @@ import {
 import { listShared, mountShared } from "@/api/shared"
 import { PreviewRenderer } from "@/components/file-area/preview/PreviewRenderer"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
+import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
 import { TransferManager } from "@/components/transfer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -248,7 +249,7 @@ export function ShareDetail() {
   const copyLink = async () => {
     if (!slug) return
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/share/${slug}`)
+      await navigator.clipboard.writeText(`${getSiteUrl()}/share/${slug}`)
       setCopied(true)
       toast.success("分享链接已复制")
       window.setTimeout(() => setCopied(false), 1600)

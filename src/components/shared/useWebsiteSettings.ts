@@ -5,6 +5,7 @@ import { getWebsiteSettings, type WebsiteSettings } from "@/api/site"
 const WEBSITE_SETTINGS_CACHE_KEY = "cloudrave.website-settings.v1"
 
 export const defaultWebsiteSettings: WebsiteSettings = {
+  site_url: "",
   site_title: "",
   site_logo_url: "",
   site_description: "",
@@ -76,6 +77,13 @@ export function cacheWebsiteSettings(settings: Partial<WebsiteSettings>) {
 
   emitWebsiteSettingsChange()
   return websiteSettingsSnapshot
+}
+
+export function getSiteUrl(): string {
+  if (typeof window === "undefined") {
+    return ""
+  }
+  return websiteSettingsSnapshot.site_url.trim() || window.location.origin
 }
 
 function refreshWebsiteSettings() {

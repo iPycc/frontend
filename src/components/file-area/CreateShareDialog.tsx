@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { cn } from "@/lib/utils"
+import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 import { type FileNode, type ShareRecord } from "@/lib/models"
 
 export type ShareOptions = {
@@ -101,7 +102,7 @@ export function CreateShareDialog({ open, nodes, onOpenChange, onCreate }: Creat
   }
 
   const primaryRecord = records[0]
-  const shareUrl = primaryRecord ? `${window.location.origin}/share/${primaryRecord.id}` : ""
+  const shareUrl = primaryRecord ? `${getSiteUrl()}/share/${primaryRecord.id}` : ""
 
   const handleCopyLink = async () => {
     if (!shareUrl) return
@@ -342,7 +343,7 @@ export function CreateShareDialog({ open, nodes, onOpenChange, onCreate }: Creat
                   <div className="space-y-2">
                     {records.map((record) => {
                       const node = nodes.find((n) => n.id === String(record.nodeId))
-                      const url = `${window.location.origin}/share/${record.id}`
+                      const url = `${getSiteUrl()}/share/${record.id}`
                       return (
                         <div key={record.id} className="rounded-2xl bg-muted/50 px-4 py-3">
                           <div className="flex items-center gap-2">

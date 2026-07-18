@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
+import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 import { cn } from "@/lib/utils"
 import { type ShareRecord } from "@/lib/models"
 
@@ -22,8 +23,7 @@ interface ShareDialogProps {
 }
 
 function getShareUrl(record: ShareRecord) {
-  const origin = typeof window !== "undefined" ? window.location.origin : ""
-  return `${origin}/share/${record.id}`
+  return `${getSiteUrl()}/share/${record.id}`
 }
 
 function getAccessBadgeClass(access: string) {
