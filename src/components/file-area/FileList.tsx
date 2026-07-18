@@ -1,5 +1,5 @@
 ﻿import type { MouseEvent } from "react"
-import { IconCheck, IconCircle } from "@tabler/icons-react"
+import { IconCheck } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
@@ -38,7 +38,7 @@ export function FileList({
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-border px-4 py-3 text-xs text-muted-foreground">
-        <div className="text-center">选择</div>
+        <div className="text-center">图标</div>
         <div>名称</div>
         <div>类型</div>
       </div>
@@ -53,7 +53,7 @@ export function FileList({
                   <div
                     className={cn(
                       "group grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors",
-                      selected ? "bg-primary/18 dark:bg-primary/28" : "bg-transparent hover:bg-muted/70 dark:hover:bg-[#2b2b2b]"
+                      selected ? "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] dark:bg-primary/10" : "bg-transparent hover:bg-muted/70 dark:hover:bg-[#2b2b2b]"
                     )}
                   >
                     <div className="flex items-center justify-center">
@@ -64,25 +64,19 @@ export function FileList({
                           onSelectNode(item.id, event)
                         }}
                         className={cn(
-                          "flex h-7 w-7 items-center justify-center rounded-full transition-colors",
-                          selected
-                            ? "bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/50"
-                            : "text-muted-foreground hover:text-foreground"
+                          "relative flex size-8 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/50",
+                          selected ? "bg-transparent" : "bg-muted/70 group-hover:bg-transparent"
                         )}
-                        aria-label={`选择 ${item.name}`}
+                        aria-label={selected ? `取消选择 ${item.name}` : `选择 ${item.name}`}
+                        aria-pressed={selected}
                       >
-                        {selected ? (
-                          <IconCheck size={11} stroke={2.2} />
-                        ) : (
-                          <>
-                            <div className="hidden group-hover:flex items-center justify-center">
-                              <IconCircle size={16} stroke={2} className="text-muted-foreground/60 dark:text-white/70" />
-                            </div>
-                            <div className="flex group-hover:hidden items-center justify-center">
-                              <FileGlyph item={item} />
-                            </div>
-                          </>
-                        )}
+                        <span className={cn("transition-opacity", selected ? "opacity-0" : "opacity-100 group-hover:opacity-0")}><FileGlyph item={item} /></span>
+                        <span className={cn(
+                          "absolute inset-0 m-auto flex size-5 items-center justify-center rounded-full border-2 transition-opacity",
+                          selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 bg-background text-transparent opacity-0 group-hover:opacity-100"
+                        )}>
+                          <IconCheck size={12} stroke={2.5} />
+                        </span>
                       </button>
                     </div>
                     <button
@@ -95,7 +89,7 @@ export function FileList({
                         event.stopPropagation()
                         onOpenNode(item)
                       }}
-                      className="min-w-0 text-left"
+                      className="flex min-w-0 items-center text-left"
                     >
                       <div className="truncate text-sm text-foreground">{item.name}</div>
                     </button>
@@ -143,4 +137,3 @@ function getItemMeta(item: FileNode) {
   if (item.ext) return item.ext.toUpperCase()
   return "文件"
 }
-

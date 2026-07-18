@@ -117,6 +117,11 @@ export async function listNodes(token: string, mountId: number, parentId?: numbe
   return requestJson<ExplorerNode[]>(`/explorer/node?${query.toString()}`, { token })
 }
 
+export async function listNodesForDownload(mountId: number, parentId: number) {
+  const query = new URLSearchParams({ mount_id: String(mountId), parent_id: String(parentId) })
+  return requestJson<ExplorerNode[]>(`/explorer/node?${query.toString()}`)
+}
+
 export async function listNodePage(token: string, options: ListNodePageOptions) {
   const query = new URLSearchParams({
     mount_id: String(options.mountId),

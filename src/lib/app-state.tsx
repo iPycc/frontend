@@ -408,7 +408,7 @@ function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?:
       multipartThreshold: `${Number(extra.multipart_threshold_mb ?? 25)} MB`,
       partSize: `${Number(extra.part_size_mb ?? 25)} MB`,
       presignTtl: String(extra.presign_ttl_seconds ?? 900),
-      concurrency: Number(extra.concurrency ?? 1),
+      concurrency: Number(extra.concurrency ?? (storageType === "local" ? 1 : 3)),
       protocol: "https",
       pathStyle: false,
       accelerate: false,
@@ -562,6 +562,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const pendingUploadTargetRef = React.useRef<UploadTarget | null>(null)
   const uploadControllersRef = React.useRef(new Map<string, AbortController>())
   const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget; relativePath?: string }>())
+  const uploadPendingIdsRef = React.useRef<string[]>([])
+  const uploadActiveIdsRef = React.useRef(new Set<string>())
+  const drainUploadQueueRef = React.useRef<() => void>(() => undefined)
   const snapshotRef = React.useRef(snapshot)
   const pageStatesRef = React.useRef(pageStates)
   const pageRequestsRef = React.useRef(new Map<string, Promise<void>>())
@@ -2053,8 +2056,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const startAt = Date.now()
         let uploadedBytes = 0
         const completedParts: Array<{ part_number: number; etag: string; size: number }> = []
+        const partConcurrency = Math.max(1, Math.min(8, Math.floor(bucket.strategy.concurrency || 1)))
+        let nextPartIndex = 0
+        let partFailure: unknown = null
 
-        for (let index = 0; index < partCount; index += 1) {
+        const uploadPartAt = async (index: number) => {
           if (controller.signal.aborted) {
             throw new DOMException("aborted", "AbortError")
           }
@@ -2114,6 +2120,29 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           })
         }
 
+        const uploadWorker = async () => {
+          while (!controller.signal.aborted) {
+            const index = nextPartIndex
+            nextPartIndex += 1
+            if (index >= partCount) return
+            try {
+              await uploadPartAt(index)
+            } catch (error) {
+              if (!partFailure) partFailure = error
+              controller.abort()
+              throw error
+            }
+          }
+        }
+
+        const partResults = await Promise.allSettled(
+          Array.from({ length: Math.min(partConcurrency, partCount) }, () => uploadWorker())
+        )
+        if (partFailure) throw partFailure
+        const rejectedPart = partResults.find((result) => result.status === "rejected")
+        if (rejectedPart?.status === "rejected") throw rejectedPart.reason
+        completedParts.sort((left, right) => left.part_number - right.part_number)
+
         updateUploadQueueItem(id, {
           status: "processing",
           progress: 100,
@@ -2131,7 +2160,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           refreshLoadedCategories(bucket.id),
         ])
       } catch (error) {
-        const aborted = error instanceof DOMException && error.name === "AbortError"
+        const aborted = error instanceof DOMException && error.name === "AbortError" && controller.signal.aborted
         if (sessionId) {
           try {
             await abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed")
@@ -2150,6 +2179,30 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     },
     [refreshCachedDirectory, refreshLoadedCategories, updateUploadQueueItem]
   )
+
+  const drainUploadQueue = React.useCallback(() => {
+    const maxConcurrentTasks = 5
+    while (uploadActiveIdsRef.current.size < maxConcurrentTasks && uploadPendingIdsRef.current.length > 0) {
+      const nextId = uploadPendingIdsRef.current.shift()
+      if (!nextId || uploadActiveIdsRef.current.has(nextId)) continue
+      uploadActiveIdsRef.current.add(nextId)
+      void processUploadItem(nextId).finally(() => {
+        uploadActiveIdsRef.current.delete(nextId)
+        drainUploadQueueRef.current()
+      })
+    }
+  }, [processUploadItem])
+
+  drainUploadQueueRef.current = drainUploadQueue
+
+  const enqueueUploads = React.useCallback((ids: string[]) => {
+    for (const id of ids) {
+      if (!uploadPendingIdsRef.current.includes(id) && !uploadActiveIdsRef.current.has(id)) {
+        uploadPendingIdsRef.current.push(id)
+      }
+    }
+    drainUploadQueue()
+  }, [drainUploadQueue])
 
   const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
     const session = snapshotRef.current.auth.session
@@ -2213,10 +2266,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setUploadQueue((current) => [...nextItems, ...current])
     setUploadQueueOpen(true)
 
-    for (const item of nextItems) {
-      void processUploadItem(item.id)
-    }
-  }, [processUploadItem])
+    enqueueUploads(nextItems.map((item) => item.id))
+  }, [enqueueUploads])
 
   const retryUpload = React.useCallback((id: string) => {
     if (!uploadFilesRef.current.get(id)) {
@@ -2231,8 +2282,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       speedText: "准备中...",
       errorMessage: undefined,
     })
-    void processUploadItem(id)
-  }, [processUploadItem, updateUploadQueueItem])
+    enqueueUploads([id])
+  }, [enqueueUploads, updateUploadQueueItem])
 
   const removeUpload = React.useCallback((id: string) => {
     const controller = uploadControllersRef.current.get(id)
@@ -2241,6 +2292,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    uploadPendingIdsRef.current = uploadPendingIdsRef.current.filter((pendingId) => pendingId !== id)
     uploadFilesRef.current.delete(id)
     setUploadQueue((current) => current.filter((item) => item.id !== id))
   }, [])

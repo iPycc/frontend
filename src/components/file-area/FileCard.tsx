@@ -1,7 +1,7 @@
 import { useState } from "react"
 import type { MouseEvent } from "react"
 import { useEffect } from "react"
-import { IconCheck, IconCircle, IconPlayerPlay } from "@tabler/icons-react"
+import { IconCheck, IconPlayerPlay } from "@tabler/icons-react"
 
 import { type FileNode } from "@/lib/models"
 import { requestResponse } from "@/api/client"
@@ -98,7 +98,7 @@ export function FileCard({
             className={cn(
               "group flex h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition-colors",
               selected
-                ? "border-primary/60 bg-primary/18 shadow-[0_0_0_1px_rgba(59,130,246,0.22)] dark:bg-primary/28"
+                ? "border-primary bg-primary/[0.06] ring-1 ring-primary/20 dark:bg-primary/10"
                 : "border-border bg-card hover:bg-muted/50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
             )}
           >
@@ -109,25 +109,19 @@ export function FileCard({
                 onSelectNode(item.id, event)
               }}
               className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200",
-                selected
-                  ? "bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/50"
-                  : "text-muted-foreground hover:text-foreground"
+                "relative flex size-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/50",
+                selected ? "bg-transparent" : "bg-muted/70 group-hover:bg-transparent"
               )}
-              aria-label={`选择 ${item.name}`}
+              aria-label={selected ? `取消选择 ${item.name}` : `选择 ${item.name}`}
+              aria-pressed={selected}
             >
-              {selected ? (
-                <IconCheck size={11} stroke={2.2} />
-              ) : (
-                <>
-                  <div className="hidden group-hover:flex items-center justify-center">
-                    <IconCircle size={16} stroke={2} className="text-muted-foreground/60 dark:text-white/70" />
-                  </div>
-                  <div className="flex group-hover:hidden items-center justify-center">
-                    <FileGlyph item={item} />
-                  </div>
-                </>
-              )}
+              <span className={cn("transition-opacity", selected ? "opacity-0" : "opacity-100 group-hover:opacity-0")}><FileGlyph item={item} /></span>
+              <span className={cn(
+                "absolute inset-0 m-auto flex size-5 items-center justify-center rounded-full border-2 transition-opacity",
+                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 bg-background text-transparent opacity-0 group-hover:opacity-100"
+              )}>
+                <IconCheck size={12} stroke={2.5} />
+              </span>
             </button>
             <button
               type="button"
@@ -170,9 +164,9 @@ export function FileCard({
       <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
         <div
           className={cn(
-            "group flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
+            "group relative flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
             selected
-              ? "border-primary/60 bg-primary/18 shadow-[0_0_0_1px_rgba(59,130,246,0.22)] dark:bg-primary/28"
+              ? "border-primary bg-card ring-1 ring-primary/25"
               : "border-border/50 bg-muted hover:bg-muted/70 dark:bg-muted dark:hover:bg-muted/70"
           )}
         >
@@ -243,22 +237,27 @@ export function FileCard({
             ) : null}
           </button>
 
-          <div className="flex items-center gap-2.5 rounded-b-xl border-t border-border/50 bg-background/50 px-3 py-2.5 backdrop-blur-sm">
+          <div className={cn(
+            "flex items-center gap-2.5 rounded-b-xl border-t border-border/50 px-3 py-2.5",
+            selected ? "bg-primary/[0.06] dark:bg-primary/10" : "bg-background"
+          )}>
             <button
               type="button"
               onClick={(event: MouseEvent) => {
                 event.stopPropagation()
                 onSelectNode(item.id, event)
               }}
-              className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200",
-                selected
-                  ? "bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/50"
-                  : "text-muted-foreground hover:bg-border dark:hover:bg-accent/70"
-              )}
-              aria-label={`选择 ${item.name}`}
+              className="relative flex size-7 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={selected ? `取消选择 ${item.name}` : `选择 ${item.name}`}
+              aria-pressed={selected}
             >
-              {selected ? <IconCheck size={11} stroke={2.2} /> : <FileGlyph item={item} />}
+              <span className={cn("transition-opacity", selected ? "opacity-0" : "opacity-100 group-hover:opacity-0")}><FileGlyph item={item} /></span>
+              <span className={cn(
+                "absolute inset-0 m-auto flex size-5 items-center justify-center rounded-full border-2 transition-opacity",
+                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 text-transparent opacity-0 group-hover:opacity-100"
+              )}>
+                <IconCheck size={12} stroke={2.5} />
+              </span>
             </button>
             <button
               type="button"

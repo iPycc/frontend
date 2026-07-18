@@ -102,11 +102,28 @@ export async function verifySharePassword(shareId: string, body: ShareVerifyInpu
   })
 }
 
+export async function recordSharedDirectoryDownload(shareId: string, accessToken?: string | null) {
+  const query = accessToken ? `?access_token=${encodeURIComponent(accessToken)}` : ""
+  return requestJson<{ message: string }>(`/share/${shareId}/download/record${query}`, { method: "POST" })
+}
+
 export function buildSharedDownloadUrl(shareId: string, accessToken?: string | null, nodeId?: number | null) {
   const url = `/api/v1/share/${shareId}/download`
   const query = new URLSearchParams()
   if (accessToken) query.set("access_token", accessToken)
   if (nodeId !== undefined && nodeId !== null) query.set("node_id", String(nodeId))
+  return query.size ? `${url}?${query.toString()}` : url
+}
+
+export function buildSharedSelectionDownloadUrl(
+  shareId: string,
+  accessToken: string | null | undefined,
+  nodeIds: number[]
+) {
+  const url = `/api/v1/share/${shareId}/download`
+  const query = new URLSearchParams()
+  if (accessToken) query.set("access_token", accessToken)
+  nodeIds.forEach((nodeId) => query.append("node_ids", String(nodeId)))
   return query.size ? `${url}?${query.toString()}` : url
 }
 

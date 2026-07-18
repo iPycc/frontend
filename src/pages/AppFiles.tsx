@@ -9,9 +9,11 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
-import { buildDownloadUrl, buildFolderDownloadUrl, prefetchPreviewManifest } from "@/api/files"
-import { requestResponse } from "@/api/client"
+import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest } from "@/api/files"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
+import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
+import { DownloadTaskPanel } from "@/components/download/DownloadTaskPanel"
+import { useFileDownload } from "@/hooks/use-file-download"
 
 const categoryMap = {
   image: "图片",
@@ -43,6 +45,7 @@ function isPreviewable(file: FileNode) {
 export function AppFiles() {
   const location = useLocation()
   const { openAudio } = useAudioPlayer()
+  const fileDownload = useFileDownload()
   const {
     clipboard,
     activeBucket,
@@ -85,6 +88,7 @@ export function AppFiles() {
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
   const [shareDialogNodes, setShareDialogNodes] = React.useState<FileNode[]>([])
+  const [downloadDialogNodes, setDownloadDialogNodes] = React.useState<FileNode[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
@@ -293,35 +297,74 @@ export function AppFiles() {
     return records
   }
 
-  const handleDownloadRequest = async (ids: string[]) => {
+  const downloadSingleFile = async (node: FileNode) => {
     try {
-      for (const id of ids) {
-        const node = getNodeById(id)
-        if (!node?.backendId) {
-          continue
-        }
-
-        const downloadUrl = node.kind === "folder" ? buildFolderDownloadUrl(node.backendId) : buildDownloadUrl(node.backendId)
-        const response = await requestResponse(downloadUrl, {
-          headers: {
-            Accept: "application/octet-stream",
-          },
-        })
-
-        const blob = await response.blob()
-        const objectUrl = window.URL.createObjectURL(blob)
-        const anchor = document.createElement("a")
-        anchor.href = objectUrl
-        anchor.download = node.kind === "folder" ? `${node.name}.zip` : node.name
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        window.URL.revokeObjectURL(objectUrl)
-      }
-
-      toast.success("开始下载")
+      if (!node.backendId) throw new Error("没有可下载的文件")
+      const completed = await fileDownload.download(buildDownloadUrl(node.backendId), node.name)
+      if (completed) toast.success("下载已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "下载失败")
+    }
+  }
+
+  const handleDownloadRequest = (ids: string[]) => {
+    const nodes = ids.map(getNodeById).filter((node): node is FileNode => Boolean(node?.backendId))
+    if (!nodes.length) {
+      toast.error("没有可下载的文件")
+      return
+    }
+    if (nodes.length === 1 && nodes[0].kind === "file") {
+      void downloadSingleFile(nodes[0])
+      return
+    }
+    setDownloadDialogNodes(nodes)
+  }
+
+  const downloadAsArchive = async () => {
+    const nodes = downloadDialogNodes
+    if (!nodes.length) return
+    const backendIds = nodes.map((node) => node.backendId).filter((id): id is number => Boolean(id))
+    const onlyNode = nodes.length === 1 ? nodes[0] : null
+    try {
+      const url = onlyNode?.kind === "folder"
+        ? buildFolderDownloadUrl(backendIds[0])
+        : buildArchiveDownloadUrl(backendIds)
+      const name = onlyNode ? `${onlyNode.name}.zip` : `Cloudrave-${nodes.length}项.zip`
+      const completed = await fileDownload.download(url, name)
+      if (completed) toast.success("ZIP 下载已保存")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "下载失败")
+    } finally {
+      setDownloadDialogNodes([])
+    }
+  }
+
+  const downloadAsDirectory = async () => {
+    const nodes = downloadDialogNodes
+    if (!nodes.length) return
+    const mountId = nodes[0].mountBackendId ?? activeBucket.backendId
+    if (!mountId) {
+      toast.error("无法确定文件所在的存储挂载")
+      return
+    }
+    try {
+      const completed = await fileDownload.downloadToDirectory(
+        nodes.map((node) => ({ id: node.backendId as number, name: node.name, type: node.kind, size: node.size })),
+        {
+          getChildren: async (folder) => (await listNodesForDownload(mountId, folder.id)).map((node) => ({
+            id: node.id,
+            name: node.name,
+            type: node.type,
+            size: node.size,
+          })),
+          buildFileUrl: (file) => buildDownloadUrl(file.id),
+        }
+      )
+      if (completed) toast.success("原始文件已保存")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "文件夹下载失败")
+    } finally {
+      setDownloadDialogNodes([])
     }
   }
 
@@ -432,7 +475,7 @@ export function AppFiles() {
         onDelete={() => handleDeleteRequest(selectedIds)}
         onRename={() => handleRenameRequest(selectedIds)}
         onShare={() => void handleShareRequest(selectedIds)}
-        onDownload={() => void handleDownloadRequest(selectedIds)}
+        onDownload={() => handleDownloadRequest(selectedIds)}
         onProperties={() => {
           if (selectedNodes.length === 1) {
             handlePropertiesRequest([selectedNodes[0].id])
@@ -470,7 +513,7 @@ export function AppFiles() {
             onRenameRequest={handleRenameRequest}
             onMoveRequest={handleMoveRequest}
             onShareRequest={(ids) => void handleShareRequest(ids)}
-            onDownloadRequest={(ids) => void handleDownloadRequest(ids)}
+            onDownloadRequest={handleDownloadRequest}
             onDeleteRequest={handleDeleteRequest}
             onCopyRequest={handleCopyIds}
             onCutRequest={handleCutIds}
@@ -489,6 +532,19 @@ export function AppFiles() {
       </AnimatePresence>
 
       <UploadQueueDock parentId={currentFolderId} />
+      <DownloadTaskPanel
+        task={fileDownload.task}
+        onCancel={fileDownload.cancel}
+        onDismiss={fileDownload.dismiss}
+      />
+      <DownloadMethodDialog
+        open={downloadDialogNodes.length > 0}
+        itemCount={downloadDialogNodes.length}
+        supportsDirectoryDownload={fileDownload.supportsDirectoryDownload}
+        onOpenChange={(open) => !open && setDownloadDialogNodes([])}
+        onDirectoryDownload={() => void downloadAsDirectory()}
+        onArchiveDownload={() => void downloadAsArchive()}
+      />
 
       <FilePreviewModal
         key={previewFile?.id ?? "preview-closed"}
@@ -498,7 +554,7 @@ export function AppFiles() {
         currentIndex={previewIndex}
         totalCount={previewableFiles.length}
         onClose={() => setPreviewFile(null)}
-        onDownload={(ids) => void handleDownloadRequest(ids)}
+        onDownload={handleDownloadRequest}
         onProperties={(id) => handlePropertiesRequest([id])}
         onCopy={handleCopyIds}
         onCut={handleCutIds}
