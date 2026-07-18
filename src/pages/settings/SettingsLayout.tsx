@@ -4,6 +4,7 @@ import { motion } from "motion/react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePageTitle } from "@/hooks/use-page-title"
+import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -18,11 +19,15 @@ export function SettingsLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { currentUser } = useAppState()
+  const availableTabs = settingsTabs.filter(
+    (item) => item.id !== "website" || currentUser?.role === "admin"
+  )
   const currentTab =
-    settingsTabs.find((item) => location.pathname.endsWith(`/${item.id}`)) ??
-    settingsTabs[0]
+    availableTabs.find((item) => location.pathname.endsWith(`/${item.id}`)) ??
+    availableTabs[0]
   const CurrentTabIcon = currentTab.icon
-  const moreTabs = settingsTabs.filter((item) => item.id !== currentTab.id)
+  const moreTabs = availableTabs.filter((item) => item.id !== currentTab.id)
 
   return (
     <div
@@ -72,7 +77,7 @@ export function SettingsLayout() {
           </div>
         ) : (
           <div className="flex flex-wrap gap-6">
-            {settingsTabs.map((item) => {
+            {availableTabs.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname.endsWith(`/${item.id}`)
 
