@@ -37,6 +37,12 @@ export type CreateFolderInput = {
   name: string
 }
 
+export type CreateFileInput = {
+  mount_id: number
+  parent_id?: number | null
+  name: string
+}
+
 export type RenameNodeInput = {
   name: string
 }
@@ -174,6 +180,14 @@ export async function createFolder(token: string, body: CreateFolderInput) {
   })
 }
 
+export async function createFile(token: string, body: CreateFileInput) {
+  return requestJson<ExplorerNode>("/explorer/node/file", {
+    method: "POST",
+    token,
+    body,
+  })
+}
+
 export async function renameNode(token: string, nodeId: number, body: RenameNodeInput) {
   return requestJson<ExplorerNode>(`/explorer/node/${nodeId}`, {
     method: "PATCH",
@@ -212,6 +226,12 @@ export async function permanentlyDeleteRecycleNodes(token: string, body: DeleteN
 
 export function buildDownloadUrl(nodeId: number) {
   return `/api/v1/explorer/download/${nodeId}`
+}
+
+export function buildArchiveDownloadUrl(nodeIds: number[]) {
+  const query = new URLSearchParams()
+  nodeIds.forEach((nodeId) => query.append("node_ids", String(nodeId)))
+  return `/api/v1/explorer/download/archive?${query.toString()}`
 }
 
 export function buildPreviewUrl(nodeId: number) {

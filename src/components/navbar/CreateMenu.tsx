@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { IconFolderPlus, IconFolderUp, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
+import { IconFileText, IconFolderPlus, IconFolderUp, IconMarkdown, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { CreateFolderDialog } from "@/components/file-area"
+import { CreateFileDialog, CreateFolderDialog, type NewTextFileType } from "@/components/file-area"
 import { useAppState } from "@/lib/app-state"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
@@ -19,8 +19,9 @@ export function CreateMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { createFolder, getFolderPathId, requestUpload, requestFolderUpload } = useAppState()
+  const { createFile, createFolder, getFolderPathId, requestUpload, requestFolderUpload } = useAppState()
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [createFileType, setCreateFileType] = useState<NewTextFileType | null>(null)
 
   const currentFolderId = useMemo(() => {
     if (!location.pathname.startsWith("/app")) {
@@ -42,6 +43,12 @@ export function CreateMenu() {
     }
   }
 
+  const submitCreateFile = async (name: string) => {
+    const created = await createFile(currentFolderId, name)
+    if (created) toast.success(`${created.name} 创建成功`)
+    return Boolean(created)
+  }
+
   return (
     <>
       <DropdownMenu>
@@ -51,20 +58,29 @@ export function CreateMenu() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-52 rounded-xl">
           <DropdownMenuItem onClick={openCreateFolderDialog}>
-            <IconFolderPlus size={16} />
+            <IconFolderPlus />
             新建文件夹
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setCreateFileType("txt")}>
+            <IconFileText />
+            新建文本文档
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setCreateFileType("markdown")}>
+            <IconMarkdown />
+            新建 Markdown 文档
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => requestUpload(currentFolderId)}>
-            <IconUpload size={16} />
+            <IconUpload />
             上传文件
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => requestFolderUpload(currentFolderId)}>
-            <IconFolderUp size={16} />
+            <IconFolderUp />
             上传文件夹
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate("/settings/storage")}>
-            <IconSettings size={16} />
+            <IconSettings />
             存储设置
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -79,6 +95,16 @@ export function CreateMenu() {
         locationLabel="当前文件夹"
         onSubmit={(name) => void submitCreateFolder(name)}
       />
+      {createFileType ? (
+        <CreateFileDialog
+          open
+          fileType={createFileType}
+          onOpenChange={(open) => {
+            if (!open) setCreateFileType(null)
+          }}
+          onSubmit={submitCreateFile}
+        />
+      ) : null}
     </>
   )
 }

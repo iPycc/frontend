@@ -13,6 +13,7 @@ import { configureAuthClient } from "@/api/client"
 import {
   buildPreviewUrl,
   buildPreviewImageUrl,
+  createFile as apiCreateFile,
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
   listCategoryNodePage,
@@ -192,6 +193,7 @@ type AppStateValue = {
   getRecycleNodes: () => FileNode[]
   getShareRecords: () => Array<ShareRecord & { node?: FileNode }>
   createFolder: (parentId: string | null, name: string, bucketId?: string) => Promise<FileNode | null>
+  createFile: (parentId: string | null, name: string, bucketId?: string) => Promise<FileNode | null>
   renameNode: (nodeId: string, name: string) => Promise<void>
   moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string) => Promise<void>
   duplicateNodes: (nodeIds: string[]) => Promise<void>
@@ -1639,6 +1641,62 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [defaultBucketId, refreshCachedDirectory, updateSnapshot]
   )
 
+  const createFile = React.useCallback(
+    async (parentId: string | null, name: string, bucketId = defaultBucketId) => {
+      const session = snapshotRef.current.auth.session
+      const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+      if (!session || !bucket?.backendId) {
+        toast.error("当前没有可用的存储挂载")
+        return null
+      }
+
+      const trimmedName = name.trim()
+      if (!trimmedName) return null
+
+      const apiParentId = parentId && !parentId.startsWith("root:") ? Number(parentId) : undefined
+      const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+      const tempId = `optimistic-file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const now = new Date().toISOString()
+      const tempNode: FileNode = {
+        id: tempId,
+        bucketId: bucket.id,
+        parentId: uiParentId,
+        kind: "file",
+        name: trimmedName,
+        ext: extractExtension(trimmedName),
+        mediaType: inferMediaType(trimmedName, "file"),
+        size: 0,
+        updatedAt: now,
+        createdAt: now,
+      }
+
+      updateSnapshot((current) => ({ ...current, nodes: [...current.nodes, tempNode] }))
+
+      try {
+        const created = await apiCreateFile(session.tokens.accessToken, {
+          mount_id: bucket.backendId,
+          parent_id: apiParentId,
+          name: trimmedName,
+        })
+        const realNode = mapNodeToFileNode(created, bucket.id, uiParentId, snapshotRef.current.settings.timezone)
+        updateSnapshot((current) => ({
+          ...current,
+          nodes: current.nodes.map((node) => (node.id === tempId ? realNode : node)),
+        }))
+        await refreshCachedDirectory(uiParentId, bucket.id)
+        return realNode
+      } catch (error) {
+        updateSnapshot((current) => ({
+          ...current,
+          nodes: current.nodes.filter((node) => node.id !== tempId),
+        }))
+        toast.error(error instanceof Error ? error.message : "创建文件失败")
+        return null
+      }
+    },
+    [defaultBucketId, refreshCachedDirectory, updateSnapshot]
+  )
+
   const renameNode = React.useCallback(async (nodeId: string, name: string) => {
     const session = snapshotRef.current.auth.session
     const backendId = Number(nodeId)
@@ -2274,6 +2332,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     getRecycleNodes,
     getShareRecords,
     createFolder,
+    createFile,
     renameNode,
     moveNodes,
     duplicateNodes,
@@ -2298,6 +2357,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     clearCompletedUploads,
     copyNodes,
     createFolder,
+    createFile,
     currentUser,
     cutNodes,
     deleteNodes,
