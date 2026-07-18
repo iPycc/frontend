@@ -37,6 +37,7 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const [rate, setRate] = React.useState(1)
   const [controlsVisible, setControlsVisible] = React.useState(true)
   const [interacting, setInteracting] = React.useState(false)
+  const autoplayAttemptedRef = React.useRef<string | null>(null)
   const isTouch = React.useMemo(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches, [])
   const hideDelayMs = isTouch ? 3500 : 900
   const hlsSource = manifest.assets.hls?.url
@@ -203,7 +204,16 @@ const toggleFullscreen = () => {
           setDuration(event.currentTarget.duration || 0)
           setVolume(event.currentTarget.volume)
         }}
-        onCanPlay={() => setLoading(false)}
+        onCanPlay={(event) => {
+          setLoading(false)
+          const key = `${manifest.node_id}:${manifest.version}`
+          if (autoplayAttemptedRef.current !== key) {
+            autoplayAttemptedRef.current = key
+            void event.currentTarget.play().catch(() => {
+              setControlsVisible(true)
+            })
+          }
+        }}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
         onPlay={() => { setPlaying(true); showControls() }}

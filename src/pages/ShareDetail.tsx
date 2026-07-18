@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { useParams, useSearchParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
   IconChevronLeft,
@@ -9,11 +9,12 @@ import {
   IconCopy,
   IconDownload,
   IconEye,
+  IconFolderPlus,
   IconHome,
   IconLock,
 } from "@tabler/icons-react"
 
-import type { PreviewManifest } from "@/api/files"
+import { ApiError } from "@/api/client"
 import {
   buildSharedCoverUrl,
   buildSharedDownloadUrl,
@@ -26,93 +27,24 @@ import {
   type SharedNode,
   type ShareNodeInfo,
 } from "@/api/share"
+import { listShared, mountShared } from "@/api/shared"
 import { PreviewRenderer } from "@/components/file-area/preview/PreviewRenderer"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
-import { DownloadTaskPanel } from "@/components/download/DownloadTaskPanel"
+import { TransferManager } from "@/components/transfer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { useAppState } from "@/lib/app-state"
+import {
+  buildSharedPreviewManifest,
+  sharedAudioExtensions,
+  sharedExtensionOf,
+} from "@/lib/shared-preview"
 import { cn } from "@/lib/utils"
 import { ShareNotFound } from "./ShareNotFound"
-
-const imageExtensions = new Set(["apng", "avif", "bmp", "gif", "heic", "jpeg", "jpg", "png", "svg", "tif", "tiff", "webp"])
-const videoExtensions = new Set(["avi", "m4v", "mkv", "mov", "mp4", "webm"])
-const audioExtensions = new Set(["aac", "flac", "m4a", "mp3", "ogg", "opus", "wav"])
-const officeExtensions = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"])
-const textExtensions = new Set(["c", "conf", "cpp", "cs", "css", "go", "h", "html", "ini", "java", "js", "json", "jsx", "log", "md", "php", "py", "rb", "rs", "sh", "sql", "ts", "tsx", "txt", "xml", "yaml", "yml"])
-
-function extensionOf(name: string) {
-  return name.includes(".") ? name.split(".").pop()?.toLowerCase() ?? "" : ""
-}
-
-function previewKind(extension: string): PreviewManifest["kind"] {
-  if (imageExtensions.has(extension)) return "image"
-  if (videoExtensions.has(extension)) return "video"
-  if (audioExtensions.has(extension)) return "audio"
-  if (extension === "pdf") return "pdf"
-  if (officeExtensions.has(extension)) return "office"
-  if (textExtensions.has(extension)) return "text"
-  return "unsupported"
-}
-
-function mimeType(kind: PreviewManifest["kind"], extension: string) {
-  if (kind === "image") return `image/${extension === "jpg" ? "jpeg" : extension}`
-  if (kind === "video") return `video/${extension === "m4v" ? "mp4" : extension}`
-  if (kind === "audio") return `audio/${extension}`
-  if (kind === "pdf") return "application/pdf"
-  if (kind === "text") return "text/plain; charset=utf-8"
-  return "application/octet-stream"
-}
-
-function buildShareManifest(
-  info: ShareNodeInfo,
-  node: SharedNode,
-  source: string,
-  cover?: string
-): PreviewManifest {
-  const extension = extensionOf(node.name)
-  const kind = previewKind(extension)
-  const absoluteSource = new URL(source, window.location.origin).href
-  const publicSourceReady = window.location.protocol === "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
-  const assets: PreviewManifest["assets"] = {
-    source: { url: source, mime_type: mimeType(kind, extension), size: node.size, supports_range: true },
-  }
-  if (kind === "audio" && cover) {
-    assets.cover = { url: cover, mime_type: "image/webp", supports_range: true }
-  }
-  if (kind === "office") {
-    assets.office_source = { url: absoluteSource, mime_type: "application/octet-stream", size: node.size, supports_range: true }
-    assets.office_viewer = {
-      url: `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(absoluteSource)}`,
-      mime_type: "text/html",
-      supports_range: false,
-    }
-  }
-  return {
-    node_id: node.id,
-    name: node.name,
-    version: `share-${info.share_id}-${node.id}`,
-    kind,
-    status: kind === "unsupported" ? "unsupported" : "ready",
-    mime_type: mimeType(kind, extension),
-    size: node.size,
-    metadata: {
-      extension,
-      external_service: kind === "office" ? "Microsoft Office Web Viewer" : undefined,
-      public_source_ready: kind === "office" ? publicSourceReady : undefined,
-      max_bytes: 5 * 1024 * 1024,
-    },
-    assets,
-    capabilities: kind === "text" ? ["syntax"] : [],
-    requires_preparation: false,
-    preparation_available: false,
-    error: null,
-  }
-}
 
 function formatExpiry(value?: string | null) {
   if (!value) return "永久有效"
@@ -132,7 +64,8 @@ function formatSharedContentCount(folderCount: number, fileCount: number) {
 export function ShareDetail() {
   const { slug } = useParams<{ slug: string }>()
   const [searchParams] = useSearchParams()
-  const { formatBytes, recordShareDownload } = useAppState()
+  const navigate = useNavigate()
+  const { auth, formatBytes, isAuthenticated, recordShareDownload } = useAppState()
   const fileDownload = useFileDownload()
   const [password, setPassword] = useState("")
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -147,6 +80,8 @@ export function ShareDetail() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [verifyingPassword, setVerifyingPassword] = useState(false)
+  const [mounting, setMounting] = useState(false)
+  const [mountedId, setMountedId] = useState<number | null>(null)
   const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number } | null>(null)
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
 
@@ -194,16 +129,38 @@ export function ShareDetail() {
     return () => { cancelled = true }
   }, [searchParams, slug])
 
+  useEffect(() => {
+    if (!isAuthenticated || !slug) {
+      setMountedId(null)
+      return
+    }
+    let cancelled = false
+    void listShared()
+      .then((items) => {
+        if (!cancelled) setMountedId(items.find((item) => item.share_id === slug)?.id ?? null)
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [isAuthenticated, slug])
+
   const requiresPassword = info?.access === "password"
   const expired = Boolean(info?.expires_at && new Date(info.expires_at) <= new Date())
   const reachedDownloadLimit = Boolean(info?.max_downloads !== null && info && info.download_count >= (info.max_downloads ?? Infinity))
   const canAccess = Boolean(info && !expired && !reachedDownloadLimit && (!requiresPassword || accessToken))
+  const isOwnShare = Boolean(info && auth.session?.user.id === info.owner_uid)
   const previewSource = slug && selected ? buildSharedPreviewUrl(slug, accessToken, selected.id) : ""
-  const coverSource = slug && selected && selected.type === "file" && audioExtensions.has(extensionOf(selected.name))
+  const coverSource = slug && selected && selected.type === "file" && sharedAudioExtensions.has(sharedExtensionOf(selected.name))
     ? buildSharedCoverUrl(slug, accessToken, selected.id)
     : undefined
   const manifest = useMemo(
-    () => info && selected?.type === "file" && canAccess ? buildShareManifest(info, selected, previewSource, coverSource) : null,
+    () => info && selected?.type === "file" && canAccess
+      ? buildSharedPreviewManifest({
+          node: selected,
+          source: previewSource,
+          version: `share-${info.share_id}-${selected.id}`,
+          cover: coverSource,
+        })
+      : null,
     [canAccess, coverSource, info, previewSource, selected]
   )
 
@@ -296,6 +253,29 @@ export function ShareDetail() {
       toast.success("分享链接已复制")
       window.setTimeout(() => setCopied(false), 1600)
     } catch { toast.error("复制失败") }
+  }
+
+  const mountCurrentShare = async () => {
+    if (!slug || !canAccess || mounting) return
+    if (mountedId !== null) {
+      navigate("/app/shared-with-me")
+      return
+    }
+    setMounting(true)
+    try {
+      const mounted = await mountShared({ share_id: slug, access_token: accessToken })
+      setMountedId(mounted.id)
+      toast.success("已挂载到与我共享")
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 409) {
+        setMountedId(-1)
+        toast.info("这个分享已经挂载")
+      } else {
+        toast.error(reason instanceof Error ? reason.message : "挂载失败")
+      }
+    } finally {
+      setMounting(false)
+    }
   }
 
   const downloadNodes = async (downloadNodes: SharedNode[]) => {
@@ -414,7 +394,15 @@ export function ShareDetail() {
                 </span>
               ))}
             </nav>
-            <Button variant="outline" size="sm" onClick={() => void copyLink()}><IconCopy size={16} className="mr-1.5" />{copied ? "已复制" : "复制链接"}</Button>
+            <div className="flex items-center gap-2">
+              {isAuthenticated && !isOwnShare ? (
+                <Button variant={mountedId === null ? "default" : "outline"} size="sm" disabled={mounting} onClick={() => void mountCurrentShare()}>
+                  <IconFolderPlus size={16} className="mr-1.5" />
+                  {mounting ? "挂载中…" : mountedId === null ? "挂载到与我共享" : "查看已挂载内容"}
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" onClick={() => void copyLink()}><IconCopy size={16} className="mr-1.5" />{copied ? "已复制" : "复制链接"}</Button>
+            </div>
           </div>
 
           {selected && manifest ? (
@@ -444,7 +432,7 @@ export function ShareDetail() {
               <aside className="w-full shrink-0 rounded-xl border border-border bg-card p-5 lg:w-72">
                 <button type="button" className="mb-4 inline-flex items-center text-sm text-muted-foreground hover:text-foreground" onClick={() => setSelected(null)}><IconChevronLeft size={17} className="mr-1" />返回文件列表</button>
                 <p className="break-words text-base font-semibold">{selected.name}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{extensionOf(selected.name).toUpperCase() || "文件"} · {formatBytes(selected.size)}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{sharedExtensionOf(selected.name).toUpperCase() || "文件"} · {formatBytes(selected.size)}</p>
                 <Button className="mt-5 w-full" onClick={() => void downloadNodes([selected])}><IconDownload size={17} className="mr-1.5" />下载</Button>
                 <ShareFacts info={info} requiresPassword={requiresPassword} />
               </aside>
@@ -528,10 +516,12 @@ export function ShareDetail() {
           )}
         </>
       ) : requiresPassword && !accessToken ? null : <ShareNotFound />}
-      <DownloadTaskPanel
-        task={fileDownload.task}
-        onCancel={fileDownload.cancel}
-        onDismiss={fileDownload.dismiss}
+      <TransferManager
+        downloadTask={fileDownload.task}
+        onCancelDownload={fileDownload.cancel}
+        onDismissDownload={fileDownload.dismiss}
+        canUpload={false}
+        placement="floating"
       />
       <DownloadMethodDialog
         open={downloadDialogNodes.length > 0}

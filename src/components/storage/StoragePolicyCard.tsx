@@ -1,14 +1,17 @@
 ﻿﻿import * as React from "react"
-import { IconPencil, IconTrash } from "@tabler/icons-react"
+import { IconPencil, IconRefresh, IconTrash, IconX } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { BucketMount } from "@/lib/models"
+import { MountStatus } from "@/components/storage/MountStatus"
 
 interface StoragePolicyCardProps {
   bucket: BucketMount
   onEdit: (bucket: BucketMount) => void
   onDelete: (bucket: BucketMount) => void
+  onSync: (bucket: BucketMount) => void
+  syncing: boolean
 }
 
 function TencentBg() {
@@ -32,7 +35,7 @@ function LocalBg() {
   )
 }
 
-export function StoragePolicyCard({ bucket, onEdit, onDelete }: StoragePolicyCardProps) {
+export function StoragePolicyCard({ bucket, onEdit, onDelete, onSync, syncing }: StoragePolicyCardProps) {
   const isLocal = bucket.storageType === "local" || bucket.isLocal
   const providerLabel = isLocal ? "Local Storage（本机存储）" : bucket.provider
   const detail = isLocal ? bucket.basePrefix : bucket.bucket
@@ -45,18 +48,33 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete }: StoragePolicyCar
         <div className="truncate text-[15px] font-semibold text-foreground/90">{bucket.name}</div>
         <div className="text-xs text-muted-foreground">{providerLabel}</div>
         {detail ? <div className="mt-1 truncate font-mono text-xs text-muted-foreground/60">{detail}</div> : null}
+        <div className="mt-2"><MountStatus bucket={bucket} /></div>
       </div>
 
       <div className="relative flex items-center justify-between gap-2 px-3 pb-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1.5 px-3 text-xs text-muted-foreground hover:bg-background/60 hover:text-foreground"
-          onClick={() => onEdit(bucket)}
-        >
-          <IconPencil size={14} />
-          编辑
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 px-3 text-xs text-muted-foreground hover:bg-background/60 hover:text-foreground"
+            onClick={() => onEdit(bucket)}
+          >
+            <IconPencil size={14} />
+            编辑
+          </Button>
+          {bucket.mountMode === "mirror" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-3 text-xs text-muted-foreground hover:bg-background/60 hover:text-foreground"
+              onClick={() => onSync(bucket)}
+              disabled={!syncing && bucket.syncStatus === "pending"}
+            >
+              {syncing ? <IconX size={14} /> : <IconRefresh size={14} />}
+              {syncing ? "停止" : bucket.syncStatus === "running" ? "继续" : "同步"}
+            </Button>
+          ) : null}
+        </div>
         <Button
           variant="ghost"
           size="icon"
@@ -70,4 +88,3 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete }: StoragePolicyCar
     </div>
   )
 }
-

@@ -13,6 +13,7 @@ import { Files } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 
 import { type FileNode } from "@/lib/models"
+import { listNodeActivity, type NodeActivity } from "@/api/files"
 import { cn } from "@/lib/utils"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { Button } from "@/components/ui/button"
@@ -188,7 +189,7 @@ export function PropertiesPanelContent({
             <DetailsTab node={node} bucketName={bucketName} formatBytes={formatBytes} previewMetadata={previewMetadata} dark={dark} />
           )
         ) : (
-          <ActivityTab dark={dark} />
+          <ActivityTab node={multiNodes ? null : node} dark={dark} />
         )}
       </div>
     </div>
@@ -292,6 +293,11 @@ function DetailsTab({
   const isAudio = node.mediaType === "audio"
   const hasPreview = isImage || isVideo
   const hasMediaMetadata = hasPreview || isAudio
+  const [previewFailed, setPreviewFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    setPreviewFailed(false)
+  }, [node.id, node.preview])
 
   const fg = dark ? "text-white/90" : "text-foreground"
   const fgMuted = dark ? "text-white/50" : "text-muted-foreground"
@@ -319,7 +325,19 @@ function DetailsTab({
     <div className="space-y-3 md:space-y-5">
       {hasPreview && node.preview ? (
         <div className={cn("overflow-hidden rounded-lg border", borderCls)}>
-          <img src={node.preview} alt={node.name} className="h-36 w-full object-cover md:h-44" draggable={false} />
+          {previewFailed ? (
+            <div className="flex h-36 items-center justify-center bg-muted/40 md:h-44">
+              <FileGlyph item={node} size={52} />
+            </div>
+          ) : (
+            <img
+              src={node.preview}
+              alt={node.name}
+              className="h-36 w-full object-cover md:h-44"
+              draggable={false}
+              onError={() => setPreviewFailed(true)}
+            />
+          )}
         </div>
       ) : null}
 
@@ -481,10 +499,68 @@ function MultiDetailsTab({
 /*  Activity tab                                                      */
 /* ------------------------------------------------------------------ */
 
-function ActivityTab({ dark }: { dark: boolean }) {
+const activityLabels: Record<string, string> = {
+  "upload.complete": "上传了",
+  "upload.dedup": "秒传了",
+  "file.open": "打开了",
+  "file.edit": "编辑了",
+  "node.rename": "重命名了",
+  "node.move": "移动了",
+  "node.copy": "复制了",
+  "node.create_file": "创建了",
+  "node.create_folder": "创建了",
+}
+
+function ActivityTab({ node, dark }: { node: FileNode | null; dark: boolean }) {
+  const [items, setItems] = React.useState<NodeActivity[]>([])
+  const [loading, setLoading] = React.useState(Boolean(node?.backendId))
+
+  React.useEffect(() => {
+    if (!node?.backendId) {
+      setItems([])
+      setLoading(false)
+      return
+    }
+    const controller = new AbortController()
+    setLoading(true)
+    void listNodeActivity(node.backendId)
+      .then(setItems)
+      .catch(() => setItems([]))
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    return () => controller.abort()
+  }, [node?.backendId])
+
+  if (loading) {
+    return <div className={cn("flex h-32 items-center justify-center text-sm", dark ? "text-white/40" : "text-muted-foreground")}>正在读取活动记录…</div>
+  }
+  if (!items.length) {
+    return (
+      <div className={cn("flex h-32 items-center justify-center text-sm", dark ? "text-white/40" : "text-muted-foreground")}>
+        暂无活动记录
+      </div>
+    )
+  }
+
   return (
-    <div className={cn("flex h-32 items-center justify-center text-sm", dark ? "text-white/40" : "text-muted-foreground")}>
-      暂无活动记录
+    <div className="space-y-4">
+      {items.map((item) => (
+        <div key={item.id} className="flex gap-3">
+          <div className={cn("flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-medium", dark ? "bg-white/10 text-white/80" : "bg-muted text-foreground")}>
+            {item.actor_avatar ? <img src={item.actor_avatar} alt="" className="h-full w-full object-cover" /> : item.actor_name.slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className={cn("text-sm leading-5", dark ? "text-white/85" : "text-foreground")}>
+              <span className="font-medium">{item.actor_name}</span>{" "}
+              <span className={dark ? "text-white/55" : "text-muted-foreground"}>{activityLabels[item.action] ?? item.action}</span>
+            </p>
+            <p className={cn("mt-0.5 text-xs", dark ? "text-white/35" : "text-muted-foreground")}>
+              {new Date(item.created_at).toLocaleString("zh-CN")}
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

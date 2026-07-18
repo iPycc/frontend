@@ -7,6 +7,7 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { MountStatus } from "@/components/storage/MountStatus"
 
 const providerIcon: Record<string, typeof IconDatabase> = {
   local: IconDatabase,
@@ -101,6 +102,7 @@ export function Buckets() {
                 </div>
 
                 <p className="mt-4 text-xs text-muted-foreground">{bucket.corsMessage}</p>
+                <div className="mt-3 border-t border-border/50 pt-3"><MountStatus bucket={bucket} /></div>
               </motion.div>
             )
           })}

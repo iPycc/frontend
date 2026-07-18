@@ -45,6 +45,7 @@ export type ShareNodeInfo = {
   node_type: string
   node_size: number
   owner_name: string
+  owner_uid: string
   owner_avatar: string | null
   expires_at: string | null
   max_downloads: number | null

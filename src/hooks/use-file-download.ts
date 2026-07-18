@@ -92,20 +92,11 @@ async function getDirectory(root: DirectoryHandle, path: string[]) {
 export function useFileDownload() {
   const [task, setTask] = useState<DownloadTask | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
-  const hideTimerRef = useRef<number | null>(null)
   const supportsDirectoryDownload = typeof window !== "undefined" && Boolean((window as FilePickerWindow).showDirectoryPicker)
-
-  const clearHideTimer = useCallback(() => {
-    if (hideTimerRef.current !== null) {
-      window.clearTimeout(hideTimerRef.current)
-      hideTimerRef.current = null
-    }
-  }, [])
 
   useEffect(() => () => {
     controllerRef.current?.abort()
-    clearHideTimer()
-  }, [clearHideTimer])
+  }, [])
 
   const cancel = useCallback(() => {
     controllerRef.current?.abort()
@@ -114,17 +105,14 @@ export function useFileDownload() {
   }, [])
 
   const dismiss = useCallback(() => {
-    clearHideTimer()
     setTask(null)
-  }, [clearHideTimer])
+  }, [])
 
   const finishTask = useCallback((nextTask: DownloadTask) => {
     setTask(nextTask)
-    hideTimerRef.current = window.setTimeout(() => setTask(null), 2400)
   }, [])
 
   const download = useCallback(async (url: string, suggestedName: string) => {
-    clearHideTimer()
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
@@ -235,7 +223,7 @@ export function useFileDownload() {
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null
     }
-  }, [clearHideTimer, finishTask])
+  }, [finishTask])
 
   const downloadToDirectory = useCallback(async (
     roots: DirectoryDownloadNode[],
@@ -244,7 +232,6 @@ export function useFileDownload() {
     const picker = (window as FilePickerWindow).showDirectoryPicker
     if (!picker) throw new Error("当前浏览器不支持保存原始文件夹，请改用 ZIP 下载")
 
-    clearHideTimer()
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
@@ -364,7 +351,7 @@ export function useFileDownload() {
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null
     }
-  }, [clearHideTimer, finishTask])
+  }, [finishTask])
 
   return { task, download, downloadToDirectory, supportsDirectoryDownload, cancel, dismiss }
 }

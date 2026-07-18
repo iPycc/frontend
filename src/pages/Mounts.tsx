@@ -4,6 +4,7 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { Button } from "@/components/ui/button"
 import { IconArrowRight } from "@tabler/icons-react"
+import { MountStatus } from "@/components/storage/MountStatus"
 
 export function Mounts() {
   usePageTitle("存储桶")
@@ -35,7 +36,9 @@ export function Mounts() {
               <div>Bucket：{bucket.bucket || "local"}</div>
               <div>Region：{bucket.region || "本机"}</div>
               <div>策略：{bucket.strategy.multipartThreshold} / {bucket.strategy.partSize}</div>
+              <div>前缀：{bucket.rootPath || "存储桶根目录"}</div>
             </div>
+            <div className="mt-3 border-t border-border/50 pt-3"><MountStatus bucket={bucket} /></div>
           </div>
         ))}
       </div>

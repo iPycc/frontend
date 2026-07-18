@@ -16,15 +16,28 @@ interface MoveDialogProps {
   onValueChange: (value: string) => void
   onCancel: () => void
   onSubmit: (targetId: string) => void
+  title?: string
+  description?: string
+  submitLabel?: string
 }
 
-export function MoveDialog({ open, folders, value, onValueChange, onCancel, onSubmit }: MoveDialogProps) {
+export function MoveDialog({
+  open,
+  folders,
+  value,
+  onValueChange,
+  onCancel,
+  onSubmit,
+  title = "移动到",
+  description = "选择新的目标文件夹。",
+  submitLabel = "移动",
+}: MoveDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>移动到</DialogTitle>
-          <DialogDescription>选择新的目标文件夹。</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="move-target">目标目录</Label>
@@ -45,7 +58,7 @@ export function MoveDialog({ open, folders, value, onValueChange, onCancel, onSu
           <Button variant="outline" onClick={onCancel}>
             取消
           </Button>
-          <Button onClick={() => onSubmit(value)}>移动</Button>
+          <Button onClick={() => onSubmit(value)} disabled={!value}>{submitLabel}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { NavLink, useLocation } from "react-router-dom"
+import { Link, NavLink, useLocation } from "react-router-dom"
 import {
   IconActivity,
   IconChevronDown,
@@ -20,6 +20,7 @@ import { AnimatePresence, motion } from "motion/react"
 
 import { useAppState } from "@/lib/app-state"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Logo } from "@/components/ui/logo"
 import {
   Sidebar,
@@ -34,6 +35,7 @@ import { SidebarFolderTree, buildTree } from "./SidebarFolderTree"
 import { SidebarNavItem } from "./SidebarNavItem"
 import { SidebarQuota } from "./SidebarQuota"
 import { SidebarFooterContent } from "@/components/shared/SidebarFooterContent"
+import { groupSharedOwners, listShared, type SharedMount } from "@/api/shared"
 
 const utilityPaths = [
   "/app/shared-with-me",
@@ -58,6 +60,23 @@ export function SidebarLayout() {
   const { open, toggleSidebar } = useSidebar()
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
+  const [sharedMounts, setSharedMounts] = useState<SharedMount[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void listShared()
+      .then((items) => {
+        if (!cancelled) setSharedMounts(items)
+      })
+      .catch(() => {
+        if (!cancelled) setSharedMounts([])
+      })
+    return () => { cancelled = true }
+  }, [location.pathname])
+
+  const sharedOwners = useMemo(() => {
+    return groupSharedOwners(sharedMounts)
+  }, [sharedMounts])
 
   const rootFolders = useMemo(
     () => buildTree(getFoldersForBucket, activeBucket.rootNodeId),
@@ -67,6 +86,7 @@ export function SidebarLayout() {
   const searchParams = new URLSearchParams(location.search)
   const category = searchParams.get("type")
   const folderParam = searchParams.get("folder")
+  const sharedOwnerId = searchParams.get("owner")
   const isExplorerRoute =
     location.pathname === "/app" &&
     !utilityPaths.some((path) => location.pathname.startsWith(path))
@@ -198,11 +218,41 @@ export function SidebarLayout() {
           <div className="space-y-1.5">
             <SidebarNavItem
               to="/app/shared-with-me"
-              active={location.pathname === "/app/shared-with-me"}
+              active={location.pathname === "/app/shared-with-me" && !sharedOwnerId}
             >
               <IconUsers size={17} />
               <span>与我共享</span>
             </SidebarNavItem>
+            {sharedOwners.length ? (
+              <div className="space-y-0.5 pb-1 pl-7">
+                {sharedOwners.map((owner) => (
+                  <Link
+                    key={owner.id}
+                    to={`/app/shared-with-me?owner=${encodeURIComponent(String(owner.id))}`}
+                    aria-current={
+                      location.pathname === "/app/shared-with-me" && sharedOwnerId === String(owner.id)
+                        ? "page"
+                        : undefined
+                    }
+                    className={cn(
+                      "flex h-8 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
+                      location.pathname === "/app/shared-with-me" &&
+                        sharedOwnerId === String(owner.id) &&
+                        "bg-nav-active-bg text-nav-active-fg"
+                    )}
+                  >
+                    <Avatar size="sm" className="size-5">
+                      {owner.avatar ? <AvatarImage src={owner.avatar} alt={`${owner.name}的头像`} /> : null}
+                      <AvatarFallback className="text-[10px]">
+                        {owner.name.trim().slice(0, 1).toUpperCase() || "用"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="min-w-0 flex-1 truncate">{owner.name}</span>
+                    <span className="tabular-nums">{owner.shareCount}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
             <SidebarNavItem
               to="/share"
               active={location.pathname === "/share"}

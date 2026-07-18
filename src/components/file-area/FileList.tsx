@@ -83,7 +83,7 @@ export function FileList({
                       type="button"
                       onClick={(event: MouseEvent) => {
                         event.stopPropagation()
-                        onOpenNode(item)
+                        onSelectNode(item.id, event)
                       }}
                       onDoubleClick={(event: MouseEvent) => {
                         event.stopPropagation()
@@ -97,7 +97,7 @@ export function FileList({
                       type="button"
                       onClick={(event: MouseEvent) => {
                         event.stopPropagation()
-                        onOpenNode(item)
+                        onSelectNode(item.id, event)
                       }}
                       onDoubleClick={(event: MouseEvent) => {
                         event.stopPropagation()

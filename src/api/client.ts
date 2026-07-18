@@ -3,12 +3,14 @@ const DEFAULT_API_BASE = "/api/v1"
 export class ApiError extends Error {
   status: number
   payload: unknown
+  retryAfterMs?: number
 
-  constructor(status: number, message: string, payload?: unknown) {
+  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.payload = payload
+    this.retryAfterMs = retryAfterMs
   }
 }
 
@@ -140,10 +142,28 @@ async function requestResponseInternal(
   if (!response.ok) {
     const rawText = await response.text()
     const payload = rawText ? parseMaybeJson(rawText) : null
-    throw new ApiError(response.status, pickErrorMessage(payload, response.status), payload)
+    throw new ApiError(
+      response.status,
+      pickErrorMessage(payload, response.status),
+      payload,
+      parseRetryAfter(response.headers.get("Retry-After"))
+    )
   }
 
   return response
+}
+
+function parseRetryAfter(value: string | null) {
+  if (!value) return undefined
+
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000)
+  }
+
+  const date = Date.parse(value)
+  if (!Number.isFinite(date)) return undefined
+  return Math.max(0, date - Date.now())
 }
 
 async function refreshAccessToken() {

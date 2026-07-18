@@ -1,10 +1,10 @@
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/app-state"
 
 export function Offline() {
   usePageTitle("离线下载")
-  const { offlineTasks } = useAppState()
+  const { offlineTasks } = useUploadState()
 
   return (
     <PageShell title="离线下载" description="保留与其他页面一致的容器风格，展示下载队列状态。">

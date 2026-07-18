@@ -1,5 +1,5 @@
 import * as React from "react"
-import { IconExternalLink, IconLoader2, IconRefresh } from "@tabler/icons-react"
+import { IconArrowsMaximize, IconExternalLink, IconLoader2, IconRefresh } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ export function OfficePreview({ manifest }: { manifest: PreviewManifest }) {
   const [loading, setLoading] = React.useState(true)
   const [timedOut, setTimedOut] = React.useState(false)
   const [reloadKey, setReloadKey] = React.useState(0)
+  const hostRef = React.useRef<HTMLDivElement>(null)
   const publicSourceReady = manifest.metadata.public_source_ready !== false
 
   React.useEffect(() => {
@@ -23,12 +24,12 @@ export function OfficePreview({ manifest }: { manifest: PreviewManifest }) {
   }
 
   return (
-    <div className="relative h-full w-full bg-muted/30">
+    <div ref={hostRef} className="relative h-full w-full bg-background">
       <iframe
         key={reloadKey}
         src={source}
         title={`${manifest.name} Office 在线预览`}
-        className="h-full w-full border-0 bg-white"
+        className={`h-full w-full border-0 bg-white transition-opacity ${loading ? "opacity-0" : "opacity-100"}`}
         referrerPolicy="no-referrer"
         allow="fullscreen"
         onLoad={() => {
@@ -36,8 +37,30 @@ export function OfficePreview({ manifest }: { manifest: PreviewManifest }) {
           setTimedOut(false)
         }}
       />
+      {!loading ? (
+        <div className="absolute right-3 top-3 z-10 flex gap-1 rounded-lg border border-border bg-background/95 p-1 shadow-sm">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => hostRef.current?.requestFullscreen()}
+            aria-label="全屏放映"
+            title="全屏放映"
+          >
+            <IconArrowsMaximize size={17} />
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => window.open(source, "_blank", "noopener,noreferrer")}
+            aria-label="新窗口打开"
+            title="新窗口打开"
+          >
+            <IconExternalLink size={17} />
+          </Button>
+        </div>
+      ) : null}
       {loading ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/95 px-6 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background px-6 text-center">
           <IconLoader2 size={22} className="mb-3 animate-spin text-primary" />
           <p className="text-sm text-foreground">正在连接 Microsoft Office Web Viewer</p>
           <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">Office 文档会通过短时签名的公网 HTTPS 地址交给微软服务读取；本模式仅支持预览。</p>

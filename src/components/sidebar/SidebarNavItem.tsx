@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { NavLink } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { cn } from "@/lib/utils"
 
 export function SidebarNavItem({
@@ -14,8 +14,9 @@ export function SidebarNavItem({
   className?: string
 }) {
   return (
-    <NavLink
+    <Link
       to={to}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-9 items-center gap-3 rounded-full px-8 text-sm text-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
         active
@@ -25,6 +26,6 @@ export function SidebarNavItem({
       )}
     >
       {children}
-    </NavLink>
+    </Link>
   )
 }

@@ -13,15 +13,15 @@ import { FormCard, StorageFormHeader } from "@/components/storage/shared"
 
 interface TencentCorsStepProps {
   onBack: () => void
-  onSubmit: () => void
+  onSubmit: (autoConfigure: boolean) => void
 }
 
 const corsRule = {
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "HEAD"],
+  origin: typeof window === "undefined" ? "current site" : window.location.origin,
+  methods: ["GET", "POST", "PUT", "HEAD"],
   allowHeaders: "*",
-  exposeHeaders: "ETag",
-  maxAge: 3600,
+  exposeHeaders: "ETag, Content-Length, Content-Range",
+  maxAge: 600,
 }
 
 export function TencentCorsStep({ onBack, onSubmit }: TencentCorsStepProps) {
@@ -49,7 +49,11 @@ export function TencentCorsStep({ onBack, onSubmit }: TencentCorsStepProps) {
               <p className="text-sm text-muted-foreground">
                 {corsAction === "auto" ? "Cloudrave 将在创建后自动配置跨域策略。" : "请在创建后手动前往 COS 控制台配置跨域策略。"}
               </p>
-              <Button size="lg" className="px-6 py-2.5 text-[15px]" onClick={onSubmit}>
+              <Button
+                size="lg"
+                className="px-6 py-2.5 text-[15px]"
+                onClick={() => onSubmit(corsAction === "auto")}
+              >
                 创建
               </Button>
             </div>

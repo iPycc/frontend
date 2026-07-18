@@ -1,5 +1,5 @@
 import * as React from "react"
-import { IconFolderPlus } from "@tabler/icons-react"
+import { IconFolderPlus, IconMapPin } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -77,25 +77,22 @@ export function CreateFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-hidden p-0 sm:max-w-[32rem]">
-        <div className="grid sm:grid-cols-[1.1fr_1.4fr]">
-          <div className="relative flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-primary/90 to-primary p-8 text-primary-foreground">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/20 shadow-lg backdrop-blur-sm">
-              <IconFolderPlus size={40} stroke={1.5} />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold">{title}</p>
-              {locationLabel ? (
-                <p className="mt-1 line-clamp-2 text-sm text-primary-foreground/80">{locationLabel}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
+      <DialogContent className="p-0 sm:max-w-[28rem]">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-6">
             <DialogHeader className="text-left">
-              <DialogTitle>{title}</DialogTitle>
+              <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <IconFolderPlus size={21} stroke={1.7} />
+              </div>
+              <DialogTitle className="text-lg">{title}</DialogTitle>
               <DialogDescription>{description}</DialogDescription>
             </DialogHeader>
+
+            {locationLabel ? (
+              <div className="flex items-start gap-2 rounded-lg bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
+                <IconMapPin size={15} className="mt-0.5 shrink-0" />
+                <span className="line-clamp-2">{locationLabel}</span>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="folder-name">文件夹名称</Label>
@@ -120,7 +117,7 @@ export function CreateFolderDialog({
               {error ? <p className="text-xs text-destructive">{error}</p> : null}
             </div>
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="pt-1">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                 取消
               </Button>
@@ -129,7 +126,6 @@ export function CreateFolderDialog({
               </Button>
             </DialogFooter>
           </form>
-        </div>
       </DialogContent>
     </Dialog>
   )

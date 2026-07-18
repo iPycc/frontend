@@ -2,6 +2,8 @@ export type ThemeMode = "light" | "dark" | "system"
 export type SortValue = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "size-desc"
 export type ViewMode = "grid" | "list" | "gallery"
 export type MediaType = "image" | "video" | "audio" | "document" | "archive" | "code" | "other"
+export type MountMode = "managed" | "mirror"
+export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
 
 export type StorageStrategyKey = "tencent" | "local" | "aliyun"
 export type UserRole = "admin" | "user" | "guest"
@@ -105,6 +107,14 @@ export interface BucketMount {
   strategy: BucketStrategy
   rootNodeId: string
   rootPath?: string
+  mountMode: MountMode
+  readOnly: boolean
+  legacyPrefixedKeys: boolean
+  objectKeyStyle: "readable" | "opaque"
+  syncStatus: MountSyncStatus
+  lastSyncAt?: string
+  syncError?: string
+  syncedObjects: number
   mountSlug?: string
   createdAt: string
   updatedAt?: string
@@ -182,6 +192,9 @@ export interface UploadQueueItem {
   progress: number
   uploadedBytes: number
   totalBytes: number
+  speedBytesPerSecond?: number
+  partSizeBytes?: number
+  partCount?: number
   speedText: string
   sessionId?: string
   expiresAt?: string

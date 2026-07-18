@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/select"
 import { FormCard, FormRow, StorageFormHeader } from "@/components/storage/shared"
 import type { StorageFormMode, TencentStorageDraft } from "@/components/storage/types"
+import { EncryptionOptions } from "@/components/storage/tencent/EncryptionOptions"
+import { MountOptions } from "@/components/storage/tencent/MountOptions"
+import { TransferOptions } from "@/components/storage/tencent/TransferOptions"
 
 interface TencentStorageFormProps {
   draft: TencentStorageDraft
@@ -48,13 +51,13 @@ export function TencentStorageForm({
     }
   }
 
+  const credentialsReady = mode === "edit" || (draft.secretId.trim().length > 0 && draft.secretKey.trim().length > 0)
   const canSubmit =
     !readonly &&
     draft.name.trim().length > 0 &&
     draft.bucketName.trim().length > 0 &&
-    draft.accessDomain.trim().length > 0 &&
-    draft.secretId.trim().length > 0 &&
-    draft.secretKey.trim().length > 0
+    draft.region.trim().length > 0 &&
+    credentialsReady
 
   const title = mode === "edit" ? `编辑 ${initialDraft?.name || "腾讯云 COS"}` : "添加 腾讯云 COS"
 
@@ -126,8 +129,8 @@ export function TencentStorageForm({
         </FormRow>
 
         <FormRow
-          label="访问域名"
-          hint="填写 Bucket 的访问域名，也可以使用绑定的源站域名或 CDN 域名。"
+          label="API 域名（可选）"
+          hint="通常留空，由 SDK 根据地域生成官方域名；仅在使用专用 COS API 网关时填写。"
         >
           <Input
             className="h-10 w-full text-[15px]"
@@ -173,6 +176,10 @@ export function TencentStorageForm({
             />
           </div>
         </FormRow>
+
+        <MountOptions draft={draft} mode={mode} onChange={onChange} />
+        <TransferOptions draft={draft} mode={mode} onChange={onChange} />
+        <EncryptionOptions draft={draft} mode={mode} onChange={onChange} />
       </FormCard>
 
       {mode === "edit" && isDirty && (

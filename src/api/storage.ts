@@ -23,6 +23,28 @@ export type StoragePolicy = {
   updated_at: string
 }
 
+export type MountMode = "managed" | "mirror"
+export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
+
+export type MountSyncResult = {
+  mount_id: number
+  mode: MountMode
+  status: MountSyncStatus
+  generation?: string | null
+  cursor?: string | null
+  complete: boolean
+  started_at?: string | null
+  completed_at?: string | null
+  scanned: number
+  created: number
+  updated: number
+  unchanged: number
+  conflicts: number
+  missing: number
+  synced_objects: number
+  error?: string | null
+}
+
 export type BucketMount = {
   id: number
   owner_id: number
@@ -32,6 +54,13 @@ export type BucketMount = {
   root_path: string
   provider_label?: string | null
   is_enabled: boolean
+  mode: MountMode
+  read_only: boolean
+  legacy_prefixed_keys: boolean
+  sync_status: MountSyncStatus
+  last_sync_at?: string | null
+  sync_error?: string | null
+  synced_objects: number
   quota_bytes?: number | null
   extra: Record<string, unknown>
   created_at: string
@@ -66,6 +95,9 @@ export type CreateBucketMountInput = {
   root_path?: string
   provider_label?: string | null
   is_enabled?: boolean
+  mode?: MountMode
+  read_only?: boolean
+  legacy_prefixed_keys?: boolean
   quota_bytes?: number | null
   extra?: Record<string, unknown>
 }
@@ -130,4 +162,25 @@ export async function applyMountCors(token: string, mountId: number) {
     method: "POST",
     token,
   })
+}
+
+export async function getMountSync(token: string, mountId: number, signal?: AbortSignal) {
+  return requestJson<MountSyncResult>(`/admin/mount/${mountId}/sync`, { token, signal })
+}
+
+export async function syncMount(token: string, mountId: number, signal?: AbortSignal) {
+  return requestJson<MountSyncResult>(`/admin/mount/${mountId}/sync`, {
+    method: "POST",
+    token,
+    signal,
+    body: { page_size: 500, max_pages: 1 },
+  })
+}
+
+export async function syncMountPages(token: string, mountId: number, signal?: AbortSignal) {
+  let result = await syncMount(token, mountId, signal)
+  for (let batch = 1; batch < 4 && result.status === "running" && result.cursor && !result.complete; batch += 1) {
+    result = await syncMount(token, mountId, signal)
+  }
+  return result
 }

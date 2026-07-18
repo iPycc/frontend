@@ -156,13 +156,17 @@ export function AudioPlayer({
   const audioElement = (
     <audio
       ref={audioRef}
+      autoPlay
       preload="metadata"
       onLoadedMetadata={(event) => {
         setLoading(false)
         setDuration(event.currentTarget.duration || 0)
         setVolume(event.currentTarget.volume)
       }}
-      onCanPlay={() => setLoading(false)}
+      onCanPlay={(event) => {
+        setLoading(false)
+        void event.currentTarget.play().catch(() => undefined)
+      }}
       onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
       onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
       onPlay={() => setPlaying(true)}

@@ -1,5 +1,6 @@
 import { requestJson } from "./client"
 import type { SortValue } from "@/lib/models"
+import type { MountMode, MountSyncStatus } from "@/api/storage"
 
 export type ExplorerMount = {
   id: number
@@ -10,6 +11,13 @@ export type ExplorerMount = {
   root_path: string
   provider_label?: string | null
   is_enabled: boolean
+  mode: MountMode
+  read_only: boolean
+  legacy_prefixed_keys: boolean
+  sync_status: MountSyncStatus
+  last_sync_at?: string | null
+  sync_error?: string | null
+  synced_objects: number
   quota_bytes?: number | null
   extra: Record<string, unknown>
   created_at: string
@@ -52,6 +60,11 @@ export type DeleteNodesInput = {
   hard_delete: boolean
 }
 
+export type TransferNodesInput = {
+  node_ids: number[]
+  target_parent_id?: number | null
+}
+
 export type RestoreNodesInput = {
   node_ids: number[]
 }
@@ -73,6 +86,29 @@ export type ListNodePageOptions = {
 export type ExplorerNodeSearchResult = {
   node: ExplorerNode
   parent_path: string
+}
+
+export type NodeActivity = {
+  id: number
+  action: string
+  actor_id?: number | null
+  actor_name: string
+  actor_avatar?: string | null
+  detail?: string | null
+  created_at: string
+}
+
+export type BackgroundTask = {
+  id: string
+  owner_id: number
+  kind: "archive_extract"
+  name: string
+  status: "pending" | "running" | "completed" | "failed"
+  progress: number
+  detail?: string | null
+  result_node_id?: number | null
+  created_at: string
+  updated_at: string
 }
 
 export type PreviewAsset = {
@@ -201,6 +237,30 @@ export async function renameNode(token: string, nodeId: number, body: RenameNode
   })
 }
 
+export async function moveNodes(token: string, body: TransferNodesInput) {
+  return requestJson<ExplorerNode[]>("/explorer/node/move", {
+    method: "POST",
+    token,
+    body,
+  })
+}
+
+export async function copyNodes(token: string, body: TransferNodesInput) {
+  return requestJson<ExplorerNode[]>("/explorer/node/copy", {
+    method: "POST",
+    token,
+    body,
+  })
+}
+
+export function recordNodeOpen(nodeId: number) {
+  return requestJson<void>(`/explorer/node/${nodeId}/open`, { method: "POST" })
+}
+
+export function listNodeActivity(nodeId: number) {
+  return requestJson<NodeActivity[]>(`/explorer/node/${nodeId}/activity`)
+}
+
 export async function deleteNodes(token: string, body: DeleteNodesInput) {
   return requestJson<Record<string, unknown>>("/explorer/node", {
     method: "DELETE",
@@ -264,6 +324,21 @@ export function buildPreviewAudioCoverUrl(nodeId: number, version?: string) {
 
 export function buildPreviewManifestUrl(nodeId: number) {
   return `/api/v1/explorer/preview/${nodeId}/manifest`
+}
+
+export function buildArchiveEntryPreviewUrl(nodeId: number, path: string) {
+  return `/api/v1/explorer/preview/${nodeId}/archive/entry?path=${encodeURIComponent(path)}`
+}
+
+export function extractArchive(nodeId: number, targetParentId?: number | null) {
+  return requestJson<BackgroundTask>(`/explorer/archive/${nodeId}/extract`, {
+    method: "POST",
+    body: { target_parent_id: targetParentId ?? null },
+  })
+}
+
+export function listBackgroundTasks() {
+  return requestJson<BackgroundTask[]>("/explorer/task")
 }
 
 const previewManifestCache = new Map<number, PreviewManifest>()

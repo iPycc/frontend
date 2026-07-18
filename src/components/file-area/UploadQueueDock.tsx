@@ -11,10 +11,11 @@ import {
   X,
 } from "lucide-react"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState, useUploadState } from "@/lib/app-state"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { FileGlyph } from "./FileGlyph"
+import { FILE_LIMIT } from "@/lib/upload/pool"
 
 function buildQueueFile(fileName: string): FileNode {
   return {
@@ -72,15 +73,17 @@ const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg 
 
 export function UploadQueueDock({ parentId }: { parentId: string | null }) {
   const {
+    requestUpload,
+    formatBytes,
+  } = useAppState()
+  const {
     uploadQueue,
     uploadQueueOpen,
     setUploadQueueOpen,
-    requestUpload,
     retryUpload,
     removeUpload,
     clearCompletedUploads,
-    formatBytes,
-  } = useAppState()
+  } = useUploadState()
   const summary = getSummary(uploadQueue)
   const hasTerminal = uploadQueue.some((item) => isTerminal(item.status))
 
@@ -122,7 +125,7 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">上传任务</h2>
           <p className="truncate text-xs text-muted-foreground" aria-live="polite">
-            {summary.active ? `${summary.active} 项进行中` : summary.failed ? `${summary.failed} 项失败` : uploadQueue.length ? "全部任务已结束" : "暂无任务"}
+            {summary.active ? `${summary.active} 项进行中（最多 ${FILE_LIMIT} 项）` : summary.failed ? `${summary.failed} 项失败` : uploadQueue.length ? "全部任务已结束" : "暂无任务"}
             {summary.total > 0 ? ` · ${formatBytes(summary.loaded)} / ${formatBytes(summary.total)}` : ""}
           </p>
         </div>
@@ -140,7 +143,11 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
           const progress = progressOf(item)
           const terminal = isTerminal(item.status)
           return (
-            <div key={item.id} className="group relative min-h-16 border-b border-border/70 last:border-b-0">
+            <div
+              key={item.id}
+              className="group relative min-h-16 border-b border-border/70 last:border-b-0"
+              style={{ contentVisibility: "auto", containIntrinsicSize: "64px" }}
+            >
               <div
                 className={cn(
                   "pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-300",
@@ -166,6 +173,8 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
                 <div className="flex w-8 shrink-0 justify-end">
                   {item.status === "failed" ? (
                     <button className={iconButton} type="button" onClick={() => retryUpload(item.id)} aria-label={`重试上传 ${item.fileName}`} title="重试"><RefreshCcw className="size-4" /></button>
+                  ) : item.status === "processing" ? (
+                    <span className="size-8" aria-hidden="true" />
                   ) : (
                     <button className={cn(iconButton, "hover:text-destructive")} type="button" onClick={() => removeUpload(item.id)} aria-label={`${terminal ? "移除" : "取消上传"} ${item.fileName}`} title={terminal ? "移除" : "取消上传"}><X className="size-4" /></button>
                   )}

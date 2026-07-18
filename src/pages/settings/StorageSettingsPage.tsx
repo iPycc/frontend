@@ -3,10 +3,9 @@ import { toast } from "sonner"
 
 import {
   applyMountCors,
-  createMount,
-  createPolicy,
   deleteMount,
   deletePolicy,
+  syncMountPages,
   updateMount,
   updatePolicy,
   type CreateBucketMountInput,
@@ -16,6 +15,7 @@ import {
 } from "@/api/storage"
 import { useAppState } from "@/lib/app-state"
 import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, validateLocalStoragePath } from "@/lib/models"
+import { attachStorage } from "@/lib/storage/attach"
 import {
   getStorageModule,
   LocalStorageForm,
@@ -38,10 +38,21 @@ function createEmptyTencentDraft(): TencentStorageDraft {
   return {
     name: "",
     bucketName: "",
+    region: "ap-guangzhou",
+    prefix: "",
+    mountMode: "managed",
+    readOnly: false,
+    legacyPrefixedKeys: false,
+    objectKeyStyle: "readable",
     accessPermission: "private",
     accessDomain: "",
     secretId: "",
     secretKey: "",
+    concurrency: 3,
+    multipartThreshold: "25 MB",
+    partSize: "25 MB",
+    serverSideEncryption: "none",
+    kmsKeyId: "",
   }
 }
 
@@ -121,6 +132,9 @@ function buildLocalMountInput(
       provider_label: "Local Storage",
       storage_type: "local",
       storage_root: storageRoot,
+      concurrency: draft.concurrency,
+      multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+      part_size_mb: parseSizeMb(draft.partSize, 25),
     },
   }
 }
@@ -130,15 +144,15 @@ function buildTencentPolicyInput(draft: TencentStorageDraft): CreateStoragePolic
     name: draft.name.trim(),
     provider: "tencent_cos",
     bucket_name: draft.bucketName.trim(),
-    region: "ap-guangzhou",
+    region: draft.region.trim(),
     endpoint: draft.accessDomain.trim() || undefined,
     base_prefix: "",
     secret_id: draft.secretId.trim(),
     secret_key: draft.secretKey.trim(),
     status: "active",
     description: `Tencent COS bucket ${draft.bucketName.trim()}`,
-    multipart_threshold_mb: 25,
-    part_size_mb: 25,
+    multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+    part_size_mb: parseSizeMb(draft.partSize, 25),
     presign_ttl_seconds: 900,
     is_default: false,
     cors_auto_configured: false,
@@ -147,7 +161,12 @@ function buildTencentPolicyInput(draft: TencentStorageDraft): CreateStoragePolic
       storage_type: "tencent",
       bucket_name: draft.bucketName.trim(),
       endpoint: draft.accessDomain.trim(),
-      region: "ap-guangzhou",
+      region: draft.region.trim(),
+      concurrency: draft.concurrency,
+      multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+      part_size_mb: parseSizeMb(draft.partSize, 25),
+      server_side_encryption: draft.serverSideEncryption,
+      kms_key_id: draft.serverSideEncryption === "SSE-KMS" ? draft.kmsKeyId.trim() : "",
     },
   }
 }
@@ -157,15 +176,24 @@ function buildTencentMountInput(draft: TencentStorageDraft, fallbackSlug: string
     policy_id: policyId,
     name: draft.name.trim(),
     mount_slug: slugify(draft.name) || fallbackSlug,
-    root_path: "",
+    root_path: draft.prefix.trim().replace(/^\/+|\/+$/g, ""),
     provider_label: "Tencent COS",
     is_enabled: true,
+    mode: draft.mountMode,
+    read_only: draft.readOnly,
+    legacy_prefixed_keys: draft.legacyPrefixedKeys,
     extra: {
       provider_label: "Tencent COS",
       storage_type: "tencent",
       bucket_name: draft.bucketName.trim(),
       endpoint: draft.accessDomain.trim(),
-      region: "ap-guangzhou",
+      region: draft.region.trim(),
+      concurrency: draft.concurrency,
+      multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+      part_size_mb: parseSizeMb(draft.partSize, 25),
+      mount_mode: draft.mountMode,
+      read_only: draft.readOnly,
+      object_key_style: draft.objectKeyStyle,
     },
   }
 }
@@ -178,6 +206,10 @@ export function StorageSettingsPage() {
   const [localDraft, setLocalDraft] = React.useState<LocalStorageDraft>(buildLocalDraft(profile.uid || profile.username || "workspace"))
   const [initialLocalDraft, setInitialLocalDraft] = React.useState<LocalStorageDraft | undefined>()
   const [submitting, setSubmitting] = React.useState(false)
+  const [syncingMountId, setSyncingMountId] = React.useState<number | null>(null)
+  const syncControllerRef = React.useRef<AbortController | null>(null)
+
+  React.useEffect(() => () => syncControllerRef.current?.abort(), [])
 
   const token = authSession?.tokens.accessToken ?? null
   const userSeed = profile.uid || profile.username || "workspace"
@@ -223,6 +255,8 @@ export function StorageSettingsPage() {
       setSubmitting(true)
       try {
         await task()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "操作失败")
       } finally {
         setSubmitting(false)
       }
@@ -262,18 +296,23 @@ export function StorageSettingsPage() {
     setView({ type: "cors-step" })
   }
 
-  const handleTencentSubmit = () =>
+  const handleTencentSubmit = (autoConfigure: boolean) =>
     void withSubmit(async () => {
       const accessToken = requireToken()
       const fallbackSlug = slugify(`${userSeed}-${tencentDraft.name}`) || slugify(userSeed) || "tencent-cos"
 
-      const createdPolicy = await createPolicy(accessToken, buildTencentPolicyInput(tencentDraft))
-      const createdMount = await createMount(accessToken, buildTencentMountInput(tencentDraft, fallbackSlug, createdPolicy.id))
+      const created = await attachStorage(
+        accessToken,
+        buildTencentPolicyInput(tencentDraft),
+        (policyId) => buildTencentMountInput(tencentDraft, fallbackSlug, policyId)
+      )
 
-      try {
-        await applyMountCors(accessToken, createdMount.id)
-      } catch (error) {
-        toast.warning(error instanceof Error ? error.message : "已创建 COS 挂载，但跨域配置尚未完成。")
+      if (autoConfigure) {
+        try {
+          await applyMountCors(accessToken, created.mount.id)
+        } catch (error) {
+          toast.warning(error instanceof Error ? error.message : "已创建 COS 挂载，但跨域配置尚未完成。")
+        }
       }
 
       await reloadWorkspace()
@@ -291,8 +330,11 @@ export function StorageSettingsPage() {
       }
 
       const fallbackSlug = slugify(`${userSeed}-${localDraft.name}`) || slugify(userSeed) || "local-storage"
-      const createdPolicy = await createPolicy(accessToken, buildLocalPolicyInput(localDraft, validation.normalized))
-      await createMount(accessToken, buildLocalMountInput(localDraft, validation.normalized, fallbackSlug, createdPolicy.id))
+      await attachStorage(
+        accessToken,
+        buildLocalPolicyInput(localDraft, validation.normalized),
+        (policyId) => buildLocalMountInput(localDraft, validation.normalized, fallbackSlug, policyId)
+      )
 
       await reloadWorkspace()
       toast.success("本机存储策略已创建。")
@@ -302,7 +344,7 @@ export function StorageSettingsPage() {
   const handleEditPolicy = (bucket: BucketMount) => {
     const strategy = resolveStorageStrategy(bucket)
     if (strategy === "local") {
-      const draft = {
+      const draft: LocalStorageDraft = {
         name: bucket.name,
         path: bucket.basePrefix ?? bucket.bucket ?? buildLocalStoragePath(userSeed),
         pathCustomized: true,
@@ -313,13 +355,27 @@ export function StorageSettingsPage() {
       setLocalDraft(draft)
       setInitialLocalDraft(draft)
     } else {
-      const draft = {
+      const draft: TencentStorageDraft = {
         name: bucket.name,
         bucketName: bucket.bucket ?? "",
+        region: bucket.region ?? "ap-guangzhou",
+        prefix: bucket.rootPath ?? "",
+        mountMode: bucket.mountMode,
+        readOnly: bucket.readOnly,
+        legacyPrefixedKeys: bucket.legacyPrefixedKeys,
+        objectKeyStyle: bucket.objectKeyStyle,
         accessPermission: "private" as const,
         accessDomain: bucket.endpoint ?? "",
         secretId: "",
         secretKey: "",
+        concurrency: Math.max(1, Math.min(3, bucket.strategy?.concurrency ?? 3)),
+        multipartThreshold: bucket.strategy?.multipartThreshold ?? "25 MB",
+        partSize: bucket.strategy?.partSize ?? "25 MB",
+        serverSideEncryption:
+          bucket.extra?.server_side_encryption === "SSE-COS" || bucket.extra?.server_side_encryption === "SSE-KMS"
+            ? bucket.extra.server_side_encryption
+            : "none",
+        kmsKeyId: typeof bucket.extra?.kms_key_id === "string" ? bucket.extra.kms_key_id : "",
       }
       setTencentDraft(draft)
       setInitialTencentDraft(draft)
@@ -387,6 +443,9 @@ export function StorageSettingsPage() {
             provider_label: "Local Storage",
             storage_type: "local",
             storage_root: validation.normalized,
+            concurrency: localDraft.concurrency,
+            multipart_threshold_mb: parseSizeMb(localDraft.multipartThreshold, 25),
+            part_size_mb: parseSizeMb(localDraft.partSize, 25),
           },
         }
 
@@ -397,15 +456,22 @@ export function StorageSettingsPage() {
         const policyPatch: UpdateStoragePolicyInput = {
           name: tencentDraft.name.trim(),
           bucket_name: tencentDraft.bucketName.trim(),
-          region: "ap-guangzhou",
+          region: tencentDraft.region.trim(),
           endpoint: tencentDraft.accessDomain.trim() || undefined,
+          multipart_threshold_mb: parseSizeMb(tencentDraft.multipartThreshold, 25),
+          part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
           extra: {
             ...(bucket.extra ?? {}),
             provider_label: "Tencent COS",
             storage_type: "tencent",
             bucket_name: tencentDraft.bucketName.trim(),
             endpoint: tencentDraft.accessDomain.trim(),
-            region: "ap-guangzhou",
+            region: tencentDraft.region.trim(),
+            concurrency: tencentDraft.concurrency,
+            multipart_threshold_mb: parseSizeMb(tencentDraft.multipartThreshold, 25),
+            part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
+            server_side_encryption: tencentDraft.serverSideEncryption,
+            kms_key_id: tencentDraft.serverSideEncryption === "SSE-KMS" ? tencentDraft.kmsKeyId.trim() : "",
           },
         }
         if (tencentDraft.secretId.trim()) {
@@ -417,14 +483,24 @@ export function StorageSettingsPage() {
 
         const mountPatch: UpdateBucketMountInput = {
           name: tencentDraft.name.trim(),
+          root_path: tencentDraft.prefix.trim().replace(/^\/+|\/+$/g, ""),
           provider_label: "Tencent COS",
+          mode: tencentDraft.mountMode,
+          read_only: tencentDraft.readOnly,
+          legacy_prefixed_keys: tencentDraft.legacyPrefixedKeys,
           extra: {
             ...(bucket.extra ?? {}),
             provider_label: "Tencent COS",
             storage_type: "tencent",
             bucket_name: tencentDraft.bucketName.trim(),
             endpoint: tencentDraft.accessDomain.trim(),
-            region: "ap-guangzhou",
+            region: tencentDraft.region.trim(),
+            concurrency: tencentDraft.concurrency,
+            multipart_threshold_mb: parseSizeMb(tencentDraft.multipartThreshold, 25),
+            part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
+            mount_mode: tencentDraft.mountMode,
+            read_only: tencentDraft.readOnly,
+            object_key_style: tencentDraft.objectKeyStyle,
           },
         }
 
@@ -437,6 +513,39 @@ export function StorageSettingsPage() {
       setView({ type: "list" })
     })
 
+  const handleSyncMount = React.useCallback(async (bucket: BucketMount) => {
+    const accessToken = requireToken()
+    if (!bucket.backendId || bucket.mountMode !== "mirror") {
+      return
+    }
+
+    if (syncingMountId === bucket.backendId) {
+      syncControllerRef.current?.abort()
+      return
+    }
+    if (syncingMountId !== null) return
+
+    const controller = new AbortController()
+    syncControllerRef.current = controller
+    setSyncingMountId(bucket.backendId)
+    try {
+      const result = await syncMountPages(accessToken, bucket.backendId, controller.signal)
+      await reloadWorkspace()
+      if (!result.complete) {
+        toast.info(`已同步 ${result.synced_objects} 个对象，可再次继续。`)
+      } else {
+        toast.success(`${bucket.name} 同步完成，共 ${result.synced_objects} 个对象。`)
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        toast.error(error instanceof Error ? error.message : "启动同步失败")
+      }
+    } finally {
+      syncControllerRef.current = null
+      setSyncingMountId(null)
+    }
+  }, [reloadWorkspace, requireToken, syncingMountId])
+
   const submitLabel = submitting ? "处理中..." : undefined
   const editSubmitLabel = submitting ? "处理中..." : "保存"
 
@@ -448,6 +557,8 @@ export function StorageSettingsPage() {
           onAddPolicy={handleAddPolicy}
           onEditPolicy={handleEditPolicy}
           onDeletePolicy={handleDeletePolicy}
+          onSyncMount={handleSyncMount}
+          syncingMountId={syncingMountId}
         />
       )}
 

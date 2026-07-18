@@ -1,0 +1,52 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="256"
+  height="256"
+  viewBox="0 0 256 256"
+  fill="none"
+  role="img"
+  aria-label="Website logo"
+>
+  <!-- 正方形白底 -->
+  <rect
+    x="1"
+    y="1"
+    width="254"
+    height="254"
+    rx="64"
+    fill="#FFFFFF"
+    stroke="#E5E7EB"
+    stroke-width="2"
+  />
+
+  <!-- 居中的 Logo -->
+  <g transform="translate(32 32) scale(8)">
+    <circle cx="12" cy="12" r="12" fill="#0EA5E9" />
+
+    <path
+      d="M6.5 9v4a5.5 5.5 0 0 0 11 0V9"
+      stroke="#FFFFFF"
+      stroke-width="2"
+      stroke-linecap="round"
+      fill="none"
+    />
+
+    <path
+      d="M12 11.5 14.5 14 12 16.5 9.5 14Z"
+      fill="#FFFFFF"
+      stroke="#FFFFFF"
+      stroke-width="1"
+      stroke-linejoin="round"
+    />
+
+    <g opacity="0.6">
+      <path
+        d="M12 5.5 14.5 8 12 10.5 9.5 8Z"
+        fill="#FFFFFF"
+        stroke="#FFFFFF"
+        stroke-width="1"
+        stroke-linejoin="round"
+      />
+    </g>
+  </g>
+</svg>

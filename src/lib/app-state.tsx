@@ -13,6 +13,8 @@ import { configureAuthClient } from "@/api/client"
 import {
   buildPreviewUrl,
   buildPreviewImageUrl,
+  buildPreviewVideoPosterUrl,
+  copyNodes as apiCopyNodes,
   createFile as apiCreateFile,
   createFolder as apiCreateFolder,
   deleteNodes as apiDeleteNodes,
@@ -20,6 +22,7 @@ import {
   listNodePage,
   listRecycle,
   listUserMounts,
+  moveNodes as apiMoveNodes,
   renameNode as apiRenameNode,
   restoreNodes as apiRestoreNodes,
   type ExplorerMount,
@@ -34,7 +37,22 @@ import {
   type ShareCreateInput,
   type ShareRead,
 } from "@/api/share"
-import { abortUpload, completeUpload, createUploadSession, recordRemotePart, sha256File, uploadLocalPart } from "@/api/uploads"
+import {
+  abortUpload,
+  completeUpload,
+  createUploadSession,
+  getUploadPartUrl,
+  recordRemotePart,
+  uploadLocalPart,
+  type UploadPartPlan,
+} from "@/api/uploads"
+import { hashFile } from "@/lib/upload/hash"
+import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
+import { createGate } from "@/lib/upload/gate"
+import { FILE_LIMIT, NETWORK_LIMIT, partLimit, takeUploads } from "@/lib/upload/pool"
+import { trackParts } from "@/lib/upload/progress"
+import { putPart } from "@/lib/upload/put"
+import { retryPart, retryRateLimited } from "@/lib/upload/retry"
 import { getCurrentProfile } from "@/api/user"
 import {
   createId,
@@ -63,6 +81,11 @@ import {
 } from "@/lib/models"
 import { emitAuthEvent, isExpired, mergeSessionTokens, subscribeAuthEvents } from "@/lib/session"
 import { toast } from "sonner"
+import {
+  UploadConflictDialog,
+  type UploadConflictChoice,
+  type UploadConflictInfo,
+} from "@/components/file-area/UploadConflictDialog"
 
 const STORAGE_KEY = "cloudrave-app-state-v2"
 
@@ -102,6 +125,11 @@ function isPasskeyCanceled(error: unknown) {
 type UploadTarget = {
   mountId: string
   parentId: string | null
+}
+
+export type UploadSelection = {
+  file: File
+  relativePath?: string
 }
 
 type NodeCategory = "image" | "video" | "audio" | "document"
@@ -148,9 +176,6 @@ type AppStateValue = {
   activeBucket: BucketMount
   nodes: FileNode[]
   shares: ShareRecord[]
-  offlineTasks: OfflineTask[]
-  uploadQueue: UploadQueueItem[]
-  uploadQueueOpen: boolean
   clipboard: AppSnapshot["clipboard"]
   effectiveTheme: Exclude<ThemeMode, "system">
   setThemeMode: (mode: ThemeMode) => void
@@ -168,10 +193,7 @@ type AppStateValue = {
   reloadWorkspace: () => Promise<void>
   requestUpload: (parentId?: string | null, mountId?: string) => void
   requestFolderUpload: (parentId?: string | null, mountId?: string) => void
-  setUploadQueueOpen: (open: boolean) => void
-  retryUpload: (id: string) => void
-  removeUpload: (id: string) => void
-  clearCompletedUploads: () => void
+  queueUploadFiles: (files: UploadSelection[], parentId?: string | null, mountId?: string) => void
   getNodeById: (nodeId: string) => FileNode | undefined
   getFolderPathId: (path: string, bucketId?: string) => string | null
   getNodesInFolder: (path: string, bucketId?: string) => FileNode[]
@@ -212,7 +234,18 @@ type AppStateValue = {
   updateFileContent: (fileId: string, content: string) => void
 }
 
+type UploadStateValue = {
+  offlineTasks: OfflineTask[]
+  uploadQueue: UploadQueueItem[]
+  uploadQueueOpen: boolean
+  setUploadQueueOpen: (open: boolean) => void
+  retryUpload: (id: string) => void
+  removeUpload: (id: string) => void
+  clearCompletedUploads: () => void
+}
+
 const AppStateContext = React.createContext<AppStateValue | null>(null)
+const UploadStateContext = React.createContext<UploadStateValue | null>(null)
 
 const EMPTY_BUCKET: BucketMount = {
   id: "",
@@ -229,6 +262,12 @@ const EMPTY_BUCKET: BucketMount = {
     accelerate: false,
   },
   rootNodeId: "root:empty",
+  mountMode: "managed",
+  readOnly: false,
+    legacyPrefixedKeys: false,
+    objectKeyStyle: "readable",
+  syncStatus: "idle",
+  syncedObjects: 0,
   createdAt: "",
   corsStatus: "healthy",
   corsMessage: "",
@@ -415,6 +454,14 @@ function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?:
     },
     rootNodeId: `root:${mount.id}`,
     rootPath: mount.root_path,
+    mountMode: mount.mode ?? (extra.mount_mode === "mirror" ? "mirror" : "managed"),
+    readOnly: mount.read_only ?? Boolean(extra.read_only),
+    legacyPrefixedKeys: mount.legacy_prefixed_keys ?? Boolean(extra.legacy_prefixed_keys),
+    objectKeyStyle: extra.object_key_style === "opaque" ? "opaque" : "readable",
+    syncStatus: mount.sync_status ?? "idle",
+    lastSyncAt: formatDateTime(mount.last_sync_at, timezone) || undefined,
+    syncError: mount.sync_error ?? undefined,
+    syncedObjects: mount.synced_objects ?? Number(extra.synced_objects ?? 0),
     mountSlug: mount.mount_slug,
     createdAt: formatDateTime(mount.created_at, timezone),
     updatedAt: formatDateTime(mount.updated_at, timezone),
@@ -441,7 +488,11 @@ function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: strin
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
   let preview: string | undefined
   if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
-    preview = mediaType === "image" ? buildPreviewImageUrl(node.id, "thumbnail_2x", node.updated_at) : buildPreviewUrl(node.id)
+    preview = mediaType === "image"
+      ? buildPreviewImageUrl(node.id, "thumbnail_2x", node.updated_at)
+      : mediaType === "video"
+        ? buildPreviewVideoPosterUrl(node.id, node.updated_at)
+        : buildPreviewUrl(node.id)
   }
   return {
     id: String(node.id),
@@ -556,15 +607,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [recycleNodes, setRecycleNodes] = React.useState<FileNode[]>([])
   const [recycleLoading, setRecycleLoading] = React.useState(false)
   const [sharesLoading, setSharesLoading] = React.useState(false)
+  const [uploadConflict, setUploadConflict] = React.useState<UploadConflictInfo | null>(null)
   const backendHealthNotifiedRef = React.useRef(false)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const folderInputRef = React.useRef<HTMLInputElement | null>(null)
   const pendingUploadTargetRef = React.useRef<UploadTarget | null>(null)
   const uploadControllersRef = React.useRef(new Map<string, AbortController>())
+  const uploadCommitIdsRef = React.useRef(new Set<string>())
   const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget; relativePath?: string }>())
   const uploadPendingIdsRef = React.useRef<string[]>([])
   const uploadActiveIdsRef = React.useRef(new Set<string>())
+  const uploadGateRef = React.useRef(createGate(NETWORK_LIMIT))
+  const uploadApiSchedulerRef = React.useRef(createUploadApiScheduler())
+  const uploadRefreshTargetsRef = React.useRef(new Map<string, { parentId: string | null; bucketId: string }>())
+  const uploadRefreshTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const drainUploadQueueRef = React.useRef<() => void>(() => undefined)
+  const uploadConflictResolverRef = React.useRef<((choice: UploadConflictChoice) => void) | null>(null)
   const snapshotRef = React.useRef(snapshot)
   const pageStatesRef = React.useRef(pageStates)
   const pageRequestsRef = React.useRef(new Map<string, Promise<void>>())
@@ -603,9 +661,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           twoFactorEnabled: snapshot.security.twoFactorEnabled,
         },
         shares: snapshot.shares,
+        activeBucketId: snapshot.activeBucketId,
       })
     )
-  }, [snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
+  }, [snapshot.activeBucketId, snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -713,6 +772,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         buckets,
         activeBucketId:
           buckets.find((bucket) => bucket.id === current.activeBucketId)?.id ??
+          buckets.find((bucket) => bucket.id === window.localStorage.getItem("cloudrave.last-mount"))?.id ??
           buckets[0]?.id ??
           "",
         nodes: rootNodes,
@@ -930,9 +990,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             setTreeFolderNodes((current) => {
               let baseNodes = current
               if (reset) {
+                const mappedIds = new Set(mapped.map((node) => node.id))
                 const directIds = new Set<string>(
                   current
-                    .filter((node) => node.bucketId === bucket.id && node.parentId === uiParentId)
+                    .filter(
+                      (node) =>
+                        node.bucketId === bucket.id &&
+                        node.parentId === uiParentId &&
+                        !mappedIds.has(node.id)
+                    )
                     .map((node) => node.id)
                 )
                 baseNodes = removeCachedSubtrees(current, directIds)
@@ -947,9 +1013,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             updateSnapshot((current) => {
               let baseNodes = current.nodes
               if (reset) {
+                const mappedIds = new Set(mapped.map((node) => node.id))
                 const directIds = new Set<string>(
                   current.nodes
-                    .filter((node) => node.bucketId === bucket.id && node.parentId === uiParentId)
+                    .filter(
+                      (node) =>
+                        node.bucketId === bucket.id &&
+                        node.parentId === uiParentId &&
+                        !mappedIds.has(node.id)
+                    )
                     .map((node) => node.id)
                 )
                 baseNodes = removeCachedSubtrees(current.nodes, directIds)
@@ -1576,6 +1648,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveBucket = React.useCallback(
     (bucketId: string) => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("cloudrave.last-mount", bucketId)
+      }
       updateSnapshot((current) => ({ ...current, activeBucketId: bucketId }))
     },
     [updateSnapshot]
@@ -1739,13 +1814,53 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     ])
   }, [refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 
-  const moveNodes = React.useCallback(async () => {
-    toast.info("当前 MVP 暂不支持真实移动操作")
-  }, [])
+  const moveNodes = React.useCallback(async (
+    nodeIds: string[],
+    targetParentId: string | null,
+    bucketId = defaultBucketId
+  ) => {
+    const session = snapshotRef.current.auth.session
+    const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+    const backendIds = nodeIds.map(Number).filter((id) => Number.isFinite(id))
+    if (!session || !bucket?.backendId || backendIds.length === 0) return
+    const target = targetParentId && !targetParentId.startsWith("root:") ? Number(targetParentId) : null
+    if (target !== null && !Number.isFinite(target)) return
 
-  const duplicateNodes = React.useCallback(async () => {
-    toast.info("当前 MVP 暂不支持真实复制副本")
-  }, [])
+    const sourceNodes = nodeIds.map((id) => snapshotRef.current.nodes.find((node) => node.id === id)).filter(Boolean) as FileNode[]
+    const sourceParents = Array.from(new Set(sourceNodes.map((node) => node.parentId)))
+    const moved = await apiMoveNodes(session.tokens.accessToken, {
+      node_ids: backendIds,
+      target_parent_id: target,
+    })
+    const uiParentId = targetParentId && !targetParentId.startsWith("root:") ? targetParentId : bucket.rootNodeId
+    const mapped = moved.map((node) => mapNodeToFileNode(node, bucket.id, uiParentId, snapshotRef.current.settings.timezone))
+    const mappedById = new Map(mapped.map((node) => [node.id, node]))
+    updateSnapshot((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => mappedById.get(node.id) ?? node),
+    }))
+    await Promise.all([
+      ...sourceParents.map((parentId) => refreshCachedDirectory(parentId, bucket.id)),
+      refreshCachedDirectory(uiParentId, bucket.id),
+      refreshLoadedCategories(bucket.id),
+    ])
+    toast.success(`已移动 ${mapped.length} 项`)
+  }, [defaultBucketId, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
+
+  const duplicateNodes = React.useCallback(async (nodeIds: string[]) => {
+    const first = nodeIds.map((id) => snapshotRef.current.nodes.find((node) => node.id === id)).find(Boolean)
+    if (!first) return
+    const session = snapshotRef.current.auth.session
+    const backendIds = nodeIds.map(Number).filter((id) => Number.isFinite(id))
+    if (!session || backendIds.length === 0) return
+    const copied = await apiCopyNodes(session.tokens.accessToken, {
+      node_ids: backendIds,
+      target_parent_id: first.parentId && !first.parentId.startsWith("root:") ? Number(first.parentId) : null,
+    })
+    await refreshCachedDirectory(first.parentId, first.bucketId)
+    await refreshLoadedCategories(first.bucketId)
+    toast.success(`已创建 ${copied.length} 个副本`)
+  }, [refreshCachedDirectory, refreshLoadedCategories])
 
   const deleteNodes = React.useCallback(async (nodeIds: string[], hardDelete = false) => {
     const session = snapshotRef.current.auth.session
@@ -1970,9 +2085,37 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [updateSnapshot]
   )
 
-  const pasteNodes = React.useCallback(async () => {
-    toast.info("当前 MVP 暂不支持真实粘贴操作")
-  }, [])
+  const pasteNodes = React.useCallback(async (
+    targetParentId: string | null,
+    bucketId = defaultBucketId
+  ) => {
+    const current = snapshotRef.current.clipboard
+    if (!current?.nodeIds.length) return
+    try {
+      if (current.type === "cut") {
+        await moveNodes(current.nodeIds, targetParentId, bucketId)
+        updateSnapshot((snapshot) => ({ ...snapshot, clipboard: null }))
+      } else {
+        const session = snapshotRef.current.auth.session
+        const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
+        const backendIds = current.nodeIds.map(Number).filter((id) => Number.isFinite(id))
+        if (!session || !bucket || backendIds.length === 0) return
+        const target = targetParentId && !targetParentId.startsWith("root:") ? Number(targetParentId) : null
+        const copied = await apiCopyNodes(session.tokens.accessToken, {
+          node_ids: backendIds,
+          target_parent_id: target,
+        })
+        const uiParentId = targetParentId && !targetParentId.startsWith("root:") ? targetParentId : bucket.rootNodeId
+        await Promise.all([
+          refreshCachedDirectory(uiParentId, bucket.id),
+          refreshLoadedCategories(bucket.id),
+        ])
+        toast.success(`已粘贴 ${copied.length} 项`)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "粘贴失败")
+    }
+  }, [defaultBucketId, moveNodes, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 
   const getFileContent = React.useCallback((fileId: string) => snapshot.fileContents[fileId] ?? "", [snapshot.fileContents])
 
@@ -1982,6 +2125,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const updateUploadQueueItem = React.useCallback((id: string, patch: Partial<UploadQueueItem>) => {
     setUploadQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }, [])
+
+  const scheduleUploadRefresh = React.useCallback((parentId: string | null, bucketId: string) => {
+    uploadRefreshTargetsRef.current.set(`${bucketId}:${parentId ?? "root"}`, { parentId, bucketId })
+    if (uploadRefreshTimerRef.current) {
+      clearTimeout(uploadRefreshTimerRef.current)
+    }
+    uploadRefreshTimerRef.current = setTimeout(() => {
+      uploadRefreshTimerRef.current = undefined
+      const targets = [...uploadRefreshTargetsRef.current.values()]
+      uploadRefreshTargetsRef.current.clear()
+      void Promise.allSettled(
+        targets.flatMap((target) => [
+          refreshCachedDirectory(target.parentId, target.bucketId),
+          refreshLoadedCategories(target.bucketId),
+        ])
+      )
+    }, 1_500)
+  }, [refreshCachedDirectory, refreshLoadedCategories])
+
+  React.useEffect(() => () => {
+    if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current)
   }, [])
 
   const processUploadItem = React.useCallback(
@@ -2000,9 +2165,20 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         })
         return
       }
+      if (bucket.readOnly) {
+        updateUploadQueueItem(id, {
+          status: "failed",
+          errorMessage: "当前挂载为只读，不能上传文件",
+          speedText: "只读挂载",
+        })
+        return
+      }
 
       const controller = new AbortController()
       uploadControllersRef.current.set(id, controller)
+      const throwIfAborted = () => {
+        if (controller.signal.aborted) throw new DOMException("aborted", "AbortError")
+      }
 
       let sessionId: string | undefined
       try {
@@ -2019,17 +2195,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             ? Number(saved.target.parentId)
             : undefined
 
-        const checksum = await sha256File(saved.file)
-        const plan = await createUploadSession(session.tokens.accessToken, {
-          mount_id: bucket.backendId,
-          parent_id: apiParentId,
-          file_name: saved.file.name,
-          relative_path: saved.relativePath,
-          checksum: checksum ?? undefined,
-          size: saved.file.size,
-          content_type: saved.file.type || "application/octet-stream",
-          mode: "multipart",
-        })
+        const checksum = await hashFile(saved.file)
+        const plan = await retryRateLimited(
+          () => uploadApiSchedulerRef.current.run(
+            () => createUploadSession(session.tokens.accessToken, {
+              mount_id: bucket.backendId,
+              parent_id: apiParentId,
+              file_name: saved.file.name,
+              relative_path: saved.relativePath,
+              checksum: checksum ?? undefined,
+              size: saved.file.size,
+              content_type: saved.file.type || "application/octet-stream",
+              mode: "auto",
+            }),
+            controller.signal
+          ),
+          controller.signal
+        )
         sessionId = plan.session_id
         if (plan.is_duplicate) {
           updateUploadQueueItem(id, {
@@ -2039,10 +2221,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             uploadedBytes: saved.file.size,
             speedText: "秒传完成",
           })
-          await Promise.all([
-            refreshCachedDirectory(saved.target.parentId, bucket.id),
-            refreshLoadedCategories(bucket.id),
-          ])
+          scheduleUploadRefresh(saved.target.parentId, bucket.id)
           return
         }
         updateUploadQueueItem(id, {
@@ -2051,14 +2230,66 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           status: "uploading",
         })
 
-        const partSize = Math.max(plan.part_size || saved.file.size || 1, 1)
-        const partCount = Math.max(plan.upload_urls.length, Math.ceil((saved.file.size || 1) / partSize), 1)
-        const startAt = Date.now()
-        let uploadedBytes = 0
+        const singlePut = plan.upload_mode === "single_put"
+        const partSize = singlePut
+          ? Math.max(saved.file.size || 1, 1)
+          : Math.max(plan.part_size || saved.file.size || 1, 1)
+        const partCount = singlePut
+          ? 1
+          : Math.max(
+              plan.part_count ?? 0,
+              plan.upload_urls.length,
+              Math.ceil((saved.file.size || 1) / partSize),
+              1
+            )
+        updateUploadQueueItem(id, {
+          partSizeBytes: partSize,
+          partCount,
+        })
         const completedParts: Array<{ part_number: number; etag: string; size: number }> = []
-        const partConcurrency = Math.max(1, Math.min(8, Math.floor(bucket.strategy.concurrency || 1)))
+        const partConcurrency = partLimit(bucket.strategy.concurrency)
+        const uploadPlans = new Map<number, Promise<UploadPartPlan | undefined>>()
+        plan.upload_urls.forEach((item) => uploadPlans.set(item.part_number, Promise.resolve(item)))
+        const progressTracker = trackParts(saved.file.size, ({ uploadedBytes, progress, bytesPerSecond }) => {
+          updateUploadQueueItem(id, {
+            status: "uploading",
+            uploadedBytes,
+            progress,
+            speedBytesPerSecond: bytesPerSecond,
+            speedText: `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
+          })
+        })
         let nextPartIndex = 0
         let partFailure: unknown = null
+
+        const getPartPlan = (partNumber: number, refresh = false) => {
+          const cached = refresh ? undefined : uploadPlans.get(partNumber)
+          if (cached) return cached
+          if (bucket.storageType === "local") return Promise.resolve(undefined)
+
+          const requested = uploadApiSchedulerRef.current.run(
+            () => getUploadPartUrl(
+              session.tokens.accessToken,
+              sessionId,
+              partNumber,
+              controller.signal
+            ),
+            controller.signal
+          )
+          uploadPlans.set(partNumber, requested)
+          void requested.catch(() => {
+            if (uploadPlans.get(partNumber) === requested) uploadPlans.delete(partNumber)
+          })
+          return requested
+        }
+
+        const prefetchNextWave = (partNumber: number) => {
+          const nextPartNumber = partNumber + partConcurrency
+          if (singlePut || bucket.storageType === "local" || nextPartNumber > partCount) return
+          void getPartPlan(nextPartNumber).catch(() => {
+            // The worker will request a fresh URL when it reaches this part.
+          })
+        }
 
         const uploadPartAt = async (index: number) => {
           if (controller.signal.aborted) {
@@ -2069,54 +2300,72 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           const start = index * partSize
           const end = saved.file.size ? Math.min(saved.file.size, start + partSize) : start + partSize
           const chunk = saved.file.slice(start, end)
-          const uploadPlan = plan.upload_urls[index]
-          let etag = `part-${partNumber}`
+          prefetchNextWave(partNumber)
 
-          if (!uploadPlan || uploadPlan.url.startsWith("/api/") || bucket.storageType === "local") {
-            const part = await uploadLocalPart(
-              session.tokens.accessToken,
-              sessionId,
-              chunk,
-              partNumber,
-              chunk.size,
-              controller.signal
-            )
-            etag = part.etag ?? etag
-          } else {
-            const response = await fetch(uploadPlan.url, {
-              method: uploadPlan.method,
-              headers: uploadPlan.headers,
-              body: chunk,
-              signal: controller.signal,
-            })
-            if (!response.ok) {
-              throw new Error("上传分片失败")
+          const uploaded = await retryPart(async (attempt) => {
+            progressTracker.begin(partNumber)
+            const uploadPlan = await getPartPlan(partNumber, attempt > 0)
+            throwIfAborted()
+            if (!uploadPlan || uploadPlan.url.startsWith("/api/") || bucket.storageType === "local") {
+              const part = await uploadApiSchedulerRef.current.run(
+                () => uploadGateRef.current.run(
+                  () => uploadLocalPart(
+                    session.tokens.accessToken,
+                    sessionId,
+                    chunk,
+                    partNumber,
+                    chunk.size,
+                    controller.signal
+                  ),
+                  controller.signal
+                ),
+                controller.signal
+              )
+              throwIfAborted()
+              return { etag: part.etag ?? `part-${partNumber}`, recorded: true }
             }
-            etag = response.headers.get("etag") ?? response.headers.get("ETag") ?? etag
-            await recordRemotePart(
-              session.tokens.accessToken,
-              sessionId,
-              partNumber,
-              etag,
-              chunk.size,
+
+            const responseEtag = await uploadGateRef.current.run(
+              () => putPart(
+                uploadPlan,
+                chunk,
+                controller.signal,
+                (loaded) => progressTracker.update(partNumber, loaded)
+              ),
+              controller.signal,
+            )
+            throwIfAborted()
+            if (!responseEtag && !singlePut) {
+              const error = new Error("COS 响应未暴露 ETag，请检查存储桶 CORS 配置")
+              Object.assign(error, { retryable: false })
+              throw error
+            }
+            return { etag: responseEtag ?? `part-${partNumber}`, recorded: false }
+          }, controller.signal)
+          throwIfAborted()
+
+          if (!uploaded.recorded) {
+            await retryPart(
+              () => uploadApiSchedulerRef.current.run(
+                () => recordRemotePart(
+                  session.tokens.accessToken,
+                  sessionId,
+                  partNumber,
+                  uploaded.etag,
+                  chunk.size,
+                  controller.signal
+                ),
+                controller.signal
+              ),
               controller.signal
             )
+            throwIfAborted()
           }
-
-          uploadedBytes += chunk.size
-          const elapsedSeconds = Math.max((Date.now() - startAt) / 1000, 0.2)
-          const speed = uploadedBytes / elapsedSeconds
-          const progress = saved.file.size > 0 ? Math.min((uploadedBytes / saved.file.size) * 100, 100) : 100
+          progressTracker.commit(partNumber, chunk.size)
           completedParts.push({
             part_number: partNumber,
-            etag,
+            etag: uploaded.etag,
             size: chunk.size,
-          })
-          updateUploadQueueItem(id, {
-            status: "uploading",
-            uploadedBytes,
-            progress,
-            speedText: `${formatBytes(speed)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
           })
         }
 
@@ -2138,32 +2387,43 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         const partResults = await Promise.allSettled(
           Array.from({ length: Math.min(partConcurrency, partCount) }, () => uploadWorker())
         )
+        progressTracker.dispose()
         if (partFailure) throw partFailure
         const rejectedPart = partResults.find((result) => result.status === "rejected")
         if (rejectedPart?.status === "rejected") throw rejectedPart.reason
+        throwIfAborted()
         completedParts.sort((left, right) => left.part_number - right.part_number)
 
+        uploadCommitIdsRef.current.add(id)
         updateUploadQueueItem(id, {
           status: "processing",
           progress: 100,
           speedText: "处理中...",
         })
-        await completeUpload(session.tokens.accessToken, sessionId, completedParts)
+        await retryRateLimited(
+          () => uploadApiSchedulerRef.current.run(
+            () => completeUpload(session.tokens.accessToken, sessionId, completedParts),
+            controller.signal
+          ),
+          controller.signal
+        )
         updateUploadQueueItem(id, {
           status: "completed",
           progress: 100,
           uploadedBytes: saved.file.size,
+          speedBytesPerSecond: 0,
           speedText: "已上传",
         })
-        await Promise.all([
-          refreshCachedDirectory(saved.target.parentId, bucket.id),
-          refreshLoadedCategories(bucket.id),
-        ])
+        scheduleUploadRefresh(saved.target.parentId, bucket.id)
       } catch (error) {
         const aborted = error instanceof DOMException && error.name === "AbortError" && controller.signal.aborted
         if (sessionId) {
           try {
-            await abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed")
+            const cleanupSignal = new AbortController().signal
+            await uploadApiSchedulerRef.current.run(
+              () => abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed"),
+              cleanupSignal
+            )
           } catch {
             // ignore abort cleanup failures
           }
@@ -2174,17 +2434,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           speedText: aborted ? "已取消" : "上传失败",
         })
       } finally {
+        uploadCommitIdsRef.current.delete(id)
         uploadControllersRef.current.delete(id)
       }
     },
-    [refreshCachedDirectory, refreshLoadedCategories, updateUploadQueueItem]
+    [scheduleUploadRefresh, updateUploadQueueItem]
   )
 
   const drainUploadQueue = React.useCallback(() => {
-    const maxConcurrentTasks = 5
-    while (uploadActiveIdsRef.current.size < maxConcurrentTasks && uploadPendingIdsRef.current.length > 0) {
-      const nextId = uploadPendingIdsRef.current.shift()
-      if (!nextId || uploadActiveIdsRef.current.has(nextId)) continue
+    const nextIds = takeUploads(uploadPendingIdsRef.current, uploadActiveIdsRef.current, FILE_LIMIT)
+    for (const nextId of nextIds) {
       uploadActiveIdsRef.current.add(nextId)
       void processUploadItem(nextId).finally(() => {
         uploadActiveIdsRef.current.delete(nextId)
@@ -2211,6 +2470,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       toast.error("当前没有可用的上传目标")
       return
     }
+    if (snapshotRef.current.buckets.find((bucket) => bucket.id === targetMountId)?.readOnly) {
+      toast.info("当前挂载为只读，不能上传文件")
+      return
+    }
 
     pendingUploadTargetRef.current = {
       mountId: targetMountId,
@@ -2226,6 +2489,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       toast.error("当前没有可用的上传目标")
       return
     }
+    if (snapshotRef.current.buckets.find((bucket) => bucket.id === targetMountId)?.readOnly) {
+      toast.info("当前挂载为只读，不能上传文件夹")
+      return
+    }
 
     pendingUploadTargetRef.current = {
       mountId: targetMountId,
@@ -2234,18 +2501,148 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     folderInputRef.current?.click()
   }, [])
 
-  const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
-    const target = pendingUploadTargetRef.current
-    const files: File[] = event.target.files ? Array.from(event.target.files as ArrayLike<File>) : []
-    event.target.value = ""
+  const askUploadConflict = React.useCallback((conflict: UploadConflictInfo) => {
+    return new Promise<UploadConflictChoice>((resolve) => {
+      uploadConflictResolverRef.current = resolve
+      setUploadConflict(conflict)
+    })
+  }, [])
 
-    if (!target || files.length === 0) {
+  const resolveUploadConflict = React.useCallback((choice: UploadConflictChoice) => {
+    const resolve = uploadConflictResolverRef.current
+    uploadConflictResolverRef.current = null
+    setUploadConflict(null)
+    resolve?.(choice)
+  }, [])
+
+  const queueUploadFiles = React.useCallback(async (
+    selections: UploadSelection[],
+    parentId: string | null = null,
+    mountId?: string
+  ) => {
+    const targetMountId = mountId ?? snapshotRef.current.activeBucketId
+    const bucket = snapshotRef.current.buckets.find((item) => item.id === targetMountId)
+    if (!snapshotRef.current.auth.session || !targetMountId || !bucket) {
+      toast.error("当前没有可用的上传目标")
       return
     }
+    if (bucket.readOnly) {
+      toast.info("当前挂载为只读，不能上传文件")
+      return
+    }
+    const target = { mountId: targetMountId, parentId }
+    const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
+    const siblings = snapshotRef.current.nodes.filter(
+      (node) => node.bucketId === bucket.id && node.parentId === uiParentId && !node.deletedAt
+    )
+    let resolvedSelections = [...selections]
+    const topNames = Array.from(new Set(selections.map(({ file, relativePath }) => relativePath?.split("/")[0] || file.name)))
+    const reservedNames = new Set(siblings.map((node) => node.name))
 
-    const nextItems = files.map<UploadQueueItem>((file) => {
+    for (const topName of topNames) {
+      const existing = siblings.find((node) => node.name === topName)
+      if (!existing) continue
+      const grouped = resolvedSelections.filter(
+        ({ file, relativePath }) => (relativePath?.split("/")[0] || file.name) === topName
+      )
+      if (!grouped.length) continue
+      const folder = grouped.some(({ relativePath }) => Boolean(relativePath?.includes("/")))
+      const choice = await askUploadConflict({
+        name: topName,
+        kind: folder ? "folder" : existing.kind,
+        existingSize: existing.size,
+        existingModified: existing.updatedAt,
+        incomingSize: grouped.reduce((sum, item) => sum + item.file.size, 0),
+        incomingModified: Math.max(...grouped.map((item) => item.file.lastModified || 0)),
+        incomingCount: grouped.length,
+      })
+      if (choice === "skip") {
+        resolvedSelections = resolvedSelections.filter(
+          ({ file, relativePath }) => (relativePath?.split("/")[0] || file.name) !== topName
+        )
+        continue
+      }
+      if (choice === "replace") {
+        await deleteNodes([existing.id])
+        reservedNames.delete(topName)
+        continue
+      }
+
+      const dot = folder ? -1 : topName.lastIndexOf(".")
+      const stem = dot > 0 ? topName.slice(0, dot) : topName
+      const suffix = dot > 0 ? topName.slice(dot) : ""
+      let counter = 2
+      let renamed = `${stem} (${counter})${suffix}`
+      while (reservedNames.has(renamed)) {
+        counter += 1
+        renamed = `${stem} (${counter})${suffix}`
+      }
+      reservedNames.add(renamed)
+      resolvedSelections = resolvedSelections.map(({ file, relativePath }) => {
+        const currentTop = relativePath?.split("/")[0] || file.name
+        if (currentTop !== topName) return { file, relativePath }
+        if (relativePath) {
+          const parts = relativePath.split("/")
+          parts[0] = renamed
+          return { file, relativePath: parts.join("/") }
+        }
+        return {
+          file: new File([file], renamed, { type: file.type, lastModified: file.lastModified }),
+        }
+      })
+    }
+
+    const uniqueSelections: UploadSelection[] = []
+    const directFiles = new Map<string, UploadSelection>()
+    for (const selection of resolvedSelections) {
+      if (selection.relativePath) {
+        uniqueSelections.push(selection)
+        continue
+      }
+      const previous = directFiles.get(selection.file.name)
+      if (!previous) {
+        directFiles.set(selection.file.name, selection)
+        uniqueSelections.push(selection)
+        continue
+      }
+      const choice = await askUploadConflict({
+        name: selection.file.name,
+        kind: "file",
+        existingSize: previous.file.size,
+        existingModified: new Date(previous.file.lastModified).toISOString(),
+        incomingSize: selection.file.size,
+        incomingModified: selection.file.lastModified,
+        incomingCount: 1,
+      })
+      if (choice === "skip") continue
+      if (choice === "replace") {
+        const index = uniqueSelections.indexOf(previous)
+        if (index >= 0) uniqueSelections.splice(index, 1, selection)
+        directFiles.set(selection.file.name, selection)
+        continue
+      }
+      const dot = selection.file.name.lastIndexOf(".")
+      const stem = dot > 0 ? selection.file.name.slice(0, dot) : selection.file.name
+      const suffix = dot > 0 ? selection.file.name.slice(dot) : ""
+      let counter = 2
+      let renamed = `${stem} (${counter})${suffix}`
+      while (reservedNames.has(renamed) || directFiles.has(renamed)) {
+        counter += 1
+        renamed = `${stem} (${counter})${suffix}`
+      }
+      const renamedSelection = {
+        file: new File([selection.file], renamed, {
+          type: selection.file.type,
+          lastModified: selection.file.lastModified,
+        }),
+      }
+      directFiles.set(renamed, renamedSelection)
+      uniqueSelections.push(renamedSelection)
+    }
+    resolvedSelections = uniqueSelections
+
+    const nextItems = resolvedSelections.map<UploadQueueItem>(({ file, relativePath }) => {
       const id = createId("upload")
-      const relativePath = isFolder && file.webkitRelativePath ? file.webkitRelativePath : undefined
       uploadFilesRef.current.set(id, { file, target, relativePath })
       return {
         id,
@@ -2259,15 +2656,34 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         uploadedBytes: 0,
         totalBytes: file.size,
         speedText: "准备中...",
+        speedBytesPerSecond: 0,
         createdAt: nowString(),
       }
     })
-
+    if (!nextItems.length) return
     setUploadQueue((current) => [...nextItems, ...current])
     setUploadQueueOpen(true)
-
     enqueueUploads(nextItems.map((item) => item.id))
-  }, [enqueueUploads])
+  }, [askUploadConflict, deleteNodes, enqueueUploads])
+
+  const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
+    const target = pendingUploadTargetRef.current
+    const files: File[] = event.target.files ? Array.from(event.target.files as ArrayLike<File>) : []
+    event.target.value = ""
+
+    if (!target || files.length === 0) {
+      return
+    }
+
+    void queueUploadFiles(
+      files.map((file) => ({
+        file,
+        relativePath: isFolder && file.webkitRelativePath ? file.webkitRelativePath : undefined,
+      })),
+      target.parentId,
+      target.mountId
+    )
+  }, [queueUploadFiles])
 
   const retryUpload = React.useCallback((id: string) => {
     if (!uploadFilesRef.current.get(id)) {
@@ -2279,6 +2695,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       progress: 0,
       uploadedBytes: 0,
       expiresAt: undefined,
+      speedBytesPerSecond: 0,
+      partSizeBytes: undefined,
+      partCount: undefined,
       speedText: "准备中...",
       errorMessage: undefined,
     })
@@ -2286,6 +2705,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [enqueueUploads, updateUploadQueueItem])
 
   const removeUpload = React.useCallback((id: string) => {
+    if (uploadCommitIdsRef.current.has(id)) return
     const controller = uploadControllersRef.current.get(id)
     if (controller) {
       controller.abort()
@@ -2339,9 +2759,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     activeBucket,
     nodes: snapshot.nodes,
     shares: snapshot.shares,
-    offlineTasks,
-    uploadQueue,
-    uploadQueueOpen,
     clipboard: snapshot.clipboard,
     effectiveTheme,
     setThemeMode,
@@ -2359,10 +2776,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     reloadWorkspace,
     requestUpload,
     requestFolderUpload,
-    setUploadQueueOpen,
-    retryUpload,
-    removeUpload,
-    clearCompletedUploads,
+    queueUploadFiles,
     getNodeById,
     getFolderPathId,
     getNodesInFolder,
@@ -2406,7 +2820,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     authReady,
     authSession,
     buckets,
-    clearCompletedUploads,
     copyNodes,
     createFolder,
     createFile,
@@ -2442,20 +2855,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     verifyTwoFactor,
     logout,
     moveNodes,
-    offlineTasks,
     pasteNodes,
     permanentlyDeleteNodes,
     register,
     recycleLoading,
     reloadWorkspace,
-    removeUpload,
     renameNode,
     requestFolderUpload,
     requestUpload,
+    queueUploadFiles,
     resetPasswordVerification,
     resolveFolderPath,
     restoreNodes,
-    retryUpload,
     setActiveBucket,
     setThemeMode,
     shareNodes,
@@ -2472,28 +2883,46 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateProfile,
     updateSecurity,
     updateSettings,
+    verifyPassword,
+  ])
+
+  const uploadValue = React.useMemo<UploadStateValue>(() => ({
+    offlineTasks,
     uploadQueue,
     uploadQueueOpen,
-    verifyPassword,
+    setUploadQueueOpen,
+    retryUpload,
+    removeUpload,
+    clearCompletedUploads,
+  }), [
+    clearCompletedUploads,
+    offlineTasks,
+    removeUpload,
+    retryUpload,
+    uploadQueue,
+    uploadQueueOpen,
   ])
 
   return (
     <AppStateContext.Provider value={value}>
-      {children}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(event) => handleFileInputChange(event, false)}
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
-        className="hidden"
-        onChange={(event) => handleFileInputChange(event, true)}
-      />
+      <UploadStateContext.Provider value={uploadValue}>
+        {children}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => handleFileInputChange(event, false)}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+          className="hidden"
+          onChange={(event) => handleFileInputChange(event, true)}
+        />
+        <UploadConflictDialog conflict={uploadConflict} onResolve={resolveUploadConflict} />
+      </UploadStateContext.Provider>
     </AppStateContext.Provider>
   )
 }
@@ -2502,6 +2931,15 @@ export function useAppState() {
   const context = React.useContext(AppStateContext)
   if (!context) {
     throw new Error("useAppState must be used within AppStateProvider.")
+  }
+
+  return context
+}
+
+export function useUploadState() {
+  const context = React.useContext(UploadStateContext)
+  if (!context) {
+    throw new Error("useUploadState must be used within AppStateProvider.")
   }
 
   return context

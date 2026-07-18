@@ -10,6 +10,8 @@ interface StoragePolicyListProps {
   onAddPolicy: () => void
   onEditPolicy: (bucket: BucketMount) => void
   onDeletePolicy: (bucket: BucketMount) => void
+  onSyncMount: (bucket: BucketMount) => void
+  syncingMountId: number | null
 }
 
 export function StoragePolicyList({
@@ -17,6 +19,8 @@ export function StoragePolicyList({
   onAddPolicy,
   onEditPolicy,
   onDeletePolicy,
+  onSyncMount,
+  syncingMountId,
 }: StoragePolicyListProps) {
   return (
     <div className="space-y-5">
@@ -47,6 +51,8 @@ export function StoragePolicyList({
               bucket={bucket}
               onEdit={onEditPolicy}
               onDelete={onDeletePolicy}
+              onSync={onSyncMount}
+              syncing={syncingMountId === bucket.backendId}
             />
           </div>
         ))}
@@ -62,4 +68,3 @@ export function StoragePolicyList({
     </div>
   )
 }
-

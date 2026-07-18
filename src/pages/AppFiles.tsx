@@ -3,16 +3,16 @@ import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal, UploadQueueDock } from "@/components/file-area"
+import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal } from "@/components/file-area"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
-import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest } from "@/api/files"
+import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest, recordNodeOpen } from "@/api/files"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
-import { DownloadTaskPanel } from "@/components/download/DownloadTaskPanel"
+import { TransferManager } from "@/components/transfer"
 import { useFileDownload } from "@/hooks/use-file-download"
 
 const categoryMap = {
@@ -69,6 +69,8 @@ export function AppFiles() {
     pasteNodes,
     formatBytes,
     requestUpload,
+    requestFolderUpload,
+    queueUploadFiles,
   } = useAppState()
   const {
     open: openPropertiesPanel,
@@ -234,6 +236,10 @@ export function AppFiles() {
 
   const handleUpload = () => {
     requestUpload(currentFolderId)
+  }
+
+  const handleFolderUpload = () => {
+    requestFolderUpload(currentFolderId)
   }
 
   const handleRefresh = async () => {
@@ -419,6 +425,9 @@ export function AppFiles() {
 
   const handleOpenFile = React.useCallback(
     async (node: FileNode) => {
+      if (node.backendId) {
+        void recordNodeOpen(node.backendId).catch(() => undefined)
+      }
       if (node.mediaType === "audio") {
         openAudio(node, previewableFiles)
         return
@@ -522,6 +531,8 @@ export function AppFiles() {
             onCreateFolder={() => handleCreateFolder()}
             onCreateChildFolder={handleCreateFolder}
             onUploadRequest={handleUpload}
+            onUploadFolderRequest={handleFolderUpload}
+            onDropUpload={(files) => queueUploadFiles(files, currentFolderId)}
             onRefresh={() => void handleRefresh()}
             onLoadMore={() => void handleLoadMore()}
             onPaste={() => void handlePaste()}
@@ -531,11 +542,12 @@ export function AppFiles() {
         </motion.div>
       </AnimatePresence>
 
-      <UploadQueueDock parentId={currentFolderId} />
-      <DownloadTaskPanel
-        task={fileDownload.task}
-        onCancel={fileDownload.cancel}
-        onDismiss={fileDownload.dismiss}
+      <TransferManager
+        parentId={currentFolderId}
+        downloadTask={fileDownload.task}
+        onCancelDownload={fileDownload.cancel}
+        onDismissDownload={fileDownload.dismiss}
+        placement="content"
       />
       <DownloadMethodDialog
         open={downloadDialogNodes.length > 0}
