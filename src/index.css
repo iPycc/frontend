@@ -168,6 +168,7 @@
   --range-progress: 0%;
   height: 4px;
   cursor: pointer;
+  -webkit-appearance: none;
   appearance: none;
   border-radius: 999px;
   background: linear-gradient(to right, white var(--range-progress), rgb(255 255 255 / 0.32) var(--range-progress));
@@ -178,24 +179,6 @@
 .media-range:hover,
 .media-range:focus-visible {
   height: 6px;
-}
-
-@media (hover: none) and (pointer: coarse) {
-  .media-range {
-    height: 6px;
-  }
-
-  .media-range::-webkit-slider-thumb {
-    opacity: 1;
-    width: 14px;
-    height: 14px;
-  }
-
-  .media-range::-moz-range-thumb {
-    opacity: 1;
-    width: 14px;
-    height: 14px;
-  }
 }
 
 .media-range-themed {
@@ -243,6 +226,38 @@
 
 .media-range-themed::-moz-range-thumb {
   background: var(--primary);
+}
+
+.video-range {
+  height: 24px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 4px;
+}
+
+.video-range:hover,
+.video-range:focus-visible {
+  height: 24px;
+  background-size: 100% 6px;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .media-range::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+    opacity: 1;
+  }
+
+  .media-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    opacity: 1;
+  }
+
+  .video-range {
+    height: 28px;
+    background-size: 100% 6px;
+  }
 }
 
 .app-shell {

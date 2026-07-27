@@ -36,10 +36,13 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const [muted, setMuted] = React.useState(false)
   const [rate, setRate] = React.useState(1)
   const [controlsVisible, setControlsVisible] = React.useState(true)
-  const [interacting, setInteracting] = React.useState(false)
+  const interactingRef = React.useRef(false)
   const autoplayAttemptedRef = React.useRef<string | null>(null)
-  const isTouch = React.useMemo(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches, [])
-  const hideDelayMs = isTouch ? 3500 : 900
+  const isTouch = React.useMemo(
+    () => typeof window !== "undefined" && window.matchMedia("(hover: none), (pointer: coarse)").matches,
+    []
+  )
+  const hideDelayMs = isTouch ? 4500 : 900
   const hlsSource = manifest.assets.hls?.url
   const source = manifest.assets.source?.url
   const poster = manifest.assets.poster?.url
@@ -52,9 +55,11 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const scheduleHide = React.useCallback((delay = hideDelayMs) => {
     clearHideTimer()
     hideTimerRef.current = window.setTimeout(() => {
-      if (!interacting) setControlsVisible(false)
+      if (!interactingRef.current && !videoRef.current?.paused) {
+        setControlsVisible(false)
+      }
     }, delay)
-  }, [clearHideTimer, hideDelayMs, interacting])
+  }, [clearHideTimer, hideDelayMs])
 
   const showControls = React.useCallback((autoHide = true) => {
     clearHideTimer()
@@ -171,17 +176,35 @@ const toggleFullscreen = () => {
     else await video.requestPictureInPicture()
   }
 
+  const beginControlInteraction = React.useCallback(() => {
+    interactingRef.current = true
+    clearHideTimer()
+    setControlsVisible(true)
+  }, [clearHideTimer])
+
+  const finishControlInteraction = React.useCallback(() => {
+    interactingRef.current = false
+    setControlsVisible(true)
+    if (!videoRef.current?.paused) scheduleHide()
+  }, [scheduleHide])
+
   return (
     <div
       ref={hostRef}
       className={cn(
         "relative flex h-full w-full items-center justify-center overflow-hidden bg-black",
-        !controlsVisible && "cursor-none"
+        playing && !controlsVisible && "cursor-none"
       )}
-      onPointerEnter={() => showControls()}
-      onPointerMove={() => showControls()}
-      onPointerLeave={() => {
-        if (interacting) return
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") showControls()
+      }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== "touch") showControls()
+      }}
+      onPointerLeave={(event) => {
+        // iOS Safari emits pointerleave after a finger is lifted. Treating it
+        // like a mouse leave made the whole toolbar disappear immediately.
+        if (event.pointerType === "touch" || interactingRef.current) return
         clearHideTimer()
         setControlsVisible(false)
       }}
@@ -220,7 +243,13 @@ const toggleFullscreen = () => {
         onPause={() => { setPlaying(false); showControls() }}
         onEnded={() => { setPlaying(false); setControlsVisible(true) }}
         onError={() => { setLoading(false); setFailed(true) }}
-        onClick={togglePlayback}
+        onPointerDown={(event) => {
+          if (event.pointerType === "touch") showControls(false)
+        }}
+        onClick={() => {
+          togglePlayback()
+          showControls()
+        }}
         onDoubleClick={() => void toggleFullscreen()}
       />
 
@@ -236,12 +265,15 @@ const toggleFullscreen = () => {
         className={cn(
           "absolute inset-x-0 bottom-0 z-30 px-4 pb-2.5 pt-10 text-white transition-opacity duration-100",
           "bg-gradient-to-t from-black/85 via-black/35 to-transparent",
-          !controlsVisible && "pointer-events-none opacity-0"
+          playing && !controlsVisible && "pointer-events-none opacity-0"
         )}
-        onPointerDown={() => { setInteracting(true); clearHideTimer() }}
-        onPointerUp={() => { setInteracting(false); scheduleHide() }}
-        onPointerCancel={() => { setInteracting(false); scheduleHide() }}
-        onPointerLeave={() => { setInteracting(false); scheduleHide(400) }}
+        onPointerDown={beginControlInteraction}
+        onPointerUp={finishControlInteraction}
+        onPointerCancel={finishControlInteraction}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "touch") return
+          finishControlInteraction()
+        }}
       >
         <input
           type="range"
@@ -254,7 +286,7 @@ const toggleFullscreen = () => {
             if (videoRef.current) videoRef.current.currentTime = value
             setCurrentTime(value)
           }}
-          className="media-range w-full"
+          className="media-range video-range w-full"
           style={{ "--range-progress": `${duration ? Math.min(100, (currentTime / duration) * 100) : 0}%` } as React.CSSProperties}
           aria-label="播放进度"
         />
