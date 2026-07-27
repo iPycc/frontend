@@ -15,11 +15,13 @@ import {
 } from "@tabler/icons-react"
 
 import { ApiError } from "@/api/client"
+import type { PreviewManifest } from "@/api/files"
 import {
   buildSharedCoverUrl,
   buildSharedDownloadUrl,
   buildSharedSelectionDownloadUrl,
   buildSharedPreviewUrl,
+  getSharedPreviewManifest,
   getShareInfo,
   listSharedNodes,
   recordSharedDirectoryDownload,
@@ -153,7 +155,7 @@ export function ShareDetail() {
   const coverSource = slug && selected && selected.type === "file" && sharedAudioExtensions.has(sharedExtensionOf(selected.name))
     ? buildSharedCoverUrl(slug, accessToken, selected.id)
     : undefined
-  const manifest = useMemo(
+  const fallbackManifest = useMemo(
     () => info && selected?.type === "file" && canAccess
       ? buildSharedPreviewManifest({
           node: selected,
@@ -164,10 +166,46 @@ export function ShareDetail() {
       : null,
     [canAccess, coverSource, info, previewSource, selected]
   )
+  const previewManifestKey = slug && selected
+    ? `${slug}:${selected.id}:${accessToken ?? "public"}`
+    : null
+  const [serverPreview, setServerPreview] = useState<{
+    key: string
+    manifest: PreviewManifest
+  } | null>(null)
+
+  useEffect(() => {
+    if (!slug || !selected || selected.type !== "file" || !canAccess) {
+      setServerPreview(null)
+      return
+    }
+    const controller = new AbortController()
+    const requestKey = `${slug}:${selected.id}:${accessToken ?? "public"}`
+    void getSharedPreviewManifest(slug, accessToken, selected.id, controller.signal)
+      .then((nextManifest) => {
+        if (!controller.signal.aborted) {
+          setServerPreview({ key: requestKey, manifest: nextManifest })
+        }
+      })
+      .catch(() => {
+        // The source-only manifest keeps common formats usable on older servers.
+      })
+    return () => controller.abort()
+  }, [accessToken, canAccess, selected, slug])
+
+  const manifest = serverPreview?.key === previewManifestKey
+    ? serverPreview.manifest
+    : fallbackManifest
 
   useEffect(() => {
     setMediaDimensions(null)
     if (!manifest || (manifest.kind !== "image" && manifest.kind !== "video")) return
+    const metadataWidth = typeof manifest.metadata.width === "number" ? manifest.metadata.width : 0
+    const metadataHeight = typeof manifest.metadata.height === "number" ? manifest.metadata.height : 0
+    if (metadataWidth > 0 && metadataHeight > 0) {
+      setMediaDimensions({ width: metadataWidth, height: metadataHeight })
+      return
+    }
     if (manifest.kind === "image") {
       const image = new Image()
       image.onload = () => image.naturalWidth && image.naturalHeight && setMediaDimensions({ width: image.naturalWidth, height: image.naturalHeight })

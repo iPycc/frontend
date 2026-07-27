@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
@@ -9,9 +9,11 @@ import {
 
 import {
   buildSharedMountPreviewUrl,
+  getSharedMountPreviewManifest,
   type SharedItem,
   type SharedMount,
 } from "@/api/shared"
+import type { PreviewManifest } from "@/api/files"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { PreviewRenderer } from "@/components/file-area/preview/PreviewRenderer"
 import { Button } from "@/components/ui/button"
@@ -35,7 +37,7 @@ export function SharedPreviewDialog({
   onSave: (item: SharedItem) => void
 }) {
   const [fullscreen, setFullscreen] = useState(false)
-  const manifest = useMemo(() => {
+  const fallbackManifest = useMemo(() => {
     if (!mount || !item || item.type !== "file") return null
     return buildSharedPreviewManifest({
       node: item,
@@ -43,6 +45,34 @@ export function SharedPreviewDialog({
       version: `mounted-share-${mount.share_id}-${item.id}`,
     })
   }, [item, mount])
+  const previewKey = mount && item ? `${mount.id}:${item.id}` : null
+  const [serverPreview, setServerPreview] = useState<{
+    key: string
+    manifest: PreviewManifest
+  } | null>(null)
+
+  useEffect(() => {
+    if (!mount || !item || item.type !== "file") {
+      setServerPreview(null)
+      return
+    }
+    const controller = new AbortController()
+    const requestKey = `${mount.id}:${item.id}`
+    void getSharedMountPreviewManifest(mount.id, item.id, controller.signal)
+      .then((nextManifest) => {
+        if (!controller.signal.aborted) {
+          setServerPreview({ key: requestKey, manifest: nextManifest })
+        }
+      })
+      .catch(() => {
+        // Keep the lightweight source-only manifest as a compatibility fallback.
+      })
+    return () => controller.abort()
+  }, [item, mount])
+
+  const manifest = serverPreview?.key === previewKey
+    ? serverPreview.manifest
+    : fallbackManifest
 
   if (!item || !mount || !manifest) return null
 

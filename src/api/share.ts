@@ -1,4 +1,5 @@
 import { requestJson } from "@/api/client"
+import type { PreviewManifest } from "@/api/files"
 
 export enum ShareAccess {
   PUBLIC = "public",
@@ -134,6 +135,20 @@ export function buildSharedPreviewUrl(shareId: string, accessToken?: string | nu
   if (accessToken) query.set("access_token", accessToken)
   if (nodeId !== undefined && nodeId !== null) query.set("node_id", String(nodeId))
   return query.size ? `${url}?${query.toString()}` : url
+}
+
+export function getSharedPreviewManifest(
+  shareId: string,
+  accessToken: string | null | undefined,
+  nodeId: number,
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams({ node_id: String(nodeId) })
+  if (accessToken) query.set("access_token", accessToken)
+  return requestJson<PreviewManifest>(
+    `/share/${shareId}/preview/manifest?${query.toString()}`,
+    { signal, cache: "no-store", skipAuthRefresh: true }
+  )
 }
 
 export function buildSharedCoverUrl(shareId: string, accessToken?: string | null, nodeId?: number | null) {

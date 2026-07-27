@@ -1,4 +1,5 @@
 import { requestJson } from "@/api/client"
+import type { PreviewManifest } from "@/api/files"
 
 export type SharedItem = {
   id: number
@@ -69,6 +70,13 @@ export function saveShared(
 
 export function buildSharedMountPreviewUrl(mountId: number, nodeId: number) {
   return `/api/v1/shared/${mountId}/preview?node_id=${nodeId}`
+}
+
+export function getSharedMountPreviewManifest(mountId: number, nodeId: number, signal?: AbortSignal) {
+  return requestJson<PreviewManifest>(
+    `/shared/${mountId}/preview/manifest?node_id=${nodeId}`,
+    { signal, cache: "no-store" }
+  )
 }
 
 export function buildSharedMountDownloadUrl(mountId: number, nodeId: number) {

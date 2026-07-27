@@ -54,7 +54,7 @@ export function SharedBrowser({
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold">{ownerName} 共享的内容</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            当前目录 {items.length} 项 · 双击打开，文件支持预览、下载和转存
+            当前目录 {items.length} 项 · 单击或轻触打开，文件支持预览、下载和转存
           </p>
         </div>
       </header>
@@ -114,8 +114,8 @@ export function SharedBrowser({
                 <button
                   type="button"
                   className="flex min-w-0 items-center gap-3 text-left"
-                  onDoubleClick={() => onOpen(item)}
-                  title="双击打开"
+                  onClick={() => onOpen(item)}
+                  title={item.type === "folder" ? "打开文件夹" : "预览文件"}
                 >
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <FileGlyph item={{ kind: item.type, name: item.name }} />
@@ -164,8 +164,8 @@ function SharedGridSection({
             <button
               type="button"
               className="flex min-w-0 flex-1 items-center gap-3 text-left"
-              onDoubleClick={() => onOpen(item)}
-              title="双击打开"
+              onClick={() => onOpen(item)}
+              title={item.type === "folder" ? "打开文件夹" : "预览文件"}
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <FileGlyph item={{ kind: item.type, name: item.name }} />
