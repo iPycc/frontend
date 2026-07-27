@@ -138,6 +138,15 @@ export type PreviewManifest = {
   error?: string | null
 }
 
+export type OfficeCardPreviewData = {
+  kind: "document" | "spreadsheet" | "presentation" | "unsupported"
+  lines: string[]
+  rows: string[][]
+  cover_available: boolean
+  cover_kind?: "thumbnail" | "slide-image" | null
+  aspect_ratio?: number | null
+}
+
 export async function listUserMounts(token: string) {
   return requestJson<ExplorerMount[]>("/explorer/mount", {
     token,
@@ -320,6 +329,23 @@ export function buildPreviewVideoPosterUrl(nodeId: number, version?: string) {
 export function buildPreviewAudioCoverUrl(nodeId: number, version?: string) {
   const query = version ? `?v=${encodeURIComponent(version)}` : ""
   return `/api/v1/explorer/preview/${nodeId}/audio/cover${query}`
+}
+
+const officeCardPreviewCache = new Map<string, OfficeCardPreviewData>()
+
+export async function getOfficeCardPreview(nodeId: number, version?: string, signal?: AbortSignal) {
+  const cacheKey = `${nodeId}:${version ?? ""}`
+  const cached = officeCardPreviewCache.get(cacheKey)
+  if (cached) return cached
+  const query = version ? `?v=${encodeURIComponent(version)}` : ""
+  const preview = await requestJson<OfficeCardPreviewData>(`/explorer/preview/${nodeId}/office/card${query}`, { signal })
+  officeCardPreviewCache.set(cacheKey, preview)
+  return preview
+}
+
+export function buildOfficeCardCoverUrl(nodeId: number, version?: string) {
+  const query = version ? `?v=${encodeURIComponent(version)}` : ""
+  return `/api/v1/explorer/preview/${nodeId}/office/cover${query}`
 }
 
 export function buildPreviewManifestUrl(nodeId: number) {

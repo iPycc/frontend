@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { type ItemHandlers } from "./types"
 import { FileGlyph } from "./FileGlyph"
 import { ItemContextMenu } from "./ItemContextMenu"
+import { isOfficeFile, OfficeCardPreview } from "./OfficeCardPreview"
+import { PdfCardPreview } from "./PdfCardPreview"
 
 interface FileCardProps extends ItemHandlers {
   item: FileNode
@@ -54,6 +56,8 @@ export function FileCard({
   const { getFileContent } = useAppState()
   const hasThumbnail = showThumbnail && canShowThumbnail(item)
   const isText = isTextFile(item)
+  const isOffice = isOfficeFile(item.ext)
+  const isPdf = item.ext?.toLowerCase() === "pdf"
   const previewUrl = item.mediaType === "video" && item.backendId
     ? buildPreviewVideoPosterUrl(item.backendId, item.updatedAt)
     : item.mediaType === "audio" && item.backendId
@@ -199,6 +203,18 @@ export function FileCard({
                   onError={() => setImageFailed(true)}
                 />
               </>
+            ) : hasThumbnail && isPdf && item.backendId ? (
+              <PdfCardPreview
+                nodeId={item.backendId}
+                version={item.updatedAt}
+                fallback={<FileGlyph item={item} size={64} />}
+              />
+            ) : hasThumbnail && isOffice && item.backendId ? (
+              <OfficeCardPreview
+                nodeId={item.backendId}
+                version={item.updatedAt}
+                fallback={<FileGlyph item={item} size={64} />}
+              />
             ) : hasThumbnail && item.mediaType === "video" && item.backendId ? (
               <>
                 {!videoFrameReady ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
@@ -217,16 +233,11 @@ export function FileCard({
                 />
               </>
             ) : hasThumbnail && isText ? (
-              <div className="absolute inset-0 overflow-hidden bg-white p-2 dark:bg-zinc-900">
+              <div className="absolute inset-0 overflow-hidden bg-background p-3">
                 {textPreviewLoading ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
-                <div
-                  className="h-full w-full overflow-hidden"
-                  style={{ transform: "scale(0.55)", transformOrigin: "top left", width: "182%", height: "182%" }}
-                >
-                  <pre className="pointer-events-none select-none whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.5] text-zinc-800 dark:text-zinc-200">
-                    {textPreview || getFileContent(item.id) || <span className="italic text-zinc-400 dark:text-zinc-600">暂无预览内容</span>}
-                  </pre>
-                </div>
+                <pre className="pointer-events-none h-full select-none overflow-hidden whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-[1.55] text-foreground">
+                  {textPreview || getFileContent(item.id) || <span className="italic text-muted-foreground">暂无预览内容</span>}
+                </pre>
               </div>
             ) : (
               <FileGlyph item={item} size={64} />
