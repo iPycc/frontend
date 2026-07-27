@@ -7,6 +7,7 @@ import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDial
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest, recordNodeOpen } from "@/api/files"
@@ -68,10 +69,12 @@ export function AppFiles() {
     cutNodes,
     pasteNodes,
     formatBytes,
+  } = useAppState()
+  const {
     requestUpload,
     requestFolderUpload,
     queueUploadFiles,
-  } = useAppState()
+  } = useUploadState()
   const {
     open: openPropertiesPanel,
     openMulti: openMultiPropertiesPanel,
@@ -497,58 +500,60 @@ export function AppFiles() {
           }
         }}
       />
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={location.pathname + location.search}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          className="contents"
-        >
-          <FileArea
-            items={items}
-            loading={routeLoading || pageState.loading}
-            hasMore={Boolean(pageState.nextCursor)}
-            currentPath={currentPath}
-            selectedIds={selectedIds}
-            viewMode={viewMode}
-            sortValue={sortValue}
-            showThumbnail={thumbnailsEnabled}
-            canPaste={Boolean(clipboard)}
-            onSelectNode={handleSelectNode}
-            onPrepareContext={handlePrepareContext}
-            onClearSelection={() => setSelectedIds([])}
-            onRenameRequest={handleRenameRequest}
-            onMoveRequest={handleMoveRequest}
-            onShareRequest={(ids) => void handleShareRequest(ids)}
-            onDownloadRequest={handleDownloadRequest}
-            onDeleteRequest={handleDeleteRequest}
-            onCopyRequest={handleCopyIds}
-            onCutRequest={handleCutIds}
-            onPropertiesRequest={handlePropertiesRequest}
-            onOpenFile={handleOpenFile}
-            onCreateFolder={() => handleCreateFolder()}
-            onCreateChildFolder={handleCreateFolder}
-            onUploadRequest={handleUpload}
-            onUploadFolderRequest={handleFolderUpload}
-            onDropUpload={(files) => queueUploadFiles(files, currentFolderId)}
-            onRefresh={() => void handleRefresh()}
-            onLoadMore={() => void handleLoadMore()}
-            onPaste={() => void handlePaste()}
-            onViewModeChange={setViewMode}
-            onSortChange={setSortValue}
-          />
-        </motion.div>
-      </AnimatePresence>
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname + location.search}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="flex min-w-0 flex-1"
+          >
+            <FileArea
+              items={items}
+              loading={routeLoading || pageState.loading}
+              hasMore={Boolean(pageState.nextCursor)}
+              currentPath={currentPath}
+              selectedIds={selectedIds}
+              viewMode={viewMode}
+              sortValue={sortValue}
+              showThumbnail={thumbnailsEnabled}
+              canPaste={Boolean(clipboard)}
+              onSelectNode={handleSelectNode}
+              onPrepareContext={handlePrepareContext}
+              onClearSelection={() => setSelectedIds([])}
+              onRenameRequest={handleRenameRequest}
+              onMoveRequest={handleMoveRequest}
+              onShareRequest={(ids) => void handleShareRequest(ids)}
+              onDownloadRequest={handleDownloadRequest}
+              onDeleteRequest={handleDeleteRequest}
+              onCopyRequest={handleCopyIds}
+              onCutRequest={handleCutIds}
+              onPropertiesRequest={handlePropertiesRequest}
+              onOpenFile={handleOpenFile}
+              onCreateFolder={() => handleCreateFolder()}
+              onCreateChildFolder={handleCreateFolder}
+              onUploadRequest={handleUpload}
+              onUploadFolderRequest={handleFolderUpload}
+              onDropUpload={(files) => queueUploadFiles(files, currentFolderId)}
+              onRefresh={() => void handleRefresh()}
+              onLoadMore={() => void handleLoadMore()}
+              onPaste={() => void handlePaste()}
+              onViewModeChange={setViewMode}
+              onSortChange={setSortValue}
+            />
+          </motion.div>
+        </AnimatePresence>
 
-      <TransferManager
-        parentId={currentFolderId}
-        downloadTask={fileDownload.task}
-        onCancelDownload={fileDownload.cancel}
-        onDismissDownload={fileDownload.dismiss}
-        placement="content"
-      />
+        <TransferManager
+          parentId={currentFolderId}
+          downloadTask={fileDownload.task}
+          onCancelDownload={fileDownload.cancel}
+          onDismissDownload={fileDownload.dismiss}
+          placement="content"
+        />
+      </div>
       <DownloadMethodDialog
         open={downloadDialogNodes.length > 0}
         itemCount={downloadDialogNodes.length}

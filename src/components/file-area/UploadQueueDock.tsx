@@ -11,7 +11,8 @@ import {
   X,
 } from "lucide-react"
 
-import { useAppState, useUploadState } from "@/lib/app-state"
+import { useAppState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { FileGlyph } from "./FileGlyph"
@@ -73,7 +74,6 @@ const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg 
 
 export function UploadQueueDock({ parentId }: { parentId: string | null }) {
   const {
-    requestUpload,
     formatBytes,
   } = useAppState()
   const {
@@ -83,6 +83,7 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
     retryUpload,
     removeUpload,
     clearCompletedUploads,
+    requestUpload,
   } = useUploadState()
   const summary = getSummary(uploadQueue)
   const hasTerminal = uploadQueue.some((item) => isTerminal(item.status))

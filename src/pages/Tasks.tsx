@@ -3,7 +3,7 @@ import * as React from "react"
 import { listBackgroundTasks, type BackgroundTask } from "@/api/files"
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useUploadState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 
 export function Tasks() {
   usePageTitle("后台任务")

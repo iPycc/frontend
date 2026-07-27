@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { CreateFileDialog, CreateFolderDialog, type NewTextFileType } from "@/components/file-area"
 import { useAppState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,7 +20,8 @@ export function CreateMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { createFile, createFolder, getFolderPathId, requestUpload, requestFolderUpload } = useAppState()
+  const { createFile, createFolder, getFolderPathId } = useAppState()
+  const { requestUpload, requestFolderUpload } = useUploadState()
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [createFileType, setCreateFileType] = useState<NewTextFileType | null>(null)
 

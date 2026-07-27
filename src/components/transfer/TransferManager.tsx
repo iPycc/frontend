@@ -16,7 +16,8 @@ import {
 
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import type { DownloadTask } from "@/hooks/use-file-download"
-import { useAppState, useUploadState } from "@/lib/app-state"
+import { useAppState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
@@ -188,7 +189,6 @@ export function TransferManager({
 }: TransferManagerProps) {
   const {
     buckets,
-    requestUpload,
     formatBytes,
   } = useAppState()
   const {
@@ -198,8 +198,11 @@ export function TransferManager({
     retryUpload,
     removeUpload,
     clearCompletedUploads,
+    requestUpload,
   } = useUploadState()
-  const [panelSize, setPanelSize] = React.useState<"normal" | "expanded">("normal")
+  const [panelSize, setPanelSize] = React.useState<"normal" | "expanded">(
+    placement === "content" ? "expanded" : "normal"
+  )
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const previousDownloadRef = React.useRef<Pick<DownloadTask, "name" | "phase"> | null>(null)
 
@@ -247,8 +250,15 @@ export function TransferManager({
   const placementClass = placement === "floating"
     ? "fixed right-4 bottom-4 z-50 w-[min(500px,calc(100vw-32px))]"
     : placement === "content"
-      ? "absolute right-3 bottom-3 z-30 w-[calc(100%_-_24px)] max-w-[500px] sm:right-4 sm:bottom-4 sm:w-[calc(100%_-_32px)]"
+      ? minimized || panelSize === "normal"
+        ? "absolute right-3 bottom-3 z-30 w-[calc(100%_-_24px)] max-w-[500px] sm:right-4 sm:bottom-4 sm:w-[calc(100%_-_32px)]"
+        : "absolute inset-y-3 right-3 z-30 w-[calc(100%_-_24px)] max-w-[500px] sm:inset-y-4 sm:right-4 sm:w-[calc(100%_-_32px)]"
       : "relative mb-1 mr-1"
+  const panelHeightClass = panelSize === "expanded"
+    ? placement === "content"
+      ? "h-auto min-h-0"
+      : "h-[min(620px,62vh)]"
+    : "h-[min(360px,44vh)] min-h-64"
 
   const compactState = summary.active ? "active" : summary.failed ? "failed" : "idle"
   const compactMeta = summary.active
@@ -294,8 +304,8 @@ export function TransferManager({
   return (
     <section
       className={cn(
-        "z-20 flex shrink-0 self-end flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-lg transition-[height] duration-200 ease-out",
-        panelSize === "expanded" ? "h-[min(620px,62vh)]" : "h-[min(360px,44vh)] min-h-64",
+        "z-20 flex shrink-0 self-end flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-lg transition-[height,top,bottom] duration-200 ease-out",
+        panelHeightClass,
         placementClass
       )}
       aria-label="传输管理"

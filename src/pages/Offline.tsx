@@ -1,6 +1,6 @@
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useUploadState } from "@/lib/app-state"
+import { useUploadState } from "@/lib/upload/provider"
 
 export function Offline() {
   usePageTitle("离线下载")
