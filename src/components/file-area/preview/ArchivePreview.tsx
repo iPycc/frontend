@@ -72,6 +72,8 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
   const [extracting, setExtracting] = React.useState(false)
   const visible = React.useMemo(() => entriesAt(entries, path), [entries, path])
   const crumbs = path.split("/").filter(Boolean)
+  const canExtract = manifest.capabilities.includes("extract")
+  const entriesTruncated = manifest.metadata.entries_truncated === true
 
   return (
     <div className="relative flex h-full min-h-0 bg-background">
@@ -80,23 +82,27 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
           <IconArchive size={28} className="text-primary" />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-foreground">{manifest.name}</h2>
-            <p className="text-xs text-muted-foreground">可逐层浏览 {entries.length} 个条目；打开文件不会解压到存储桶。</p>
+            <p className="text-xs text-muted-foreground">
+              可逐层浏览 {entries.length} 个条目{entriesTruncated ? "（仅显示前 200 个）" : ""}；打开文件不会解压到存储桶。
+            </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={extracting}
-            onClick={() => {
-              setExtracting(true)
-              void extractArchive(manifest.node_id)
-                .then(() => toast.success("解压任务已放入后台任务"))
-                .catch((reason) => toast.error(reason instanceof Error ? reason.message : "创建解压任务失败"))
-                .finally(() => setExtracting(false))
-            }}
-          >
-            <IconPackageExport size={16} />
-            {extracting ? "正在创建…" : "解压到当前目录"}
-          </Button>
+          {canExtract ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={extracting}
+              onClick={() => {
+                setExtracting(true)
+                void extractArchive(manifest.node_id)
+                  .then(() => toast.success("解压任务已放入后台任务"))
+                  .catch((reason) => toast.error(reason instanceof Error ? reason.message : "创建解压任务失败"))
+                  .finally(() => setExtracting(false))
+              }}
+            >
+              <IconPackageExport size={16} />
+              {extracting ? "正在创建…" : "解压到当前目录"}
+            </Button>
+          ) : null}
         </div>
 
         <nav className="mb-3 flex shrink-0 items-center gap-1 overflow-x-auto text-sm" aria-label="压缩包路径">
