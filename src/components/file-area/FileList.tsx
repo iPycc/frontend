@@ -5,6 +5,14 @@ import { type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { type ItemHandlers } from "./types"
 import { FileGlyph } from "./FileGlyph"
 import { ItemContextMenu } from "./ItemContextMenu"
@@ -36,27 +44,30 @@ export function FileList({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="grid grid-cols-[56px_minmax(0,1.8fr)_140px] gap-3 border-b border-border px-4 py-3 text-xs text-muted-foreground">
-        <div className="text-center">图标</div>
-        <div>名称</div>
-        <div>类型</div>
-      </div>
-      <div className="divide-y divide-border">
+    <Table className="table-fixed">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-14 text-center">图标</TableHead>
+          <TableHead>名称</TableHead>
+          <TableHead className="w-36">类型</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {items.map((item) => {
           const selected = selectedIds.includes(item.id)
 
           return (
-            <div key={item.id}>
-              <ContextMenu>
-                <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
-                  <div
+            <ContextMenu key={item.id}>
+              <ContextMenuTrigger
+                onContextMenu={() => onPrepareContext(item.id)}
+                render={
+                  <TableRow
                     className={cn(
-                      "group grid grid-cols-[56px_minmax(0,1.8fr)_140px] items-center gap-3 px-4 py-2.5 transition-colors",
-                      selected ? "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] dark:bg-primary/10" : "bg-transparent hover:bg-muted/70 dark:hover:bg-[#2b2b2b]"
+                      "group",
+                      selected && "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/[0.08] dark:bg-primary/10"
                     )}
                   >
-                    <div className="flex items-center justify-center">
+                    <TableCell className="w-14 px-3 py-2.5 text-center">
                       <button
                         type="button"
                         onClick={(event: MouseEvent) => {
@@ -78,57 +89,61 @@ export function FileList({
                           <IconCheck size={12} stroke={2.5} />
                         </span>
                       </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(event: MouseEvent) => {
-                        event.stopPropagation()
-                        onSelectNode(item.id, event)
-                      }}
-                      onDoubleClick={(event: MouseEvent) => {
-                        event.stopPropagation()
-                        onOpenNode(item)
-                      }}
-                      className="flex min-w-0 items-center text-left"
-                    >
-                      <div className="truncate text-sm text-foreground">{item.name}</div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event: MouseEvent) => {
-                        event.stopPropagation()
-                        onSelectNode(item.id, event)
-                      }}
-                      onDoubleClick={(event: MouseEvent) => {
-                        event.stopPropagation()
-                        onOpenNode(item)
-                      }}
-                      className="truncate text-left text-sm text-muted-foreground"
-                    >
-                      {getItemMeta(item)}
-                    </button>
-                  </div>
-                </ContextMenuTrigger>
-                <ItemContextMenu
-                  item={item}
-                  ids={getContextIds(item.id)}
-                  onOpenNode={onOpenNode}
-                  onRenameRequest={onRenameRequest}
-                  onMoveRequest={onMoveRequest}
-                  onShareRequest={onShareRequest}
-                  onDownloadRequest={onDownloadRequest}
-                  onDeleteRequest={onDeleteRequest}
-                  onCopyRequest={onCopyRequest}
-                  onCutRequest={onCutRequest}
-                  onPropertiesRequest={onPropertiesRequest}
-                  onCreateChildFolder={onCreateChildFolder}
-                />
-              </ContextMenu>
-            </div>
+                    </TableCell>
+                    <TableCell className="min-w-0 py-2.5">
+                      <button
+                        type="button"
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          onSelectNode(item.id, event)
+                        }}
+                        onDoubleClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          onOpenNode(item)
+                        }}
+                        className="block w-full truncate text-left text-sm text-foreground"
+                      >
+                        {item.name}
+                      </button>
+                    </TableCell>
+                    <TableCell className="w-36 py-2.5">
+                      <button
+                        type="button"
+                        onClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          onSelectNode(item.id, event)
+                        }}
+                        onDoubleClick={(event: MouseEvent) => {
+                          event.stopPropagation()
+                          onOpenNode(item)
+                        }}
+                        className="block w-full truncate text-left text-sm text-muted-foreground"
+                      >
+                        {getItemMeta(item)}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                }
+              />
+              <ItemContextMenu
+                item={item}
+                ids={getContextIds(item.id)}
+                onOpenNode={onOpenNode}
+                onRenameRequest={onRenameRequest}
+                onMoveRequest={onMoveRequest}
+                onShareRequest={onShareRequest}
+                onDownloadRequest={onDownloadRequest}
+                onDeleteRequest={onDeleteRequest}
+                onCopyRequest={onCopyRequest}
+                onCutRequest={onCutRequest}
+                onPropertiesRequest={onPropertiesRequest}
+                onCreateChildFolder={onCreateChildFolder}
+              />
+            </ContextMenu>
           )
         })}
-      </div>
-    </div>
+      </TableBody>
+    </Table>
   )
 }
 
