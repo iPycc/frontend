@@ -42,6 +42,12 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   // the low-resolution placeholder visible indefinitely.
   const source = manifest.assets.source.url
   const placeholder = manifest.assets.thumbnail_2x?.url ?? manifest.assets.thumbnail?.url
+  const imageWidth = typeof manifest.metadata.width === "number" && manifest.metadata.width > 0
+    ? manifest.metadata.width
+    : undefined
+  const imageHeight = typeof manifest.metadata.height === "number" && manifest.metadata.height > 0
+    ? manifest.metadata.height
+    : undefined
 
   const fit = React.useCallback(() => {
     transformRef.current?.resetTransform(180)
@@ -85,7 +91,9 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
           <img
             src={placeholder}
             alt=""
-            className="pointer-events-none absolute inset-0 m-auto max-h-full max-w-full object-contain opacity-45"
+            width={imageWidth}
+            height={imageHeight}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-45"
             aria-hidden="true"
           />
         ) : null}
@@ -118,6 +126,8 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
                 ref={imageRef}
                 src={source}
                 alt={manifest.name}
+                width={imageWidth}
+                height={imageHeight}
                 draggable={false}
                 decoding="async"
                 fetchPriority="high"
