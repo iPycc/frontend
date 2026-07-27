@@ -50,6 +50,21 @@ function entriesAt(entries: ArchiveEntry[], path: string): VisibleEntry[] {
   )
 }
 
+function archiveEntryPreviewUrl(manifest: PreviewManifest, path: string) {
+  const configured = manifest.assets.archive_entry?.url
+  if (!configured) return buildArchiveEntryPreviewUrl(manifest.node_id, path)
+
+  if (configured.includes("{path}")) {
+    return configured.replaceAll("{path}", encodeURIComponent(path))
+  }
+
+  const url = new URL(configured, window.location.origin)
+  url.searchParams.set("path", path)
+  return /^https?:\/\//i.test(configured)
+    ? url.href
+    : `${url.pathname}${url.search}${url.hash}`
+}
+
 export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
   const entries = Array.isArray(manifest.metadata.entries) ? manifest.metadata.entries as ArchiveEntry[] : []
   const [path, setPath] = React.useState("")
@@ -59,7 +74,7 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
   const crumbs = path.split("/").filter(Boolean)
 
   return (
-    <div className="flex h-full min-h-0 bg-background">
+    <div className="relative flex h-full min-h-0 bg-background">
       <div className="flex min-w-0 flex-1 flex-col p-4 md:p-6">
         <div className="mb-4 flex shrink-0 items-center gap-3 border-b border-border pb-4">
           <IconArchive size={28} className="text-primary" />
@@ -108,8 +123,14 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
               type="button"
               key={entry.fullPath}
               className="flex min-h-11 w-full items-center gap-3 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/60"
-              onDoubleClick={() => entry.directory ? setPath(entry.fullPath) : setPreview(entry)}
-              onClick={() => !entry.directory && setPreview(entry)}
+              onClick={() => {
+                if (entry.directory) {
+                  setPath(entry.fullPath)
+                  setPreview(null)
+                } else {
+                  setPreview(entry)
+                }
+              }}
             >
               {entry.directory ? <IconFolder size={18} className="shrink-0 text-primary" /> : <IconFile size={18} className="shrink-0 text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate text-foreground" title={entry.name}>{entry.name}</span>
@@ -123,15 +144,18 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
       </div>
 
       {preview ? (
-        <aside className="hidden min-h-0 w-[42%] min-w-80 flex-col border-l border-border bg-muted/20 md:flex">
+        <aside className="absolute inset-0 z-20 flex min-h-0 flex-col bg-background md:static md:w-[42%] md:min-w-80 md:border-l md:border-border md:bg-muted/20">
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{preview.name}</span>
             <Button variant="ghost" size="icon-sm" onClick={() => setPreview(null)} aria-label="关闭条目预览"><IconX /></Button>
           </header>
           <iframe
-            src={buildArchiveEntryPreviewUrl(manifest.node_id, preview.fullPath)}
+            key={preview.fullPath}
+            src={archiveEntryPreviewUrl(manifest, preview.fullPath)}
             title={`${preview.name} 压缩包内预览`}
             className="min-h-0 flex-1 border-0 bg-background"
+            sandbox=""
+            referrerPolicy="no-referrer"
           />
         </aside>
       ) : null}
