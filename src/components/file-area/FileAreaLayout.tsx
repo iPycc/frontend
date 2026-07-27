@@ -29,6 +29,7 @@ interface FileAreaProps {
   selectedIds: string[]
   viewMode: ViewMode
   sortValue: SortValue
+  pageSize: number
   showThumbnail?: boolean
   canPaste: boolean
   onSelectNode: (id: string, event: MouseEvent) => void
@@ -71,6 +72,7 @@ export function FileArea({
   selectedIds,
   viewMode,
   sortValue,
+  pageSize,
   showThumbnail = false,
   canPaste,
   onSelectNode,
@@ -226,10 +228,13 @@ export function FileArea({
               />
             )}
             {hasMore ? (
-              <div className="flex justify-center py-6">
+              <div className="flex flex-wrap items-center justify-center gap-3 py-6">
+                <span className="text-xs text-muted-foreground">
+                  已加载 {items.length} 项
+                </span>
                 <Button variant="outline" disabled={loading} onClick={onLoadMore}>
                   {loading ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : null}
-                  {loading ? "正在加载" : "加载更多"}
+                  {loading ? "正在加载" : `再加载 ${pageSize} 项`}
                 </Button>
               </div>
             ) : null}

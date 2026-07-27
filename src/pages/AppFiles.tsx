@@ -518,6 +518,7 @@ export function AppFiles() {
               selectedIds={selectedIds}
               viewMode={viewMode}
               sortValue={sortValue}
+              pageSize={pageSize}
               showThumbnail={thumbnailsEnabled}
               canPaste={Boolean(clipboard)}
               onSelectNode={handleSelectNode}

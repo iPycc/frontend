@@ -871,7 +871,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const session = snapshotRef.current.auth.session
       const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
-      if (!session || !bucket?.backendId) {
+      const backendId = bucket?.backendId
+      if (!session || !bucket || backendId === undefined) {
         return
       }
 
@@ -909,7 +910,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const request = (async () => {
         try {
           const response = await listNodePage(session.tokens.accessToken, {
-            mountId: bucket.backendId,
+            mountId: backendId,
             parentId: apiParentId,
             limit,
             cursor,
@@ -1116,7 +1117,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     async (category: NodeCategory, bucketId = defaultBucketId, options: PageLoadOptions = {}) => {
       const session = snapshotRef.current.auth.session
       const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
-      if (!session || !bucket?.backendId) {
+      const backendId = bucket?.backendId
+      if (!session || !bucket || backendId === undefined) {
         return
       }
 
@@ -1147,7 +1149,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       const request = (async () => {
         try {
           const response = await listCategoryNodePage(session.tokens.accessToken, {
-            mountId: bucket.backendId,
+            mountId: backendId,
             category,
             limit,
             cursor,

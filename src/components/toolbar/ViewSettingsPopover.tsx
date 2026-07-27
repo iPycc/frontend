@@ -41,12 +41,20 @@ export function ViewSettingsPopover({
     setDraftPageSize(pageSize)
   }, [pageSize])
 
+  const applyPageSize = () => {
+    const nextPageSize = Math.min(2000, Math.max(50, draftPageSize))
+    setDraftPageSize(nextPageSize)
+    if (nextPageSize !== pageSize) {
+      onPageSizeChange(nextPageSize)
+    }
+  }
+
   return (
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-4">
-        <div className="space-y-5">
-          <div className="space-y-2.5">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2.5">
             <p className="text-sm font-medium text-foreground">布局</p>
             <ToggleGroup
               type="single"
@@ -58,17 +66,17 @@ export function ViewSettingsPopover({
               className="w-full"
             >
               <ToggleGroupItem value="grid" className="flex-1 gap-1.5 text-xs">
-                <IconLayoutGrid size={15} />
+                <IconLayoutGrid />
                 网格
               </ToggleGroupItem>
               <ToggleGroupItem value="list" className="flex-1 gap-1.5 text-xs">
-                <IconListDetails size={15} />
+                <IconListDetails />
                 列表
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="flex flex-col gap-2.5">
             <p className="text-sm font-medium text-foreground">缩略图</p>
             <ToggleGroup
               type="single"
@@ -80,30 +88,46 @@ export function ViewSettingsPopover({
               className="w-full"
             >
               <ToggleGroupItem value="on" className="flex-1 gap-1.5 text-xs">
-                <IconPhoto size={15} />
+                <IconPhoto />
                 开启
               </ToggleGroupItem>
               <ToggleGroupItem value="off" className="flex-1 gap-1.5 text-xs">
-                <IconPhotoOff size={15} />
+                <IconPhotoOff />
                 关闭
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
-          <div className="space-y-2.5">
-            <p className="text-sm font-medium text-foreground">分页大小</p>
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-foreground">分页大小</p>
+              <span className="text-xs font-medium tabular-nums text-foreground">
+                {draftPageSize} 项 / 批
+              </span>
+            </div>
             <Slider
               value={[draftPageSize]}
               onValueChange={([value]) => setDraftPageSize(value)}
-              onValueCommit={([value]) => onPageSizeChange(value)}
               min={50}
               max={2000}
               step={50}
+              aria-label="每批加载数量"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>50</span>
               <span>2000</span>
             </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              应用后会使用新的 limit 重新加载当前目录；“加载更多”继续使用游标请求下一批。
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              disabled={draftPageSize === pageSize}
+              onClick={applyPageSize}
+            >
+              {draftPageSize === pageSize ? "当前设置已应用" : "应用并重新加载"}
+            </Button>
           </div>
         </div>
       </PopoverContent>
