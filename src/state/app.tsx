@@ -1,19 +1,17 @@
 import * as React from "react"
 
-import { refreshToken as apiRefreshToken } from "@/api/auth"
-import { configureAuthClient } from "@/api/client"
 import { checkBackendHealth } from "@/api/system"
 import {
   formatBytes,
   type AppSnapshot,
-  type AuthSession,
   type FileNode,
 } from "@/lib/models"
 import { UploadProvider } from "@/lib/upload/provider"
-import { emitAuthEvent, isExpired, mergeSessionTokens, subscribeAuthEvents } from "@/lib/session"
+import { isExpired } from "@/lib/session"
 import { toast } from "sonner"
 import { useActions } from "@/state/act"
 import { useAuth } from "@/state/auth"
+import { useBoot } from "@/state/boot"
 import { useNav } from "@/state/nav"
 
 import {
@@ -21,14 +19,9 @@ import {
   EMPTY_BUCKET,
   EMPTY_PAGE_STATE,
   STORAGE_KEY,
-  createEmptyProfile,
-  createMountRootNode,
-  fetchWorkspaceBasics,
   loadSnapshot,
-  mapMountToBucket,
   type AppStateValue,
   type PageLoadState,
-  type WorkspaceBasics,
 } from "@/state/core"
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
@@ -146,198 +139,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setPageStates(next)
   }, [])
 
-  const hydrateWorkspace = React.useCallback(
-    async (session: AuthSession, prefetchedBasics?: WorkspaceBasics) => {
-      const token = session.tokens.accessToken
-      const { profilePayload, rawMounts } = prefetchedBasics ?? await fetchWorkspaceBasics(token)
-      const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
-
-      const nextSession: AuthSession = {
-        ...session,
-        user: {
-          ...session.user,
-          username: profilePayload.profile.username,
-          email: profilePayload.profile.email,
-          avatar: profilePayload.profile.avatar,
-          registeredAt: profilePayload.profile.registeredAt,
-          group: profilePayload.profile.group,
-          twoFactorEnabled: profilePayload.twoFactorEnabled,
-        },
-      }
-
-      const tz = timezone
-      const buckets = rawMounts.map((mount) => mapMountToBucket(mount, nextSession.user, tz))
-      const rootNodes = buckets.map(createMountRootNode)
-
-      updateSnapshot((current) => ({
-        ...current,
-        profile: profilePayload.profile,
-        settings: {
-          ...current.settings,
-          timezone,
-        },
-        security: {
-          ...current.security,
-          passwordVerified: false,
-          passwordUpdatedAt: profilePayload.passwordUpdatedAt,
-          twoFactorEnabled: profilePayload.twoFactorEnabled,
-          passkeysEnabled: false,
-          passkeys: [],
-        },
-        auth: {
-          session: nextSession,
-        },
-        loginActivity: [],
-        buckets,
-        activeBucketId:
-          buckets.find((bucket) => bucket.id === current.activeBucketId)?.id ??
-          buckets.find((bucket) => bucket.id === window.localStorage.getItem("cloudrave.last-mount"))?.id ??
-          buckets[0]?.id ??
-          "",
-        nodes: rootNodes,
-        shares: [],
-        fileContents: {},
-      }))
-      setPageStates({})
-      pageStatesRef.current = {}
-      pageRequestsRef.current.clear()
-      setCategoryNodesByKey({})
-      setTreeFolderNodes([])
-      setRecycleNodes([])
-    },
-    [updateSnapshot]
-  )
-
-  const clearWorkspace = React.useCallback(() => {
-    updateSnapshot((current) => ({
-      ...current,
-      profile: createEmptyProfile(),
-      security: {
-        ...current.security,
-        passwordVerified: false,
-        passwordUpdatedAt: "",
-        passkeysEnabled: false,
-        passkeys: [],
-        twoFactorEnabled: false,
-      },
-      auth: {
-        session: null,
-      },
-      loginActivity: [],
-      buckets: [],
-      activeBucketId: "",
-      nodes: [],
-      shares: [],
-      clipboard: null,
-      fileContents: {},
-    }))
-    setPageStates({})
-    pageStatesRef.current = {}
-    pageRequestsRef.current.clear()
-    setCategoryNodesByKey({})
-    setTreeFolderNodes([])
-    setRecycleNodes([])
-  }, [updateSnapshot])
-
-  const refreshAuthSession = React.useCallback(
-    async (hydrate = false) => {
-      const currentSession = snapshotRef.current.auth.session
-      const refreshedTokens = await apiRefreshToken()
-      let nextSession = currentSession ? mergeSessionTokens(currentSession, refreshedTokens) : null
-      let prefetchedBasics: WorkspaceBasics | undefined
-
-      if (!nextSession) {
-        prefetchedBasics = await fetchWorkspaceBasics(refreshedTokens.accessToken)
-        nextSession = {
-          user: prefetchedBasics.profilePayload.account,
-          tokens: refreshedTokens,
-        }
-      }
-
-      if (hydrate) {
-        await hydrateWorkspace(nextSession, prefetchedBasics)
-      } else {
-        updateSnapshot((current) => ({
-          ...current,
-          auth: {
-            session: nextSession,
-          },
-        }))
-      }
-
-      return nextSession
-    },
-    [hydrateWorkspace, updateSnapshot]
-  )
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    const bootstrapAuth = async () => {
-      try {
-        await refreshAuthSession(true)
-      } catch {
-        if (!cancelled) {
-          clearWorkspace()
-        }
-      } finally {
-        if (!cancelled) {
-          setAuthReady(true)
-        }
-      }
-    }
-
-    void bootstrapAuth()
-
-    return () => {
-      cancelled = true
-    }
-  }, [clearWorkspace, refreshAuthSession])
-
-  React.useEffect(() => {
-    return subscribeAuthEvents((message) => {
-      if (message.type === "session-updated") {
-        void refreshAuthSession(true)
-        return
-      }
-
-      clearWorkspace()
-      setAuthReady(true)
-    })
-  }, [clearWorkspace, refreshAuthSession])
-
-  React.useEffect(() => {
-    configureAuthClient({
-      getAccessToken: () => snapshotRef.current.auth.session?.tokens.accessToken ?? null,
-      refreshAccessToken: async () => {
-        try {
-          const session = await refreshAuthSession(false)
-          return session.tokens.accessToken
-        } catch {
-          clearWorkspace()
-          emitAuthEvent({ type: "logout", reason: "session-expired" })
-          return null
-        }
-      },
-      onAuthFailure: () => {
-        clearWorkspace()
-        emitAuthEvent({ type: "logout", reason: "session-expired" })
-      },
-    })
-
-    return () => {
-      configureAuthClient({})
-    }
-  }, [clearWorkspace, refreshAuthSession])
-
-  const reloadWorkspace = React.useCallback(async () => {
-    const session = snapshotRef.current.auth.session
-    if (!session) {
-      return
-    }
-
-    await hydrateWorkspace(session)
-  }, [hydrateWorkspace])
+  const {
+    hydrateWorkspace,
+    clearWorkspace,
+    reloadWorkspace,
+  } = useBoot({
+    snapshotRef,
+    pageStatesRef,
+    pageRequestsRef,
+    updateSnapshot,
+    setAuthReady,
+    setPageStates,
+    setCategoryNodesByKey,
+    setTreeFolderNodes,
+    setRecycleNodes,
+  })
 
   const buckets = React.useMemo(() => snapshot.buckets, [snapshot.buckets])
 
