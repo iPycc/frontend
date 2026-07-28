@@ -118,6 +118,8 @@ export type PreviewAsset = {
   height?: number | null
   size?: number | null
   supports_range: boolean
+  delivery?: "cloudrave" | "storage" | "external"
+  expires_at?: string | null
 }
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "office" | "text" | "archive" | "unsupported"

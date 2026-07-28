@@ -11,6 +11,7 @@ import {
 } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
+import { previewSourceUrls } from "@/lib/preview-assets"
 import { cn } from "@/lib/utils"
 
 const videoControlButton = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
@@ -44,8 +45,15 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   )
   const hideDelayMs = isTouch ? 4500 : 900
   const hlsSource = manifest.assets.hls?.url
-  const source = manifest.assets.source?.url
+  const sources = previewSourceUrls(manifest)
+  const sourceSignature = sources.join("\n")
+  const [sourceIndex, setSourceIndex] = React.useState(0)
+  const source = sources[sourceIndex]
   const poster = manifest.assets.poster?.url
+
+  React.useEffect(() => {
+    setSourceIndex(0)
+  }, [manifest.node_id, manifest.version, sourceSignature])
 
   const clearHideTimer = React.useCallback(() => {
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current)
@@ -242,7 +250,15 @@ const toggleFullscreen = () => {
         onPlay={() => { setPlaying(true); showControls() }}
         onPause={() => { setPlaying(false); showControls() }}
         onEnded={() => { setPlaying(false); setControlsVisible(true) }}
-        onError={() => { setLoading(false); setFailed(true) }}
+        onError={() => {
+          if (!hlsSource && sourceIndex + 1 < sources.length) {
+            setLoading(true)
+            setSourceIndex((value) => value + 1)
+            return
+          }
+          setLoading(false)
+          setFailed(true)
+        }}
         onPointerDown={(event) => {
           if (event.pointerType === "touch") showControls(false)
         }}

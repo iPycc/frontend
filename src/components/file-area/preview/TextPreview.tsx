@@ -9,10 +9,10 @@ import { toast } from "sonner"
 
 import type { PreviewManifest } from "@/api/files"
 import { saveTextPreview } from "@/api/files"
-import { requestResponse } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
 import { MarkdownPreview } from "./MarkdownPreview"
 
 type MonacoApi = typeof import("monaco-editor")
@@ -112,25 +112,32 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     setDirty(false)
     setVersion(manifest.version)
     setView(isMarkdown ? "preview" : "source")
-    void requestResponse(manifest.assets.source.url, {
-      signal: controller.signal,
-      cache: "no-store",
-      headers: truncated ? { Range: `bytes=0-${maxBytes - 1}` } : undefined,
+    const load = async () => {
+      let lastError: unknown
+      for (const source of previewSourceUrls(manifest)) {
+        try {
+          const response = await requestPreviewAsset(source, {
+            signal: controller.signal,
+            cache: "no-store",
+            headers: truncated ? { Range: `bytes=0-${maxBytes - 1}` } : undefined,
+          })
+          const value = await response.arrayBuffer()
+          const decoded = new TextDecoder(textEncoding).decode(value)
+          setContent(decoded)
+          draftRef.current = decoded
+          return
+        } catch (reason) {
+          if (controller.signal.aborted) return
+          lastError = reason
+        }
+      }
+      setError(lastError instanceof Error ? lastError.message : "文本加载失败")
+    }
+    void load().finally(() => {
+      if (!controller.signal.aborted) setLoading(false)
     })
-      .then((response) => response.arrayBuffer())
-      .then((value) => {
-        const decoded = new TextDecoder(textEncoding).decode(value)
-        setContent(decoded)
-        draftRef.current = decoded
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "文本加载失败")
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
     return () => controller.abort()
-  }, [isMarkdown, manifest.assets.source.url, manifest.node_id, manifest.version, maxBytes, textEncoding, truncated])
+  }, [isMarkdown, manifest, maxBytes, textEncoding, truncated])
 
   React.useEffect(() => {
     if (loading || error || isMobile || view !== "source" || !hostRef.current) return

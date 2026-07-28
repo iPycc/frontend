@@ -14,6 +14,7 @@ import {
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { isSameOriginPreviewUrl, previewSourceUrls } from "@/lib/preview-assets"
 
 export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
@@ -27,7 +28,14 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
   const [query, setQuery] = React.useState("")
   const [searching, setSearching] = React.useState(false)
   const renderTaskRef = React.useRef<{ cancel: () => void } | null>(null)
-  const source = manifest.assets.source.url
+  const sources = previewSourceUrls(manifest)
+  const sourceSignature = sources.join("\n")
+  const [sourceIndex, setSourceIndex] = React.useState(0)
+  const source = sources[sourceIndex] ?? manifest.assets.source.url
+
+  React.useEffect(() => {
+    setSourceIndex(0)
+  }, [manifest.node_id, manifest.version, sourceSignature])
 
   React.useEffect(() => {
     let cancelled = false
@@ -41,11 +49,18 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
     void import("pdfjs-dist").then((pdfjs) => {
       if (cancelled) return
       pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-      loadingTask = pdfjs.getDocument({ url: source, withCredentials: true })
+      loadingTask = pdfjs.getDocument({
+        url: source,
+        withCredentials: isSameOriginPreviewUrl(source),
+      })
       return loadingTask.promise.then((pdf) => {
         if (!cancelled) setDocument(pdf)
       })
     }).catch((reason: unknown) => {
+      if (!cancelled && sourceIndex + 1 < sources.length) {
+        setSourceIndex((value) => value + 1)
+        return
+      }
       if (!cancelled) setError(reason instanceof Error ? reason.message : "PDF 加载失败")
     }).finally(() => {
       if (!cancelled) setLoading(false)
@@ -57,7 +72,7 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
       void loadingTask?.destroy()
       setDocument(null)
     }
-  }, [manifest.node_id, manifest.version, source])
+  }, [manifest.node_id, manifest.version, source, sourceIndex, sources.length])
 
   React.useEffect(() => {
     if (!document || !canvasRef.current) return

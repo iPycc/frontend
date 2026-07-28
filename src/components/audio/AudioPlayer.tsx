@@ -15,6 +15,7 @@ import {
 } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
+import { previewSourceUrls } from "@/lib/preview-assets"
 import { cn } from "@/lib/utils"
 
 function formatTime(value: number) {
@@ -62,8 +63,17 @@ export function AudioPlayer({
   const [rate, setRate] = React.useState(1)
 
   const hlsSource = manifest?.assets.hls?.url
-  const source = manifest?.assets.audio?.url ?? manifest?.assets.source?.url
+  const sources = manifest
+    ? (manifest.assets.audio?.url ? [manifest.assets.audio.url] : previewSourceUrls(manifest))
+    : []
+  const sourceSignature = sources.join("\n")
+  const [sourceIndex, setSourceIndex] = React.useState(0)
+  const source = sources[sourceIndex]
   const cover = manifest?.assets.cover?.url
+
+  React.useEffect(() => {
+    setSourceIndex(0)
+  }, [manifest?.node_id, manifest?.version, sourceSignature])
 
   const title = manifest
     ? (typeof manifest.metadata.title === "string" && manifest.metadata.title.trim()
@@ -173,6 +183,11 @@ export function AudioPlayer({
       onPause={() => setPlaying(false)}
       onEnded={() => setPlaying(false)}
       onError={() => {
+        if (!hlsSource && sourceIndex + 1 < sources.length) {
+          setLoading(true)
+          setSourceIndex((value) => value + 1)
+          return
+        }
         setLoading(false)
         setFailed(true)
       }}

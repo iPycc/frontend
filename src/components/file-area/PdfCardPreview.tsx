@@ -2,8 +2,9 @@ import * as React from "react"
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url"
 import type { PDFDocumentLoadingTask } from "pdfjs-dist"
 
-import { buildPreviewUrl } from "@/api/files"
+import { getPreviewManifest } from "@/api/files"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isSameOriginPreviewUrl, previewSourceUrls } from "@/lib/preview-assets"
 
 let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null
 
@@ -59,50 +60,62 @@ export function PdfCardPreview({
     let loadingTask: PDFDocumentLoadingTask | null = null
     setLoading(true)
     setFailed(false)
-    const query = version ? `?v=${encodeURIComponent(version)}` : ""
-    const source = `${buildPreviewUrl(nodeId)}${query}`
 
-    void loadPdfjs()
-      .then((pdfjs) => {
+    const render = async () => {
+      const [pdfjs, manifest] = await Promise.all([
+        loadPdfjs(),
+        getPreviewManifest(nodeId),
+      ])
+      let lastError: unknown
+      for (const source of previewSourceUrls(manifest)) {
         if (cancelled) return
-        loadingTask = pdfjs.getDocument({
-          url: source,
-          withCredentials: true,
-          disableAutoFetch: true,
-          disableStream: true,
-          rangeChunkSize: 64 * 1024,
-        })
-        return loadingTask.promise
-      })
-      .then(async (document) => {
-        if (!document || cancelled || !canvasRef.current || !hostRef.current) return
-        const page = await document.getPage(1)
-        if (cancelled || !canvasRef.current || !hostRef.current) return
-        const original = page.getViewport({ scale: 1 })
-        const cssWidth = Math.max(hostRef.current.clientWidth - 24, 160)
-        const scale = cssWidth / original.width
-        const viewport = page.getViewport({ scale })
-        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-        const canvas = canvasRef.current
-        canvas.width = Math.ceil(viewport.width * pixelRatio)
-        canvas.height = Math.ceil(viewport.height * pixelRatio)
-        canvas.style.width = `${Math.ceil(viewport.width)}px`
-        canvas.style.height = `${Math.ceil(viewport.height)}px`
-        const context = canvas.getContext("2d", { alpha: false })
-        if (!context) throw new Error("Canvas is unavailable")
-        const renderTask = page.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-          background: "#ffffff",
-          transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
-        })
-        renderTaskRef.current = renderTask
-        await renderTask.promise
-        page.cleanup()
-        await loadingTask?.destroy()
-        loadingTask = null
-      })
+        try {
+          loadingTask = pdfjs.getDocument({
+            url: source,
+            withCredentials: isSameOriginPreviewUrl(source),
+            disableAutoFetch: true,
+            disableStream: true,
+            rangeChunkSize: 64 * 1024,
+          })
+          const document = await loadingTask.promise
+          if (cancelled || !canvasRef.current || !hostRef.current) return
+          const page = await document.getPage(1)
+          if (cancelled || !canvasRef.current || !hostRef.current) return
+          const original = page.getViewport({ scale: 1 })
+          const cssWidth = Math.max(hostRef.current.clientWidth - 24, 160)
+          const scale = cssWidth / original.width
+          const viewport = page.getViewport({ scale })
+          const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+          const canvas = canvasRef.current
+          canvas.width = Math.ceil(viewport.width * pixelRatio)
+          canvas.height = Math.ceil(viewport.height * pixelRatio)
+          canvas.style.width = `${Math.ceil(viewport.width)}px`
+          canvas.style.height = `${Math.ceil(viewport.height)}px`
+          const context = canvas.getContext("2d", { alpha: false })
+          if (!context) throw new Error("Canvas is unavailable")
+          const renderTask = page.render({
+            canvas,
+            canvasContext: context,
+            viewport,
+            background: "#ffffff",
+            transform: pixelRatio === 1 ? undefined : [pixelRatio, 0, 0, pixelRatio, 0, 0],
+          })
+          renderTaskRef.current = renderTask
+          await renderTask.promise
+          page.cleanup()
+          await loadingTask.destroy()
+          loadingTask = null
+          return
+        } catch (reason) {
+          lastError = reason
+          await loadingTask?.destroy()
+          loadingTask = null
+        }
+      }
+      throw lastError ?? new Error("PDF preview source is unavailable")
+    }
+
+    void render()
       .catch((reason: unknown) => {
         if (!cancelled && (reason as { name?: string })?.name !== "RenderingCancelledException") {
           setFailed(true)

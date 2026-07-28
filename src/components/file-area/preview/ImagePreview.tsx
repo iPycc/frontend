@@ -16,6 +16,7 @@ import {
 
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
+import { previewSourceUrls } from "@/lib/preview-assets"
 
 type ImagePreviewProps = {
   manifest: PreviewManifest
@@ -37,10 +38,13 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   const [scale, setScale] = React.useState(1)
   const [loaded, setLoaded] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
+  const sources = previewSourceUrls(manifest)
+  const sourceSignature = sources.join("\n")
+  const [sourceIndex, setSourceIndex] = React.useState(0)
   // The original source already supports range/cache and preserves the exact
   // dimensions. Generated screen variants can still be warming up, which left
   // the low-resolution placeholder visible indefinitely.
-  const source = manifest.assets.source.url
+  const source = sources[sourceIndex] ?? manifest.assets.source.url
   const placeholder = manifest.assets.thumbnail_2x?.url ?? manifest.assets.thumbnail?.url
   const imageWidth = typeof manifest.metadata.width === "number" && manifest.metadata.width > 0
     ? manifest.metadata.width
@@ -68,7 +72,8 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
     setScale(1)
     setLoaded(false)
     setFailed(false)
-  }, [manifest.node_id, manifest.version])
+    setSourceIndex(0)
+  }, [manifest.node_id, manifest.version, sourceSignature])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +139,14 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
                 onLoad={(event) => {
                   if (event.currentTarget.naturalWidth > 0) setLoaded(true)
                 }}
-                onError={() => setFailed(true)}
+                onError={() => {
+                  if (sourceIndex + 1 < sources.length) {
+                    setLoaded(false)
+                    setSourceIndex((value) => value + 1)
+                    return
+                  }
+                  setFailed(true)
+                }}
                 className="max-h-full max-w-full select-none object-contain transition-transform duration-150"
                 style={{ transform: `rotate(${rotation}deg)` }}
               />
