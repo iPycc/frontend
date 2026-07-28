@@ -110,7 +110,7 @@ export function SiteUrlMismatchAlert() {
             <IconAlertTriangle size={20} className="text-amber-500" />
             网站地址不一致
           </DialogTitle>
-          <DialogDescription className="space-y-2 pt-1">
+          <DialogDescription render={<div />} className="space-y-2 pt-1">
             <p>当前访问地址与数据库中保存的网站链接不一致，可能会影响分享链接、通行密钥等功能。</p>
             <div className="rounded-xl bg-muted/50 px-3 py-2 text-sm">
               <div className="flex justify-between gap-2">
