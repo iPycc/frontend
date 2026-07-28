@@ -1,7 +1,7 @@
 import { Navigate } from "react-router-dom"
 
 import { ShareLayout } from "@/components/share"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 export function isProtected(pathname: string) {
   return (

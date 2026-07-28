@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { toast } from "sonner"
 
 import { updateUserPreferences } from "@/api/user"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import {
   languageOptions,
   OptionGroup,

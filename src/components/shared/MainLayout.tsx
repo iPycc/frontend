@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom"
 import { NavbarLayout } from "@/components/navbar"
 import { SidebarLayout } from "@/components/sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { PropertiesPanelProvider, PropertiesPanel } from "./PropertiesPanel"
 import { SiteUrlMismatchAlert } from "./SiteUrlMismatchAlert"
 

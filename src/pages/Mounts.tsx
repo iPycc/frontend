@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom"
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { IconArrowRight } from "@tabler/icons-react"
 import { MountStatus } from "@/components/storage/MountStatus"

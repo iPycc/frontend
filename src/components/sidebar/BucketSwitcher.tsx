@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom"
 import { IconCheck, IconChevronDown, IconPlus } from "@tabler/icons-react"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,

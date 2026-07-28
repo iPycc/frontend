@@ -13,7 +13,7 @@ import {
   type UpdateBucketMountInput,
   type UpdateStoragePolicyInput,
 } from "@/api/storage"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, validateLocalStoragePath } from "@/lib/models"
 import { attachStorage } from "@/lib/storage/attach"
 import {

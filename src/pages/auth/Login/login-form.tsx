@@ -25,7 +25,7 @@ import {
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { Logo } from "@/components/ui/logo"
 import { Input } from "@/components/ui/input"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
 

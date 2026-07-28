@@ -40,7 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { StatusBadge } from "./shared"
 
 function isPasskeyCanceled(error: unknown) {

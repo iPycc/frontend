@@ -28,7 +28,7 @@ import { TransferManager } from "@/components/transfer"
 import { Button } from "@/components/ui/button"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 const VIEW_MODE_KEY = "cloudrave.shared-with-me.view"
 

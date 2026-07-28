@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom"
 import { IconChevronDown, IconChevronRight, IconFolderFilled, IconLoader2 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { SidebarTreeItem } from "./SidebarTreeItem"

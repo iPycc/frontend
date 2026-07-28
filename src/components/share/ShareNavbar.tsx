@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react"
 
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/ui/logo"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { UserMenu } from "@/components/navbar"
 import { cn } from "@/lib/utils"
 

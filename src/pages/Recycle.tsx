@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import type { FileNode, ViewMode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 

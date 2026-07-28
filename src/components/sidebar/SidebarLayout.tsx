@@ -18,7 +18,7 @@ import {
 } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Logo } from "@/components/ui/logo"

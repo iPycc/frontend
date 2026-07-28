@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useFileDownload } from "@/hooks/use-file-download"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import {
   buildSharedPreviewManifest,
   sharedAudioExtensions,

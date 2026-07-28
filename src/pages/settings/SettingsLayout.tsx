@@ -4,7 +4,7 @@ import { motion } from "motion/react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,

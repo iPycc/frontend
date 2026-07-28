@@ -2,7 +2,7 @@ import { IconMoon, IconSearch, IconSettings, IconSun } from "@tabler/icons-react
 import { Menu } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { CreateMenu } from "./CreateMenu"

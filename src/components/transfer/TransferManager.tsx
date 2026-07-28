@@ -16,7 +16,7 @@ import {
 
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import type { DownloadTask } from "@/hooks/use-file-download"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
 import { cn } from "@/lib/utils"

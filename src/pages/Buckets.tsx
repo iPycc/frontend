@@ -4,7 +4,7 @@ import { IconArrowRight, IconBucket, IconCheck, IconCloud, IconDatabase, IconExc
 
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MountStatus } from "@/components/storage/MountStatus"

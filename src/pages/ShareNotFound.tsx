@@ -4,7 +4,7 @@ import { IconArrowLeft, IconHome, IconShare } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 export function ShareNotFound() {
   usePageTitle("分享链接不存在")

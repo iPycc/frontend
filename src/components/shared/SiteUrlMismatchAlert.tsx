@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 const DISMISS_KEY = "cloudrave.site-url-mismatch-dismissed"
 

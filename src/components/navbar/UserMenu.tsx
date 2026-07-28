@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import {
   DropdownMenu,
   DropdownMenuContent,

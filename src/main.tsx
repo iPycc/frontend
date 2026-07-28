@@ -1,7 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import App from "./App"
-import { AppStateProvider } from "./lib/app-state"
+import { AppStateProvider } from "./state/app"
 import "./index.css"
 
 createRoot(document.getElementById("root")!).render(

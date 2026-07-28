@@ -4,7 +4,7 @@ import { IconFileText, IconFolderPlus, IconFolderUp, IconMarkdown, IconPlus, Ico
 import { toast } from "sonner"
 
 import { CreateFileDialog, CreateFolderDialog, type NewTextFileType } from "@/components/file-area"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { IconSearch, IconFolder, IconFile } from "@tabler/icons-react"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 import {
   CommandDialog,
   CommandEmpty,

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 type CropImageSize = {
   width: number

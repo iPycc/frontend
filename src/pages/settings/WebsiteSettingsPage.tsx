@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { useAppState } from "@/lib/app-state"
+import { useAppState } from "@/state/app"
 
 const defaultSettings: WebsiteSettings = {
   site_url: "",
