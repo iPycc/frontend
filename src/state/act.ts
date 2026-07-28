@@ -10,28 +10,21 @@ import {
   restoreNodes as apiRestoreNodes,
 } from "@/api/files"
 import {
-  createShare as apiCreateShare,
-  revokeShare as apiRevokeShare,
-  ShareAccess,
-  type ShareCreateInput,
-} from "@/api/share"
-import {
   inferMediaType,
   type AppSnapshot,
   type FileNode,
-  type ShareRecord,
 } from "@/lib/models"
 import { toast } from "sonner"
 
+import { useClipActions } from "@/state/act/clip"
+import { useShareActions } from "@/state/act/share"
 import {
   directoryPageKey,
   extractExtension,
   formatDateTime,
   mapNodeToFileNode,
-  mapShareRead,
   removeCachedSubtrees,
   type PageLoadState,
-  type ShareCreateOptions,
 } from "@/state/core"
 
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>
@@ -376,155 +369,29 @@ export function useActions({
     await deleteNodes(nodeIds, true)
   }, [deleteNodes])
 
-  const shareNodes = React.useCallback(
-    async (nodeIds: string[], options: ShareCreateOptions = {}) => {
-      const session = snapshotRef.current.auth.session
-      const nodes = nodeIds
-        .map(getNodeById)
-        .filter(Boolean) as FileNode[]
+  const {
+    shareNodes,
+    deleteShares,
+    recordShareView,
+    recordShareDownload,
+  } = useShareActions({
+    snapshotRef,
+    updateSnapshot,
+    getNodeById,
+  })
 
-      if (!session || nodes.length === 0) {
-        toast.info("当前没有可分享的文件")
-        return [] as ShareRecord[]
-      }
-
-      const input: ShareCreateInput = {
-        node_ids: nodes.map((node) => node.backendId ?? Number(node.id)),
-        access: options.access === "password" ? ShareAccess.PASSWORD : ShareAccess.PUBLIC,
-        password: options.access === "password" && options.password ? options.password : null,
-        expires_in_hours: options.expiresInHours ?? null,
-        max_downloads: options.maxDownloads ?? null,
-      }
-
-      try {
-        const share = await apiCreateShare(session.tokens.accessToken, input)
-        const node = nodes.find((candidate) => candidate.backendId === share.node_id) ?? nodes[0]
-        const newRecords: ShareRecord[] = [{
-          ...mapShareRead(share),
-          nodeName: node.name,
-          nodeKind: node.kind,
-          nodeExt: node.ext,
-          nodeSize: node.size,
-          nodeMediaType: node.mediaType,
-          nodePreview: node.preview,
-          itemCount: nodes.length,
-        }]
-
-        updateSnapshot((current) => ({
-          ...current,
-          shares: [...current.shares, ...newRecords],
-        }))
-
-        toast.success(`已生成 ${newRecords.length} 条分享链接`)
-        return newRecords
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "创建分享失败")
-        return [] as ShareRecord[]
-      }
-    },
-    [getNodeById, updateSnapshot]
-  )
-
-  const deleteShares = React.useCallback(
-    async (shareIds: string[]) => {
-      const session = snapshotRef.current.auth.session
-      if (!session) {
-        updateSnapshot((current) => ({
-          ...current,
-          shares: current.shares.filter((record) => !shareIds.includes(record.id)),
-        }))
-        return
-      }
-
-      try {
-        await Promise.all(shareIds.map((id) => apiRevokeShare(session.tokens.accessToken, id)))
-        updateSnapshot((current) => ({
-          ...current,
-          shares: current.shares.filter((record) => !shareIds.includes(record.id)),
-        }))
-        toast.success("分享链接已删除")
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "删除分享失败")
-      }
-    },
-    [updateSnapshot]
-  )
-
-  const recordShareView = React.useCallback(
-    (shareId: string) => {
-      updateSnapshot((current) => ({
-        ...current,
-        shares: current.shares.map((record) =>
-          record.id === shareId ? { ...record, views: record.views + 1 } : record
-        ),
-      }))
-    },
-    [updateSnapshot]
-  )
-
-  const recordShareDownload = React.useCallback(
-    (shareId: string) => {
-      updateSnapshot((current) => ({
-        ...current,
-        shares: current.shares.map((record) =>
-          record.id === shareId ? { ...record, downloads: record.downloads + 1 } : record
-        ),
-      }))
-    },
-    [updateSnapshot]
-  )
-
-  const copyNodes = React.useCallback(
-    (nodeIds: string[]) => {
-      updateSnapshot((current) => ({
-        ...current,
-        clipboard: { type: "copy", nodeIds },
-      }))
-    },
-    [updateSnapshot]
-  )
-
-  const cutNodes = React.useCallback(
-    (nodeIds: string[]) => {
-      updateSnapshot((current) => ({
-        ...current,
-        clipboard: { type: "cut", nodeIds },
-      }))
-    },
-    [updateSnapshot]
-  )
-
-  const pasteNodes = React.useCallback(async (
-    targetParentId: string | null,
-    bucketId = defaultBucketId
-  ) => {
-    const current = snapshotRef.current.clipboard
-    if (!current?.nodeIds.length) return
-    try {
-      if (current.type === "cut") {
-        await moveNodes(current.nodeIds, targetParentId, bucketId)
-        updateSnapshot((snapshot) => ({ ...snapshot, clipboard: null }))
-      } else {
-        const session = snapshotRef.current.auth.session
-        const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
-        const backendIds = current.nodeIds.map(Number).filter((id) => Number.isFinite(id))
-        if (!session || !bucket || backendIds.length === 0) return
-        const target = targetParentId && !targetParentId.startsWith("root:") ? Number(targetParentId) : null
-        const copied = await apiCopyNodes(session.tokens.accessToken, {
-          node_ids: backendIds,
-          target_parent_id: target,
-        })
-        const uiParentId = targetParentId && !targetParentId.startsWith("root:") ? targetParentId : bucket.rootNodeId
-        await Promise.all([
-          refreshCachedDirectory(uiParentId, bucket.id),
-          refreshLoadedCategories(bucket.id),
-        ])
-        toast.success(`已粘贴 ${copied.length} 项`)
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "粘贴失败")
-    }
-  }, [defaultBucketId, moveNodes, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
+  const {
+    copyNodes,
+    cutNodes,
+    pasteNodes,
+  } = useClipActions({
+    defaultBucketId,
+    snapshotRef,
+    updateSnapshot,
+    moveNodes,
+    refreshCachedDirectory,
+    refreshLoadedCategories,
+  })
 
 
   return {
