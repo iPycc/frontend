@@ -1,6 +1,5 @@
 import type { ViewMode } from "@/lib/models"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
 
 type FileAreaPendingProps = {
   metadataLoaded?: boolean
@@ -19,17 +18,6 @@ export function FileAreaPending(props: FileAreaPendingProps) {
   )
 }
 
-export function FileAreaLoading() {
-  return (
-    <div className="flex min-h-40 flex-1 items-center justify-center" role="status" aria-label="正在读取目录信息">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Spinner />
-        <span>Loading...</span>
-      </div>
-    </div>
-  )
-}
-
 export function FileAreaPendingContent({
   metadataLoaded = false,
   folderCount = 0,
@@ -38,11 +26,11 @@ export function FileAreaPendingContent({
   viewMode = "grid",
   showThumbnail = false,
 }: FileAreaPendingProps) {
-  if (!metadataLoaded) return <FileAreaLoading />
+  if (!metadataLoaded) return null
 
   const visibleFolderCount = Math.min(folderCount, pageSize)
   const visibleFileCount = Math.min(fileCount, Math.max(0, pageSize - visibleFolderCount))
-  if (visibleFolderCount + visibleFileCount === 0) return <FileAreaLoading />
+  if (visibleFolderCount + visibleFileCount === 0) return null
 
   if (viewMode !== "grid") {
     return (

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/context-menu"
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
-import { FileAreaLoading, FileAreaPendingContent } from "./FileAreaPending"
+import { FileAreaPendingContent } from "./FileAreaPending"
 
 interface FileAreaProps {
   items: FileNode[]
@@ -165,7 +165,7 @@ export function FileArea({
           ) : null}
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
             {items.length === 0 && !metadataLoaded ? (
-              <FileAreaLoading />
+              null
             ) : loading && items.length === 0 ? (
               <FileAreaPendingContent
                 metadataLoaded

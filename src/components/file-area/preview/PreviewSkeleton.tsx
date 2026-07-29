@@ -23,6 +23,7 @@ export function inferPreviewKind(file: FileNode | null): PreviewManifest["kind"]
 }
 
 export function PreviewSkeleton({
+  kind,
   compact = false,
   className,
 }: {
@@ -30,6 +31,8 @@ export function PreviewSkeleton({
   compact?: boolean
   className?: string
 }) {
+  if (kind !== "image" && kind !== "video") return null
+
   return (
     <div
       className={cn("flex h-full items-center justify-center bg-background/95", className)}
