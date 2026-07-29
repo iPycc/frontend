@@ -67,6 +67,25 @@ export type BucketMount = {
   updated_at: string
 }
 
+export type MountDeletePreview = {
+  mount_id: number
+  mount_name: string
+  provider: "local_fs" | "tencent_cos"
+  bucket_name: string
+  prefix: string
+  file_count: number
+  folder_count: number
+  active_upload_count: number
+  pending_cleanup_count: number
+  remote_objects: boolean | null
+  has_contents: boolean
+}
+
+export type MountDeleteResult = {
+  message: string
+  deleted_objects: number
+}
+
 export type CreateStoragePolicyInput = {
   name: string
   provider: "local_fs" | "tencent_cos"
@@ -150,8 +169,12 @@ export async function updateMount(token: string, mountId: number, body: UpdateBu
   })
 }
 
-export async function deleteMount(token: string, mountId: number) {
-  return requestJson<{ message: string }>(`/admin/mount/${mountId}`, {
+export async function getMountDeletePreview(token: string, mountId: number) {
+  return requestJson<MountDeletePreview>(`/admin/mount/${mountId}/delete-preview`, { token })
+}
+
+export async function deleteMount(token: string, mountId: number, deleteObjects = false) {
+  return requestJson<MountDeleteResult>(`/admin/mount/${mountId}?delete_objects=${deleteObjects}`, {
     method: "DELETE",
     token,
   })

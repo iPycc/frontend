@@ -141,6 +141,14 @@ export async function completeUpload(
   })
 }
 
+export async function heartbeatUpload(token: string, sessionId: string, signal?: AbortSignal) {
+  return requestJson<{ message: string }>(`/explorer/upload/${sessionId}/heartbeat`, {
+    method: "POST",
+    token,
+    signal,
+  })
+}
+
 export async function abortUpload(token: string, sessionId: string, reason?: string) {
   return requestJson<UploadSession>(`/explorer/upload/${sessionId}/abort`, {
     method: "POST",

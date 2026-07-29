@@ -5,6 +5,7 @@ import {
   completeUpload,
   createUploadSession,
   getUploadPartUrl,
+  heartbeatUpload,
   recordRemotePart,
   uploadLocalPart,
   type UploadPartPlan,
@@ -85,6 +86,7 @@ export function useUploadRun({
       }
 
       let sessionId: string | undefined
+      let stopHeartbeat: (() => void) | undefined
       try {
         updateUploadQueueItem(id, {
           status: "preparing",
@@ -133,6 +135,28 @@ export function useUploadRun({
           expiresAt: plan.expires_at ?? undefined,
           status: "uploading",
         })
+        const heartbeatController = new AbortController()
+        const activeSessionId = plan.session_id
+        const sendHeartbeat = () => {
+          if (heartbeatController.signal.aborted) return
+          void uploadApiSchedulerRef.current
+            .run(
+              () => heartbeatUpload(
+                session.tokens.accessToken,
+                activeSessionId,
+                heartbeatController.signal
+              ),
+              heartbeatController.signal
+            )
+            .catch(() => {
+              // A transient heartbeat failure is retried on the next interval.
+            })
+        }
+        const heartbeatTimer = window.setInterval(sendHeartbeat, 60_000)
+        stopHeartbeat = () => {
+          window.clearInterval(heartbeatTimer)
+          heartbeatController.abort()
+        }
 
         const singlePut = plan.upload_mode === "single_put"
         const partSize = singlePut
@@ -338,6 +362,7 @@ export function useUploadRun({
           speedText: aborted ? "已取消" : "上传失败",
         })
       } finally {
+        stopHeartbeat?.()
         uploadCommitIdsRef.current.delete(id)
         uploadControllersRef.current.delete(id)
       }

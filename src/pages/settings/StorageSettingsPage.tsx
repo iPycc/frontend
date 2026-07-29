@@ -5,9 +5,11 @@ import {
   applyMountCors,
   deleteMount,
   deletePolicy,
+  getMountDeletePreview,
   syncMountPages,
   updateMount,
   updatePolicy,
+  type MountDeletePreview,
   type UpdateBucketMountInput,
   type UpdateStoragePolicyInput,
 } from "@/api/storage"
@@ -24,6 +26,10 @@ import {
   TencentStorageForm,
 } from "@/components/storage"
 import type { LocalStorageDraft, TencentStorageDraft } from "@/components/storage"
+import {
+  MountDeleteDialog,
+  type MountDeleteMode,
+} from "@/components/storage/MountDeleteDialog"
 import {
   buildLocalDraft,
   buildLocalMountInput,
@@ -46,7 +52,13 @@ export function StorageSettingsPage() {
   const [initialLocalDraft, setInitialLocalDraft] = React.useState<LocalStorageDraft | undefined>()
   const [submitting, setSubmitting] = React.useState(false)
   const [syncingMountId, setSyncingMountId] = React.useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<BucketMount | null>(null)
+  const [deletePreview, setDeletePreview] = React.useState<MountDeletePreview | null>(null)
+  const [deletePreviewLoading, setDeletePreviewLoading] = React.useState(false)
+  const [deletePreviewError, setDeletePreviewError] = React.useState<string | null>(null)
+  const [deletingMode, setDeletingMode] = React.useState<MountDeleteMode | null>(null)
   const syncControllerRef = React.useRef<AbortController | null>(null)
+  const deletePreviewRequestRef = React.useRef(0)
 
   React.useEffect(() => () => syncControllerRef.current?.abort(), [])
 
@@ -223,20 +235,69 @@ export function StorageSettingsPage() {
     setView({ type: "edit", bucket })
   }
 
-  const handleDeletePolicy = (bucket: BucketMount) =>
+  const handleDeletePolicy = (bucket: BucketMount) => {
+    if (!bucket.canDelete || !bucket.backendId || !bucket.policyId) {
+      toast.info("当前挂载为系统内置或不可删除。")
+      return
+    }
+
+    let accessToken: string
+    try {
+      accessToken = requireToken()
+    } catch {
+      return
+    }
+
+    const requestId = deletePreviewRequestRef.current + 1
+    deletePreviewRequestRef.current = requestId
+    setDeleteTarget(bucket)
+    setDeletePreview(null)
+    setDeletePreviewError(null)
+    setDeletePreviewLoading(true)
+    void getMountDeletePreview(accessToken, bucket.backendId)
+      .then((preview) => {
+        if (deletePreviewRequestRef.current === requestId) setDeletePreview(preview)
+      })
+      .catch((error) => {
+        if (deletePreviewRequestRef.current === requestId) {
+          setDeletePreviewError(error instanceof Error ? error.message : "无法检查挂载内容")
+        }
+      })
+      .finally(() => {
+        if (deletePreviewRequestRef.current === requestId) setDeletePreviewLoading(false)
+      })
+  }
+
+  const closeDeleteDialog = (force = false) => {
+    if (deletingMode && !force) return
+    deletePreviewRequestRef.current += 1
+    setDeleteTarget(null)
+    setDeletePreview(null)
+    setDeletePreviewError(null)
+    setDeletePreviewLoading(false)
+  }
+
+  const confirmDeletePolicy = (mode: MountDeleteMode) => {
+    const bucket = deleteTarget
+    if (!bucket?.backendId || !bucket.policyId || submitting || deletingMode) return
+    setDeletingMode(mode)
     void withSubmit(async () => {
-      const accessToken = requireToken()
-
-      if (!bucket.canDelete || !bucket.backendId || !bucket.policyId) {
-        toast.info("当前挂载为系统内置或不可删除。")
-        return
+      try {
+        const accessToken = requireToken()
+        const result = await deleteMount(accessToken, bucket.backendId as number, mode === "purge")
+        await deletePolicy(accessToken, bucket.policyId as number)
+        await reloadWorkspace()
+        closeDeleteDialog(true)
+        toast.success(
+          mode === "purge"
+            ? `已删除 ${bucket.name} 及其存储文件（清理 ${result.deleted_objects} 个存储项）`
+            : `已删除 ${bucket.name}，存储文件未受影响`
+        )
+      } finally {
+        setDeletingMode(null)
       }
-
-      await deleteMount(accessToken, bucket.backendId)
-      await deletePolicy(accessToken, bucket.policyId)
-      await reloadWorkspace()
-      toast.success(`已删除 ${bucket.name}`)
     })
+  }
 
   const handleSaveEdit = (bucket: BucketMount) =>
     void withSubmit(async () => {
@@ -452,6 +513,18 @@ export function StorageSettingsPage() {
           submitLabel={editSubmitLabel}
         />
       )}
+
+      <MountDeleteDialog
+        bucket={deleteTarget}
+        preview={deletePreview}
+        loading={deletePreviewLoading}
+        error={deletePreviewError}
+        deletingMode={deletingMode}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog()
+        }}
+        onDelete={confirmDeletePolicy}
+      />
     </div>
   )
 }
