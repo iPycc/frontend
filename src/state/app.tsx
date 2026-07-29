@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { useActions } from "@/state/act"
 import { useAuth } from "@/state/auth"
 import { useBoot } from "@/state/boot"
+import { loadInitialFileRouteState } from "@/state/file-route-cache"
 import { useNav } from "@/state/nav"
 
 import {
@@ -30,11 +31,12 @@ import {
 } from "@/state/core"
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [snapshot, setSnapshot] = React.useState<AppSnapshot>(loadSnapshot)
+  const [initialState] = React.useState(() => loadInitialFileRouteState(loadSnapshot()))
+  const [snapshot, setSnapshot] = React.useState<AppSnapshot>(initialState.snapshot)
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light")
   const [authReady, setAuthReady] = React.useState(false)
-  const [pageStates, setPageStates] = React.useState<Record<string, PageLoadState>>({})
-  const [categoryNodesByKey, setCategoryNodesByKey] = React.useState<Record<string, FileNode[]>>({})
+  const [pageStates, setPageStates] = React.useState<Record<string, PageLoadState>>(initialState.pageStates)
+  const [categoryNodesByKey, setCategoryNodesByKey] = React.useState<Record<string, FileNode[]>>(initialState.categoryNodesByKey)
   const [treeFolderNodes, setTreeFolderNodes] = React.useState<FileNode[]>([])
   const [recycleNodes, setRecycleNodes] = React.useState<FileNode[]>([])
   const [recycleLoading, setRecycleLoading] = React.useState(false)

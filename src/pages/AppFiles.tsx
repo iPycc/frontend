@@ -2,7 +2,6 @@ import * as React from "react"
 import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
 
-import { FileAreaPending } from "@/components/file-area/FileAreaPending"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
@@ -14,6 +13,7 @@ import { updateUserPreferences } from "@/api/user"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { loadFileViewPreferences, saveFileViewPreferences } from "@/lib/file-view-preferences"
+import { EMPTY_PAGE_STATE } from "@/state/core"
 
 const RenameDialog = React.lazy(() => import("@/components/file-area/RenameDialog").then((module) => ({ default: module.RenameDialog })))
 const FileArea = React.lazy(() => import("@/components/file-area/FileAreaLayout").then((module) => ({ default: module.FileArea })))
@@ -112,7 +112,7 @@ export function AppFiles() {
   const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
   const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
   const [previewFile, setPreviewFile] = React.useState<FileNode | null>(null)
-  const [resolvedFolderId, setResolvedFolderId] = React.useState<string | null>(null)
+  const [resolvedFolder, setResolvedFolder] = React.useState<{ path: string; id: string } | null>(null)
   const [routeLoading, setRouteLoading] = React.useState(true)
 
   const setViewMode = React.useCallback((value: ViewMode) => {
@@ -149,10 +149,19 @@ export function AppFiles() {
   const rawCategory = searchParams.get("type")
   const category = rawCategory && rawCategory in categoryMap ? (rawCategory as keyof typeof categoryMap) : null
   const currentPath = searchParams.get("folder") ?? ""
-  const currentFolderId = resolvedFolderId ?? getFolderPathId(currentPath)
-  const pageState = category
+  const knownFolderId = getFolderPathId(currentPath)
+  const currentFolderId = resolvedFolder?.path === currentPath ? resolvedFolder.id : knownFolderId
+  const unresolvedFolder = Boolean(!category && currentPath && !currentFolderId)
+  const pageState = unresolvedFolder
+    ? EMPTY_PAGE_STATE
+    : category
     ? getCategoryPageState(category)
     : getDirectoryPageState(currentFolderId)
+  const routeDataReady = Boolean(
+    !unresolvedFolder &&
+    pageState.loaded &&
+    pageState.queryKey === `${sortValue}:${pageSize}`
+  )
 
   usePageTitle(getPageTitle(category, currentPath))
 
@@ -202,10 +211,20 @@ export function AppFiles() {
       }
     }
 
+    if (routeDataReady) {
+      if (!category && currentFolderId) {
+        setResolvedFolder({ path: currentPath, id: currentFolderId })
+      }
+      setRouteLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
     const loadRoute = async () => {
       try {
         if (category) {
-          setResolvedFolderId(null)
+          setResolvedFolder(null)
           await loadCategory(category, activeBucket.id, {
             reset: true,
             limit: pageSize,
@@ -216,7 +235,7 @@ export function AppFiles() {
 
         const folderId = await resolveFolderPath(currentPath, activeBucket.id, { limit: pageSize })
         if (cancelled) return
-        setResolvedFolderId(folderId)
+        setResolvedFolder(folderId ? { path: currentPath, id: folderId } : null)
         if (folderId) {
           await loadDirectory(folderId, activeBucket.id, {
             reset: true,
@@ -239,7 +258,7 @@ export function AppFiles() {
     return () => {
       cancelled = true
     }
-  }, [activeBucket.id, authReady, category, currentPath, isAuthenticated, loadCategory, loadDirectory, pageSize, resolveFolderPath, sortValue])
+  }, [activeBucket.id, authReady, category, currentFolderId, currentPath, isAuthenticated, loadCategory, loadDirectory, pageSize, resolveFolderPath, routeDataReady, sortValue])
 
   React.useEffect(() => {
     setSelectedIds([])
@@ -554,19 +573,16 @@ export function AppFiles() {
         <div key={location.pathname + location.search} className="flex min-w-0 flex-1">
           <React.Suspense
             fallback={(
-              <FileAreaPending
-                metadataLoaded={pageState.metadataLoaded}
-                folderCount={pageState.folderCount}
-                fileCount={pageState.fileCount}
-                pageSize={pageSize}
-                viewMode={viewMode}
-                showThumbnail={thumbnailsEnabled}
+              <div
+                className="app-panel min-w-0 flex-1 rounded-xl border border-border dark:border-white/10"
+                aria-hidden="true"
               />
             )}
           >
             <FileArea
               items={items}
-              loading={routeLoading || pageState.loading}
+              loading={routeLoading || unresolvedFolder || pageState.loading}
+              loaded={pageState.loaded}
               metadataLoaded={pageState.metadataLoaded}
               folderCount={pageState.folderCount}
               fileCount={pageState.fileCount}

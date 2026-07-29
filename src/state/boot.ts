@@ -3,6 +3,18 @@ import * as React from "react"
 import { refreshToken as apiRefreshToken } from "@/api/auth"
 import { configureAuthClient } from "@/api/client"
 import {
+  listCategoryNodePage,
+  listNodePage,
+  type ExplorerNodePage,
+} from "@/api/files"
+import { loadFileViewPreferences } from "@/lib/file-view-preferences"
+import {
+  clearFileRouteCache,
+  getCachedFolderChain,
+  pageStateFromResponse,
+  saveFileRouteCache,
+} from "@/state/file-route-cache"
+import {
   type AppSnapshot,
   type AuthSession,
   type FileNode,
@@ -15,13 +27,72 @@ import {
 import {
   createEmptyProfile,
   createMountRootNode,
+  categoryPageKey,
+  directoryPageKey,
   fetchWorkspaceBasics,
+  mapNodeToFileNode,
   mapMountToBucket,
   type PageLoadState,
   type WorkspaceBasics,
 } from "@/state/core"
 
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>
+
+type PrefetchCategory = "image" | "video" | "audio" | "document"
+
+type InitialFileRoutePrefetch = {
+  bucketId: string
+  backendId: number
+  category: PrefetchCategory | null
+  parentId: string
+  ancestors: FileNode[]
+  response: ExplorerNodePage
+  limit: number
+  sort: ReturnType<typeof loadFileViewPreferences>["sortValue"]
+}
+
+const PREFETCH_CATEGORIES = new Set<PrefetchCategory>(["image", "video", "audio", "document"])
+
+async function prefetchInitialFileRoute(token: string, snapshot: AppSnapshot): Promise<InitialFileRoutePrefetch | null> {
+  if (typeof window === "undefined" || !["/app", "/images"].includes(window.location.pathname)) {
+    return null
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const path = params.get("folder") ?? ""
+  const rawCategory = window.location.pathname === "/images" ? "image" : params.get("type")
+  const category = rawCategory && PREFETCH_CATEGORIES.has(rawCategory as PrefetchCategory)
+    ? rawCategory as PrefetchCategory
+    : null
+  const bucket = snapshot.buckets.find((item) => item.id === snapshot.activeBucketId) ?? snapshot.buckets[0]
+  if (!bucket || bucket.backendId === undefined) return null
+
+  const folderChain = category ? null : getCachedFolderChain(snapshot, path, bucket.id)
+  if (!category && !folderChain) return null
+  const parentId = category ? bucket.rootNodeId : folderChain!.parentId
+  const apiParentId = parentId.startsWith("root:") ? undefined : Number(parentId)
+  if (apiParentId !== undefined && Number.isNaN(apiParentId)) return null
+
+  const { pageSize: limit, sortValue: sort } = loadFileViewPreferences()
+  try {
+    const pageRequest = category
+      ? listCategoryNodePage(token, { mountId: bucket.backendId, category, limit, sort })
+      : listNodePage(token, { mountId: bucket.backendId, parentId: apiParentId, limit, sort })
+    const response = await pageRequest
+    return {
+      bucketId: bucket.id,
+      backendId: bucket.backendId,
+      category,
+      parentId,
+      ancestors: folderChain?.ancestors ?? [],
+      response,
+      limit,
+      sort,
+    }
+  } catch {
+    return null
+  }
+}
 
 type BootDeps = {
   snapshotRef: { current: AppSnapshot }
@@ -47,7 +118,11 @@ export function useBoot({
   setRecycleNodes,
 }: BootDeps) {
   const hydrateWorkspace = React.useCallback(
-    async (session: AuthSession, prefetchedBasics?: WorkspaceBasics) => {
+    async (
+      session: AuthSession,
+      prefetchedBasics?: WorkspaceBasics,
+      initialFileRoute?: InitialFileRoutePrefetch | null
+    ) => {
       const token = session.tokens.accessToken
       const { profilePayload, rawMounts, mountUsage } = prefetchedBasics ?? await fetchWorkspaceBasics(token)
       const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
@@ -76,6 +151,37 @@ export function useBoot({
           : bucket
       })
       const rootNodes = buckets.map(createMountRootNode)
+      const prefetchedBucket = initialFileRoute
+        ? buckets.find((bucket) => bucket.id === initialFileRoute.bucketId && bucket.backendId === initialFileRoute.backendId)
+        : undefined
+      const prefetchedNodes = prefetchedBucket && initialFileRoute
+        ? initialFileRoute.response.items.map((node) => mapNodeToFileNode(
+            node,
+            prefetchedBucket.id,
+            initialFileRoute.category && node.parent_id ? String(node.parent_id) : initialFileRoute.parentId,
+            tz
+          ))
+        : []
+      const preserveCachedRoute = !initialFileRoute && Object.values(pageStatesRef.current).some(
+        (state) => state.metadataLoaded && !state.loaded
+      )
+      const nextPageStates: Record<string, PageLoadState> = preserveCachedRoute
+        ? pageStatesRef.current
+        : {}
+      const nextCategoryNodes: Record<string, FileNode[]> = {}
+
+      if (prefetchedBucket && initialFileRoute) {
+        const stateKey = initialFileRoute.category
+          ? categoryPageKey(initialFileRoute.category, prefetchedBucket.id)
+          : directoryPageKey("content", prefetchedBucket.id, initialFileRoute.parentId)
+        nextPageStates[stateKey] = pageStateFromResponse(
+          `${initialFileRoute.sort}:${initialFileRoute.limit}`,
+          initialFileRoute.response
+        )
+        if (initialFileRoute.category) {
+          nextCategoryNodes[stateKey] = prefetchedNodes
+        }
+      }
 
       updateSnapshot((current) => ({
         ...current,
@@ -103,21 +209,45 @@ export function useBoot({
           buckets.find((bucket) => bucket.id === window.localStorage.getItem("cloudrave.last-mount"))?.id ??
           buckets[0]?.id ??
           "",
-        nodes: rootNodes,
+        nodes: [
+          ...rootNodes,
+          ...(preserveCachedRoute
+            ? snapshotRef.current.nodes.filter((node) => (
+                !node.isSystemRoot && buckets.some((bucket) => bucket.id === node.bucketId)
+              ))
+            : []),
+          ...(prefetchedBucket && initialFileRoute ? initialFileRoute.ancestors : []),
+          ...prefetchedNodes,
+        ],
         shares: [],
         fileContents: {},
       }))
-      setPageStates({})
-      pageStatesRef.current = {}
+      setPageStates(nextPageStates)
+      pageStatesRef.current = nextPageStates
       pageRequestsRef.current.clear()
-      setCategoryNodesByKey({})
+      setCategoryNodesByKey((current) => preserveCachedRoute ? current : nextCategoryNodes)
       setTreeFolderNodes([])
       setRecycleNodes([])
+
+      if (prefetchedBucket && initialFileRoute) {
+        const stateKey = initialFileRoute.category
+          ? categoryPageKey(initialFileRoute.category, prefetchedBucket.id)
+          : directoryPageKey("content", prefetchedBucket.id, initialFileRoute.parentId)
+        saveFileRouteCache({
+          snapshot: snapshotRef.current,
+          bucketId: prefetchedBucket.id,
+          parentId: initialFileRoute.parentId,
+          category: initialFileRoute.category,
+          nodes: prefetchedNodes,
+          pageState: nextPageStates[stateKey],
+        })
+      }
     },
     [updateSnapshot]
   )
 
   const clearWorkspace = React.useCallback(() => {
+    clearFileRouteCache()
     updateSnapshot((current) => ({
       ...current,
       profile: createEmptyProfile(),
@@ -164,7 +294,12 @@ export function useBoot({
       }
 
       if (hydrate) {
-        await hydrateWorkspace(nextSession, prefetchedBasics)
+        const basicsRequest = prefetchedBasics
+          ? Promise.resolve(prefetchedBasics)
+          : fetchWorkspaceBasics(nextSession.tokens.accessToken)
+        const initialFileRouteRequest = prefetchInitialFileRoute(nextSession.tokens.accessToken, snapshotRef.current)
+        const [basics, initialFileRoute] = await Promise.all([basicsRequest, initialFileRouteRequest])
+        await hydrateWorkspace(nextSession, basics, initialFileRoute)
       } else {
         updateSnapshot((current) => ({
           ...current,

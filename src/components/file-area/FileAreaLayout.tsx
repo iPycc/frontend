@@ -24,6 +24,7 @@ import { FileAreaPendingContent } from "./FileAreaPending"
 interface FileAreaProps {
   items: FileNode[]
   loading: boolean
+  loaded: boolean
   metadataLoaded: boolean
   folderCount: number
   fileCount: number
@@ -70,6 +71,7 @@ const sortLabels: Array<{ value: SortValue; label: string }> = [
 export function FileArea({
   items,
   loading,
+  loaded,
   metadataLoaded,
   folderCount,
   fileCount,
@@ -164,9 +166,7 @@ export function FileArea({
             </div>
           ) : null}
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
-            {items.length === 0 && !metadataLoaded ? (
-              null
-            ) : loading && items.length === 0 ? (
+            {items.length === 0 && !metadataLoaded ? null : loading && items.length === 0 ? (
               <FileAreaPendingContent
                 metadataLoaded
                 folderCount={folderCount}
@@ -175,7 +175,7 @@ export function FileArea({
                 viewMode={viewMode}
                 showThumbnail={showThumbnail}
               />
-            ) : items.length === 0 ? (
+            ) : items.length === 0 && !loaded ? null : items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
               </div>
