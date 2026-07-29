@@ -83,6 +83,12 @@ export type ExplorerNodePage = {
   file_count: number
 }
 
+export type ExplorerNodePageMetadata = {
+  total: number
+  folder_count: number
+  file_count: number
+}
+
 export type ListNodePageOptions = {
   mountId: number
   parentId?: number | null

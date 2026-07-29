@@ -21,6 +21,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Logo } from "@/components/ui/logo"
 import {
   Sidebar,
@@ -35,7 +36,7 @@ import { SidebarFolderTree, buildTree } from "./SidebarFolderTree"
 import { SidebarNavItem } from "./SidebarNavItem"
 import { SidebarQuota } from "./SidebarQuota"
 import { SidebarFooterContent } from "@/components/shared/SidebarFooterContent"
-import { groupSharedOwners, listShared, type SharedMount } from "@/api/shared"
+import { getSharedSummary, groupSharedOwners, listShared, type SharedMount } from "@/api/shared"
 
 const utilityPaths = [
   "/app/shared-with-me",
@@ -63,20 +64,36 @@ export function SidebarLayout() {
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
   const [sharedMounts, setSharedMounts] = useState<SharedMount[]>([])
+  const [sharedOwnerPlaceholderCount, setSharedOwnerPlaceholderCount] = useState(0)
+  const [sharedOwnersLoading, setSharedOwnersLoading] = useState(false)
 
   useEffect(() => {
     if (isGuest) {
       setSharedMounts([])
+      setSharedOwnerPlaceholderCount(0)
+      setSharedOwnersLoading(false)
       return
     }
     let cancelled = false
-    void listShared()
-      .then((items) => {
+    setSharedOwnersLoading(true)
+    const loadSharedOwners = async () => {
+      try {
+        const summary = await getSharedSummary()
+        if (!cancelled) setSharedOwnerPlaceholderCount(summary.owner_count)
+      } catch {
+        if (!cancelled) setSharedOwnerPlaceholderCount(0)
+      }
+
+      try {
+        const items = await listShared()
         if (!cancelled) setSharedMounts(items)
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setSharedMounts([])
-      })
+      } finally {
+        if (!cancelled) setSharedOwnersLoading(false)
+      }
+    }
+    void loadSharedOwners()
     return () => { cancelled = true }
   }, [isGuest, location.pathname])
 
@@ -256,6 +273,16 @@ export function SidebarLayout() {
                     <span className="min-w-0 flex-1 truncate">{owner.name}</span>
                     <span className="tabular-nums">{owner.shareCount}</span>
                   </Link>
+                ))}
+              </div>
+            ) : sharedOwnersLoading && sharedOwnerPlaceholderCount > 0 ? (
+              <div className="space-y-0.5 pb-1 pl-7" aria-label="正在加载共享用户">
+                {Array.from({ length: sharedOwnerPlaceholderCount }, (_, index) => (
+                  <div key={index} className="flex h-8 items-center gap-2 rounded-full px-3" aria-hidden="true">
+                    <Skeleton className="size-5 shrink-0 rounded-full" />
+                    <Skeleton className="h-3 min-w-0 flex-1" />
+                    <Skeleton className="h-3 w-4" />
+                  </div>
                 ))}
               </div>
             ) : null}

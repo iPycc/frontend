@@ -19,11 +19,14 @@ import {
 } from "@/components/ui/context-menu"
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
-import { FileAreaPendingContent } from "./FileAreaPending"
+import { FileAreaLoading, FileAreaPendingContent } from "./FileAreaPending"
 
 interface FileAreaProps {
   items: FileNode[]
   loading: boolean
+  metadataLoaded: boolean
+  folderCount: number
+  fileCount: number
   hasMore: boolean
   currentPath: string
   selectedIds: string[]
@@ -67,6 +70,9 @@ const sortLabels: Array<{ value: SortValue; label: string }> = [
 export function FileArea({
   items,
   loading,
+  metadataLoaded,
+  folderCount,
+  fileCount,
   hasMore,
   currentPath,
   selectedIds,
@@ -158,8 +164,17 @@ export function FileArea({
             </div>
           ) : null}
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
-            {loading && items.length === 0 ? (
-              <FileAreaPendingContent />
+            {items.length === 0 && !metadataLoaded ? (
+              <FileAreaLoading />
+            ) : loading && items.length === 0 ? (
+              <FileAreaPendingContent
+                metadataLoaded
+                folderCount={folderCount}
+                fileCount={fileCount}
+                pageSize={pageSize}
+                viewMode={viewMode}
+                showThumbnail={showThumbnail}
+              />
             ) : items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />

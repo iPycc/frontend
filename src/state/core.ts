@@ -71,6 +71,8 @@ export type NodeCategory = "image" | "video" | "audio" | "document"
 export type PageLoadState = {
   loading: boolean
   loaded: boolean
+  metadataLoading: boolean
+  metadataLoaded: boolean
   nextCursor: string | null
   queryKey: string
   totalCount: number
@@ -87,6 +89,8 @@ export type PageLoadOptions = {
 export const EMPTY_PAGE_STATE: PageLoadState = {
   loading: false,
   loaded: false,
+  metadataLoading: false,
+  metadataLoaded: false,
   nextCursor: null,
   queryKey: "",
   totalCount: 0,
@@ -254,6 +258,46 @@ export function createEmptyProfile(): UserProfile {
   }
 }
 
+export function createPersistedBucketPreview(bucket: BucketMount): BucketMount {
+  return {
+    ...EMPTY_BUCKET,
+    id: bucket.id,
+    backendId: bucket.backendId,
+    policyId: bucket.policyId,
+    name: bucket.name,
+    provider: bucket.provider,
+    providerLabel: bucket.providerLabel,
+    storageType: bucket.storageType,
+    ownerId: bucket.ownerId,
+    ownerBackendId: bucket.ownerBackendId,
+    region: bucket.region,
+    bucket: bucket.bucket,
+    basePrefix: bucket.basePrefix,
+    strategy: { ...bucket.strategy },
+    rootNodeId: bucket.rootNodeId,
+    rootPath: bucket.rootPath,
+    mountMode: bucket.mountMode,
+    readOnly: bucket.readOnly,
+    legacyPrefixedKeys: bucket.legacyPrefixedKeys,
+    objectKeyStyle: bucket.objectKeyStyle,
+    syncStatus: bucket.syncStatus,
+    lastSyncAt: bucket.lastSyncAt,
+    syncError: bucket.syncError,
+    syncedObjects: bucket.syncedObjects,
+    mountSlug: bucket.mountSlug,
+    createdAt: bucket.createdAt,
+    updatedAt: bucket.updatedAt,
+    corsStatus: bucket.corsStatus,
+    corsMessage: bucket.corsMessage,
+    advancedMode: bucket.advancedMode,
+    isLocal: bucket.isLocal,
+    canEditConnection: bucket.canEditConnection,
+    canDelete: bucket.canDelete,
+    canRename: bucket.canRename,
+    quota: bucket.quota ? { ...bucket.quota } : undefined,
+  }
+}
+
 export function loadSnapshot(): AppSnapshot {
   if (typeof window === "undefined") {
     return defaultAppSnapshot
@@ -267,6 +311,9 @@ export function loadSnapshot(): AppSnapshot {
   try {
     const parsed = JSON.parse(raw) as Partial<AppSnapshot>
     const persistedSession = parsed.auth?.session
+    const persistedBuckets = (parsed.buckets ?? [])
+      .filter((bucket) => Boolean(bucket?.id && bucket?.name))
+      .map(createPersistedBucketPreview)
     return {
       ...defaultAppSnapshot,
       auth: {
@@ -290,6 +337,8 @@ export function loadSnapshot(): AppSnapshot {
         passwordUpdatedAt: parsed.security?.passwordUpdatedAt ?? "",
         twoFactorEnabled: parsed.security?.twoFactorEnabled ?? false,
       },
+      buckets: persistedBuckets,
+      activeBucketId: parsed.activeBucketId ?? persistedBuckets[0]?.id ?? "",
       shares: parsed.shares ?? defaultAppSnapshot.shares,
     }
   } catch {

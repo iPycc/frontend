@@ -21,6 +21,7 @@ import {
   EMPTY_BUCKET,
   EMPTY_PAGE_STATE,
   STORAGE_KEY,
+  createPersistedBucketPreview,
   loadSnapshot,
   type AppStateValue,
   type AuthStateValue,
@@ -56,6 +57,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    const activeBucket = snapshot.buckets.find((bucket) => bucket.id === snapshot.activeBucketId)
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -78,9 +80,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         },
         shares: snapshot.shares,
         activeBucketId: snapshot.activeBucketId,
+        buckets: activeBucket ? [createPersistedBucketPreview(activeBucket)] : [],
       })
     )
-  }, [snapshot.activeBucketId, snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
+  }, [snapshot.activeBucketId, snapshot.auth, snapshot.buckets, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
 
   React.useEffect(() => {
     const controller = new AbortController()

@@ -8,6 +8,7 @@ type RawUserResponse = {
   email?: string
   username?: string
   timezone?: string
+  thumbnails_enabled?: boolean
   role?: string
   group?: string
   avatar?: string | null
@@ -32,6 +33,7 @@ export type ProfilePayload = {
   profile: UserProfile
   passwordUpdatedAt: string
   timezone: string
+  thumbnailsEnabled: boolean
   twoFactorEnabled: boolean
 }
 
@@ -54,7 +56,8 @@ export type ChangePasswordRequest = {
 }
 
 export type UserPreferencesPayload = {
-  timezone: string
+  timezone?: string
+  thumbnailsEnabled?: boolean
 }
 
 type RawPasskeyCredential = {
@@ -117,6 +120,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
     },
     passwordUpdatedAt: formatDateTimeToSeconds(raw.password_updated_at ?? raw.created_at, timezone),
     timezone,
+    thumbnailsEnabled: raw.thumbnails_enabled !== false,
     twoFactorEnabled: Boolean(raw.two_factor_enabled),
   }
 }
@@ -178,13 +182,18 @@ export async function changeCurrentPassword(token: string, payload: ChangePasswo
 }
 
 export async function updateUserPreferences(token: string, payload: UserPreferencesPayload) {
-  return requestJson<UserPreferencesPayload>("/user/me/preferences", {
+  const response = await requestJson<{ timezone: string; thumbnails_enabled: boolean }>("/user/me/preferences", {
     method: "PATCH",
     token,
     body: {
-      timezone: payload.timezone,
+      ...(payload.timezone !== undefined ? { timezone: payload.timezone } : {}),
+      ...(payload.thumbnailsEnabled !== undefined ? { thumbnails_enabled: payload.thumbnailsEnabled } : {}),
     },
   })
+  return {
+    timezone: response.timezone,
+    thumbnailsEnabled: response.thumbnails_enabled,
+  }
 }
 
 export async function getLoginActivity(token: string, timezone?: string): Promise<UserLoginActivityEntry[]> {

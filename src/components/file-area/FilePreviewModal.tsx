@@ -317,7 +317,7 @@ export function FilePreviewModal({
         </div>
 
         {minimized ? null : isMobile ? (
-          <AnimatePresence>{showPanel ? <motion.div key="preview-properties-mobile" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }} className="absolute inset-0 z-50 bg-background">{panel}</motion.div> : null}</AnimatePresence>
+          <AnimatePresence>{showPanel ? <motion.div key="preview-properties-mobile" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }} className="absolute inset-0 z-50 bg-background">{panel}</motion.div> : null}</AnimatePresence>
         ) : (
           <AnimatePresence>{showPanel ? <motion.aside key="preview-properties" initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }} className="min-h-0 shrink-0 self-stretch overflow-hidden border-l border-border bg-card"><div className="h-full min-h-0 w-[340px]">{panel}</div></motion.aside> : null}</AnimatePresence>
         )}

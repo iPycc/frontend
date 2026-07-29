@@ -1,6 +1,8 @@
 import * as React from "react"
 
 import {
+  getCategoryNodePageMetadata,
+  getNodePageMetadata,
   listCategoryNodePage,
   listNodePage,
   listRecycle,
@@ -106,12 +108,29 @@ export function useNav({
       updatePageState(stateKey, (current) => ({
         ...current,
         loading: true,
+        metadataLoading: reset,
+        metadataLoaded: reset ? false : current.metadataLoaded,
         nextCursor: reset ? null : current.nextCursor,
         queryKey,
       }))
 
       const request = (async () => {
         try {
+          if (reset) {
+            const metadata = await getNodePageMetadata(session.tokens.accessToken, {
+              mountId: backendId,
+              parentId: apiParentId,
+              foldersOnly: mode === "folders",
+            })
+            updatePageState(stateKey, (current) => ({
+              ...current,
+              metadataLoading: false,
+              metadataLoaded: true,
+              totalCount: metadata.total,
+              folderCount: metadata.folder_count,
+              fileCount: metadata.file_count,
+            }))
+          }
           const response = await listNodePage(session.tokens.accessToken, {
             mountId: backendId,
             parentId: apiParentId,
@@ -176,6 +195,8 @@ export function useNav({
           updatePageState(stateKey, () => ({
             loading: false,
             loaded: true,
+            metadataLoading: false,
+            metadataLoaded: true,
             nextCursor: response.next_cursor,
             queryKey,
             totalCount: response.total,
@@ -183,7 +204,7 @@ export function useNav({
             fileCount: response.file_count,
           }))
         } catch (error) {
-          updatePageState(stateKey, (current) => ({ ...current, loading: false }))
+          updatePageState(stateKey, (current) => ({ ...current, loading: false, metadataLoading: false }))
           throw error
         } finally {
           pageRequestsRef.current.delete(requestKey)
@@ -348,12 +369,28 @@ export function useNav({
       updatePageState(stateKey, (current) => ({
         ...current,
         loading: true,
+        metadataLoading: reset,
+        metadataLoaded: reset ? false : current.metadataLoaded,
         nextCursor: reset ? null : current.nextCursor,
         queryKey,
       }))
 
       const request = (async () => {
         try {
+          if (reset) {
+            const metadata = await getCategoryNodePageMetadata(session.tokens.accessToken, {
+              mountId: backendId,
+              category,
+            })
+            updatePageState(stateKey, (current) => ({
+              ...current,
+              metadataLoading: false,
+              metadataLoaded: true,
+              totalCount: metadata.total,
+              folderCount: metadata.folder_count,
+              fileCount: metadata.file_count,
+            }))
+          }
           const response = await listCategoryNodePage(session.tokens.accessToken, {
             mountId: backendId,
             category,
@@ -385,6 +422,8 @@ export function useNav({
           updatePageState(stateKey, () => ({
             loading: false,
             loaded: true,
+            metadataLoading: false,
+            metadataLoaded: true,
             nextCursor: response.next_cursor,
             queryKey,
             totalCount: response.total,
@@ -392,7 +431,7 @@ export function useNav({
             fileCount: response.file_count,
           }))
         } catch (error) {
-          updatePageState(stateKey, (current) => ({ ...current, loading: false }))
+          updatePageState(stateKey, (current) => ({ ...current, loading: false, metadataLoading: false }))
           throw error
         } finally {
           pageRequestsRef.current.delete(requestKey)

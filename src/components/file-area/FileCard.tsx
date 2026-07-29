@@ -198,7 +198,7 @@ export function FileCard({
                   srcSet={item.backendId && item.mediaType === "image" ? `${buildPreviewImageUrl(item.backendId, "thumbnail", item.updatedAt)} 320w, ${buildPreviewImageUrl(item.backendId, "thumbnail_2x", item.updatedAt)} 640w` : undefined}
                   sizes="(max-width: 768px) 50vw, 240px"
                   alt={item.name}
-                  className={cn("h-full w-full object-cover transition-opacity duration-300", imageLoaded ? "opacity-100" : "opacity-0")}
+                  className={cn("h-full w-full object-cover transition-opacity duration-150", imageLoaded ? "opacity-100" : "opacity-0")}
                   loading="lazy"
                   decoding="async"
                   fetchPriority="low"
@@ -227,7 +227,7 @@ export function FileCard({
                   muted
                   playsInline
                   preload="metadata"
-                  className={cn("h-full w-full object-cover transition-opacity duration-300", videoFrameReady ? "opacity-100" : "opacity-0")}
+                  className={cn("h-full w-full object-cover transition-opacity duration-150", videoFrameReady ? "opacity-100" : "opacity-0")}
                   onLoadedMetadata={(event) => {
                     const video = event.currentTarget
                     video.currentTime = Math.min(Math.max(video.duration * 0.1, 0.5), 5)

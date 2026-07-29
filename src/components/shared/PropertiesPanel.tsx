@@ -153,7 +153,7 @@ export function PropertiesPanel() {
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
             className="fixed inset-0 z-[100] flex flex-col bg-background"
           >
             <PropertiesPanelContent

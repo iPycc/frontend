@@ -10,6 +10,7 @@ import { useUploadState } from "@/lib/upload/provider"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest, recordNodeOpen } from "@/api/files"
+import { updateUserPreferences } from "@/api/user"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { loadFileViewPreferences, saveFileViewPreferences } from "@/lib/file-view-preferences"
@@ -58,6 +59,11 @@ export function AppFiles() {
   const {
     clipboard,
     activeBucket,
+    authReady,
+    authSession,
+    isAuthenticated,
+    settings,
+    updateSettings,
     getCategoryNodes,
     getFolderPathId,
     getFoldersForBucket,
@@ -93,7 +99,9 @@ export function AppFiles() {
   } = usePropertiesPanel()
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [viewPreferences, setViewPreferences] = React.useState(loadFileViewPreferences)
-  const { viewMode, sortValue, thumbnailsEnabled, pageSize } = viewPreferences
+  const { viewMode, sortValue, pageSize } = viewPreferences
+  const thumbnailsEnabled = settings.thumbnailsEnabled
+  const thumbnailPreferenceRequestRef = React.useRef(0)
   const [renameTargetId, setRenameTargetId] = React.useState<string | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
   const [moveIds, setMoveIds] = React.useState<string[]>([])
@@ -114,8 +122,21 @@ export function AppFiles() {
     setViewPreferences((current) => ({ ...current, sortValue: value }))
   }, [])
   const setThumbnailsEnabled = React.useCallback((value: boolean) => {
-    setViewPreferences((current) => ({ ...current, thumbnailsEnabled: value }))
-  }, [])
+    const previous = settings.thumbnailsEnabled
+    const requestId = thumbnailPreferenceRequestRef.current + 1
+    thumbnailPreferenceRequestRef.current = requestId
+    updateSettings({ thumbnailsEnabled: value })
+    const token = authSession?.tokens.accessToken
+    if (!token) {
+      updateSettings({ thumbnailsEnabled: previous })
+      return
+    }
+    void updateUserPreferences(token, { thumbnailsEnabled: value }).catch((error) => {
+      if (thumbnailPreferenceRequestRef.current !== requestId) return
+      updateSettings({ thumbnailsEnabled: previous })
+      toast.error(error instanceof Error ? error.message : "缩略图设置保存失败")
+    })
+  }, [authSession?.tokens.accessToken, settings.thumbnailsEnabled, updateSettings])
   const setPageSize = React.useCallback((value: number) => {
     setViewPreferences((current) => ({ ...current, pageSize: value }))
   }, [])
@@ -175,6 +196,12 @@ export function AppFiles() {
     let cancelled = false
     setRouteLoading(true)
 
+    if (!authReady || !isAuthenticated || !activeBucket.id) {
+      return () => {
+        cancelled = true
+      }
+    }
+
     const loadRoute = async () => {
       try {
         if (category) {
@@ -212,7 +239,7 @@ export function AppFiles() {
     return () => {
       cancelled = true
     }
-  }, [activeBucket.id, category, currentPath, loadCategory, loadDirectory, pageSize, resolveFolderPath, sortValue])
+  }, [activeBucket.id, authReady, category, currentPath, isAuthenticated, loadCategory, loadDirectory, pageSize, resolveFolderPath, sortValue])
 
   React.useEffect(() => {
     setSelectedIds([])
@@ -525,10 +552,24 @@ export function AppFiles() {
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div key={location.pathname + location.search} className="flex min-w-0 flex-1">
-          <React.Suspense fallback={<FileAreaPending />}>
+          <React.Suspense
+            fallback={(
+              <FileAreaPending
+                metadataLoaded={pageState.metadataLoaded}
+                folderCount={pageState.folderCount}
+                fileCount={pageState.fileCount}
+                pageSize={pageSize}
+                viewMode={viewMode}
+                showThumbnail={thumbnailsEnabled}
+              />
+            )}
+          >
             <FileArea
               items={items}
               loading={routeLoading || pageState.loading}
+              metadataLoaded={pageState.metadataLoaded}
+              folderCount={pageState.folderCount}
+              fileCount={pageState.fileCount}
               hasMore={Boolean(pageState.nextCursor)}
               currentPath={currentPath}
               selectedIds={selectedIds}

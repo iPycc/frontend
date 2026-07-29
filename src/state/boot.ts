@@ -83,6 +83,7 @@ export function useBoot({
         settings: {
           ...current.settings,
           timezone,
+          thumbnailsEnabled: profilePayload.thumbnailsEnabled,
         },
         security: {
           ...current.security,

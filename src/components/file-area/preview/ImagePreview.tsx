@@ -16,6 +16,7 @@ import {
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { previewSourceUrls } from "@/lib/preview-assets"
+import { cn } from "@/lib/utils"
 import { PreviewSkeleton } from "./PreviewSkeleton"
 
 type ImagePreviewProps = {
@@ -45,7 +46,6 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   // dimensions. Generated screen variants can still be warming up, which left
   // the low-resolution placeholder visible indefinitely.
   const source = sources[sourceIndex] ?? manifest.assets.source.url
-  const placeholder = manifest.assets.thumbnail_2x?.url ?? manifest.assets.thumbnail?.url
   const imageWidth = typeof manifest.metadata.width === "number" && manifest.metadata.width > 0
     ? manifest.metadata.width
     : undefined
@@ -92,16 +92,6 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   return (
     <div className="relative flex h-full w-full min-h-0 flex-col bg-[#111214]">
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {!loaded && placeholder ? (
-          <img
-            src={placeholder}
-            alt=""
-            width={imageWidth}
-            height={imageHeight}
-            className="pointer-events-none absolute inset-0 h-full w-full object-contain opacity-45"
-            aria-hidden="true"
-          />
-        ) : null}
         {!loaded && !failed ? (
           <PreviewSkeleton kind="image" className="pointer-events-none absolute inset-0 z-10" />
         ) : null}
@@ -144,7 +134,10 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
                   }
                   setFailed(true)
                 }}
-                className="max-h-full max-w-full select-none object-contain transition-transform duration-150"
+                className={cn(
+                  "max-h-full max-w-full select-none object-contain transition-[opacity,transform] duration-150",
+                  loaded ? "opacity-100" : "opacity-0"
+                )}
                 style={{ transform: `rotate(${rotation}deg)` }}
               />
             </TransformComponent>

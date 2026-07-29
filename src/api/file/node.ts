@@ -6,6 +6,7 @@ import type {
   ExplorerMount,
   ExplorerNode,
   ExplorerNodePage,
+  ExplorerNodePageMetadata,
   ExplorerNodeSearchResult,
   ListNodePageOptions,
   MountUsage,
@@ -58,6 +59,17 @@ export async function listNodePage(token: string, options: ListNodePageOptions) 
   return requestJson<ExplorerNodePage>(`/explorer/node/page?${query.toString()}`, { token })
 }
 
+export async function getNodePageMetadata(token: string, options: Pick<ListNodePageOptions, "mountId" | "parentId" | "foldersOnly">) {
+  const query = new URLSearchParams({ mount_id: String(options.mountId) })
+  if (options.parentId !== undefined && options.parentId !== null) {
+    query.set("parent_id", String(options.parentId))
+  }
+  if (options.foldersOnly) {
+    query.set("folders_only", "true")
+  }
+  return requestJson<ExplorerNodePageMetadata>(`/explorer/node/page/metadata?${query.toString()}`, { token })
+}
+
 export async function listCategoryNodePage(
   token: string,
   options: Omit<ListNodePageOptions, "parentId" | "foldersOnly"> & {
@@ -75,6 +87,17 @@ export async function listCategoryNodePage(
   }
 
   return requestJson<ExplorerNodePage>(`/explorer/node/category?${query.toString()}`, { token })
+}
+
+export async function getCategoryNodePageMetadata(
+  token: string,
+  options: { mountId: number; category: "image" | "video" | "audio" | "document" }
+) {
+  const query = new URLSearchParams({
+    mount_id: String(options.mountId),
+    category: options.category,
+  })
+  return requestJson<ExplorerNodePageMetadata>(`/explorer/node/category/metadata?${query.toString()}`, { token })
 }
 
 export async function searchNodes(

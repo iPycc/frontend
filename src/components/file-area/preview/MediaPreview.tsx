@@ -229,7 +229,10 @@ const toggleFullscreen = () => {
         ref={(element) => { videoRef.current = element }}
         poster={poster}
         playsInline
-        className="h-full w-full object-contain"
+        className={cn(
+          "h-full w-full object-contain transition-opacity duration-150",
+          loading ? "opacity-0" : "opacity-100"
+        )}
         preload="metadata"
         onLoadedMetadata={(event) => {
           setLoading(false)
@@ -282,6 +285,7 @@ const toggleFullscreen = () => {
         className={cn(
           "absolute inset-x-0 bottom-0 z-30 px-4 pb-2.5 pt-10 text-white transition-opacity duration-100",
           "bg-gradient-to-t from-black/85 via-black/35 to-transparent",
+          loading && "pointer-events-none opacity-0",
           playing && !controlsVisible && "pointer-events-none opacity-0"
         )}
         onPointerDown={beginControlInteraction}

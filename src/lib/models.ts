@@ -37,6 +37,7 @@ export interface UserSettings {
   themeMode: ThemeMode
   accentTheme: string
   showSidebarTree: boolean
+  thumbnailsEnabled: boolean
 }
 
 export interface PasskeyCredential {
@@ -246,6 +247,7 @@ export const defaultSettings: UserSettings = {
   themeMode: "system",
   accentTheme: "Blue",
   showSidebarTree: true,
+  thumbnailsEnabled: true,
 }
 
 export const defaultSecurity: SecurityState = {

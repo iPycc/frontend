@@ -5,14 +5,12 @@ const STORAGE_KEY = "cloudrave.file-view-preferences.v1"
 export type FileViewPreferences = {
   viewMode: ViewMode
   sortValue: SortValue
-  thumbnailsEnabled: boolean
   pageSize: number
 }
 
 const DEFAULT_PREFERENCES: FileViewPreferences = {
   viewMode: "grid",
   sortValue: "name-asc",
-  thumbnailsEnabled: true,
   pageSize: 200,
 }
 
@@ -29,9 +27,6 @@ export function loadFileViewPreferences(): FileViewPreferences {
     return {
       viewMode: value.viewMode && VIEW_MODES.has(value.viewMode) ? value.viewMode : DEFAULT_PREFERENCES.viewMode,
       sortValue: value.sortValue && SORT_VALUES.has(value.sortValue) ? value.sortValue : DEFAULT_PREFERENCES.sortValue,
-      thumbnailsEnabled: typeof value.thumbnailsEnabled === "boolean"
-        ? value.thumbnailsEnabled
-        : DEFAULT_PREFERENCES.thumbnailsEnabled,
       pageSize: typeof value.pageSize === "number"
         ? Math.min(2000, Math.max(50, Math.round(value.pageSize)))
         : DEFAULT_PREFERENCES.pageSize,

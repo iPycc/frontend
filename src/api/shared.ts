@@ -39,12 +39,21 @@ export type SharedCreate = {
   access_token?: string | null
 }
 
+export type SharedSummary = {
+  owner_count: number
+  share_count: number
+}
+
 export function mountShared(body: SharedCreate) {
   return requestJson<SharedMount>("/shared", { method: "POST", body })
 }
 
 export function listShared() {
   return requestJson<SharedMount[]>("/shared")
+}
+
+export function getSharedSummary() {
+  return requestJson<SharedSummary>("/shared/summary")
 }
 
 export function listSharedNodes(mountId: number, parentId?: number | null) {
