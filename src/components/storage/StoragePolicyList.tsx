@@ -7,6 +7,7 @@ import { StoragePolicyCard } from "@/components/storage/StoragePolicyCard"
 
 interface StoragePolicyListProps {
   buckets: BucketMount[]
+  canAddPolicy: boolean
   onAddPolicy: () => void
   onEditPolicy: (bucket: BucketMount) => void
   onDeletePolicy: (bucket: BucketMount) => void
@@ -16,6 +17,7 @@ interface StoragePolicyListProps {
 
 export function StoragePolicyList({
   buckets,
+  canAddPolicy,
   onAddPolicy,
   onEditPolicy,
   onDeletePolicy,
@@ -36,14 +38,16 @@ export function StoragePolicyList({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <button
-          type="button"
-          onClick={onAddPolicy}
-          className="flex min-h-[120px] items-center justify-center gap-2 rounded-2xl bg-muted/30 text-[15px] text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
-        >
-          <IconPlus size={18} />
-          添加存储策略
-        </button>
+        {canAddPolicy ? (
+          <button
+            type="button"
+            onClick={onAddPolicy}
+            className="flex min-h-[120px] items-center justify-center gap-2 rounded-2xl bg-muted/30 text-[15px] text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
+          >
+            <IconPlus size={18} />
+            添加存储策略
+          </button>
+        ) : null}
 
         {buckets.map((bucket) => (
           <div key={bucket.id}>

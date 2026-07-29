@@ -375,9 +375,9 @@ export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, tim
     corsMessage: storageRoot ? `已绑定目录：${storageRoot}` : "已连接真实存储",
     advancedMode: Boolean(extra.advanced_mode),
     isLocal: storageType === "local",
-    canEditConnection: user?.role === "admin" && !systemManaged,
-    canDelete: user?.role === "admin" && !systemManaged,
-    canRename: user?.role === "admin" && !systemManaged,
+    canEditConnection: (user?.role === "user" || user?.role === "admin") && !systemManaged,
+    canDelete: (user?.role === "user" || user?.role === "admin") && !systemManaged,
+    canRename: (user?.role === "user" || user?.role === "admin") && !systemManaged,
     extra,
   }
 }

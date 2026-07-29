@@ -68,7 +68,7 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete, onSync, syncing }:
               size="sm"
               className="h-8 gap-1.5 px-3 text-xs text-muted-foreground hover:bg-background/60 hover:text-foreground"
               onClick={() => onSync(bucket)}
-              disabled={!syncing && bucket.syncStatus === "pending"}
+              disabled={!bucket.canEditConnection || (!syncing && bucket.syncStatus === "pending")}
             >
               {syncing ? <IconX size={14} /> : <IconRefresh size={14} />}
               {syncing ? "停止" : bucket.syncStatus === "running" ? "继续" : "同步"}

@@ -2,17 +2,17 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import {
-  applyMountCors,
-  deleteMount,
-  deletePolicy,
-  getMountDeletePreview,
-  syncMountPages,
-  updateMount,
-  updatePolicy,
-  type MountDeletePreview,
   type UpdateBucketMountInput,
   type UpdateStoragePolicyInput,
 } from "@/api/storage"
+import {
+  applyUserMountCors,
+  deleteUserMount,
+  getUserMountDeletePreview,
+  syncUserMountPages,
+  updateUserMount,
+  type UserMountDeletePreview,
+} from "@/api/user-storage"
 import { useAppState } from "@/state/app"
 import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, validateLocalStoragePath } from "@/lib/models"
 import { attachStorage } from "@/lib/storage/attach"
@@ -44,7 +44,7 @@ import {
 } from "./store/build"
 
 export function StorageSettingsPage() {
-  const { authSession, buckets, profile, reloadWorkspace } = useAppState()
+  const { authSession, buckets, currentUser, profile, reloadWorkspace } = useAppState()
   const [view, setView] = React.useState<View>({ type: "list" })
   const [tencentDraft, setTencentDraft] = React.useState<TencentStorageDraft>(createEmptyTencentDraft)
   const [initialTencentDraft, setInitialTencentDraft] = React.useState<TencentStorageDraft | undefined>()
@@ -53,7 +53,7 @@ export function StorageSettingsPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [syncingMountId, setSyncingMountId] = React.useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<BucketMount | null>(null)
-  const [deletePreview, setDeletePreview] = React.useState<MountDeletePreview | null>(null)
+  const [deletePreview, setDeletePreview] = React.useState<UserMountDeletePreview | null>(null)
   const [deletePreviewLoading, setDeletePreviewLoading] = React.useState(false)
   const [deletePreviewError, setDeletePreviewError] = React.useState<string | null>(null)
   const [deletingMode, setDeletingMode] = React.useState<MountDeleteMode | null>(null)
@@ -64,6 +64,7 @@ export function StorageSettingsPage() {
 
   const token = authSession?.tokens.accessToken ?? null
   const userSeed = profile.uid || profile.username || "workspace"
+  const canManageMounts = currentUser?.role === "user" || currentUser?.role === "admin"
 
   const providerOptions = React.useMemo(
     () => [
@@ -116,6 +117,10 @@ export function StorageSettingsPage() {
   )
 
   const handleAddPolicy = () => {
+    if (!canManageMounts) {
+      toast.error("访客账号不能创建或管理挂载。")
+      return
+    }
     setTencentDraft(createEmptyTencentDraft())
     setLocalDraft(buildLocalDraft(userSeed))
     setInitialTencentDraft(undefined)
@@ -160,7 +165,7 @@ export function StorageSettingsPage() {
 
       if (autoConfigure) {
         try {
-          await applyMountCors(accessToken, created.mount.id)
+          await applyUserMountCors(accessToken, created.mount.id)
         } catch (error) {
           toast.warning(error instanceof Error ? error.message : "已创建 COS 挂载，但跨域配置尚未完成。")
         }
@@ -236,7 +241,7 @@ export function StorageSettingsPage() {
   }
 
   const handleDeletePolicy = (bucket: BucketMount) => {
-    if (!bucket.canDelete || !bucket.backendId || !bucket.policyId) {
+    if (!bucket.canDelete || !bucket.backendId) {
       toast.info("当前挂载为系统内置或不可删除。")
       return
     }
@@ -254,7 +259,7 @@ export function StorageSettingsPage() {
     setDeletePreview(null)
     setDeletePreviewError(null)
     setDeletePreviewLoading(true)
-    void getMountDeletePreview(accessToken, bucket.backendId)
+    void getUserMountDeletePreview(accessToken, bucket.backendId)
       .then((preview) => {
         if (deletePreviewRequestRef.current === requestId) setDeletePreview(preview)
       })
@@ -279,13 +284,12 @@ export function StorageSettingsPage() {
 
   const confirmDeletePolicy = (mode: MountDeleteMode) => {
     const bucket = deleteTarget
-    if (!bucket?.backendId || !bucket.policyId || submitting || deletingMode) return
+    if (!bucket?.backendId || submitting || deletingMode) return
     setDeletingMode(mode)
     void withSubmit(async () => {
       try {
         const accessToken = requireToken()
-        const result = await deleteMount(accessToken, bucket.backendId as number, mode === "purge")
-        await deletePolicy(accessToken, bucket.policyId as number)
+        const result = await deleteUserMount(accessToken, bucket.backendId as number, mode === "purge")
         await reloadWorkspace()
         closeDeleteDialog(true)
         toast.success(
@@ -349,8 +353,7 @@ export function StorageSettingsPage() {
           },
         }
 
-        await updatePolicy(accessToken, bucket.policyId, policyPatch)
-        await updateMount(accessToken, bucket.backendId, mountPatch)
+        await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
         toast.success("本机存储策略已保存。")
       } else {
         const policyPatch: UpdateStoragePolicyInput = {
@@ -404,8 +407,7 @@ export function StorageSettingsPage() {
           },
         }
 
-        await updatePolicy(accessToken, bucket.policyId, policyPatch)
-        await updateMount(accessToken, bucket.backendId, mountPatch)
+        await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
         toast.success("腾讯云 COS 存储策略已保存。")
       }
 
@@ -429,7 +431,7 @@ export function StorageSettingsPage() {
     syncControllerRef.current = controller
     setSyncingMountId(bucket.backendId)
     try {
-      const result = await syncMountPages(accessToken, bucket.backendId, controller.signal)
+      const result = await syncUserMountPages(accessToken, bucket.backendId, controller.signal)
       await reloadWorkspace()
       if (!result.complete) {
         toast.info(`已同步 ${result.synced_objects} 个对象，可再次继续。`)
@@ -454,6 +456,7 @@ export function StorageSettingsPage() {
       {view.type === "list" && (
         <StoragePolicyList
           buckets={buckets}
+          canAddPolicy={canManageMounts}
           onAddPolicy={handleAddPolicy}
           onEditPolicy={handleEditPolicy}
           onDeletePolicy={handleDeletePolicy}
