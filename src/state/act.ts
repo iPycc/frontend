@@ -77,10 +77,14 @@ export function useActions({
       const tempId = `optimistic-folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const tempNode: FileNode = {
         id: tempId,
+        backendId: null,
         bucketId: bucket.id,
+        mountBackendId: bucket.backendId,
         parentId: uiParentId,
+        parentBackendId: apiParentId ?? null,
         kind: "folder",
         name: trimmedName,
+        size: 0,
         updatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       }
@@ -139,8 +143,11 @@ export function useActions({
       const now = new Date().toISOString()
       const tempNode: FileNode = {
         id: tempId,
+        backendId: null,
         bucketId: bucket.id,
+        mountBackendId: bucket.backendId,
         parentId: uiParentId,
+        parentBackendId: apiParentId ?? null,
         kind: "file",
         name: trimmedName,
         ext: extractExtension(trimmedName),

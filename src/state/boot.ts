@@ -49,7 +49,7 @@ export function useBoot({
   const hydrateWorkspace = React.useCallback(
     async (session: AuthSession, prefetchedBasics?: WorkspaceBasics) => {
       const token = session.tokens.accessToken
-      const { profilePayload, rawMounts } = prefetchedBasics ?? await fetchWorkspaceBasics(token)
+      const { profilePayload, rawMounts, mountUsage } = prefetchedBasics ?? await fetchWorkspaceBasics(token)
       const timezone = profilePayload.timezone || snapshotRef.current.settings.timezone
 
       const nextSession: AuthSession = {
@@ -62,11 +62,19 @@ export function useBoot({
           registeredAt: profilePayload.profile.registeredAt,
           group: profilePayload.profile.group,
           twoFactorEnabled: profilePayload.twoFactorEnabled,
+          capabilities: profilePayload.account.capabilities,
         },
       }
 
       const tz = timezone
-      const buckets = rawMounts.map((mount) => mapMountToBucket(mount, nextSession.user, tz))
+      const usageByMount = new Map(mountUsage.map((usage) => [usage.mount_id, usage]))
+      const buckets = rawMounts.map((mount) => {
+        const bucket = mapMountToBucket(mount, nextSession.user, tz)
+        const usage = usageByMount.get(mount.id)
+        return usage?.quota_bytes != null
+          ? { ...bucket, quota: { used: usage.used_bytes + usage.reserved_bytes, total: usage.quota_bytes } }
+          : bucket
+      })
       const rootNodes = buckets.map(createMountRootNode)
 
       updateSnapshot((current) => ({

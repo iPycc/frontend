@@ -35,7 +35,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ButtonGroup } from "@/components/ui/button-group"
-import { type SortValue, type ViewMode } from "@/lib/models"
+import { hasCapability, type SortValue, type ViewMode } from "@/lib/models"
+import { useAppState } from "@/state/app"
 import { ViewSettingsPopover } from "./ViewSettingsPopover"
 
 interface ToolbarProps {
@@ -97,6 +98,9 @@ export function Toolbar({
   onProperties,
   currentLabel,
 }: ToolbarProps) {
+  const { currentUser } = useAppState()
+  const canCopy = hasCapability(currentUser, "file.copy")
+  const canShare = hasCapability(currentUser, "share.manage")
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait">
@@ -122,11 +126,11 @@ export function Toolbar({
               </span>
             </div>
             <div className="hidden items-center gap-2 md:flex">
-              <ActionButton icon={<IconCopy size={18} />} label="复制" onClick={onCopy} />
+              {canCopy ? <ActionButton icon={<IconCopy size={18} />} label="复制" onClick={onCopy} /> : null}
               <ActionButton icon={<IconCut size={18} />} label="剪切" onClick={onCut} />
               <ActionButton icon={<IconEdit size={18} />} label="重命名" onClick={onRename} />
               <ActionButton icon={<IconDownload size={18} />} label="下载" onClick={onDownload} />
-              <ActionButton icon={<IconShare3 size={18} />} label="分享" onClick={onShare} />
+              {canShare ? <ActionButton icon={<IconShare3 size={18} />} label="分享" onClick={onShare} /> : null}
               <ActionButton icon={<IconX size={18} />} label="删除" onClick={onDelete} />
             </div>
             <div className="md:hidden">
@@ -135,11 +139,11 @@ export function Toolbar({
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onCopy}>复制</DropdownMenuItem>
+                  {canCopy ? <DropdownMenuItem onClick={onCopy}>复制</DropdownMenuItem> : null}
                   <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem>
                   <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
                   <DropdownMenuItem onClick={onDownload}>下载</DropdownMenuItem>
-                  <DropdownMenuItem onClick={onShare}>分享</DropdownMenuItem>
+                  {canShare ? <DropdownMenuItem onClick={onShare}>分享</DropdownMenuItem> : null}
                   <DropdownMenuItem onClick={onProperties}>
                     <IconInfoCircle size={16} className="mr-2" /> 属性
                   </DropdownMenuItem>

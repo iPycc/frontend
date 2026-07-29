@@ -1,6 +1,6 @@
 import { buildAvatar, buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
 import { requestJson } from "@/api/client"
-import type { AppUser, PasskeyCredential, SecurityState, UserProfile } from "@/lib/models"
+import type { AppUser, Capability, PasskeyCredential, SecurityState, UserProfile } from "@/lib/models"
 
 type RawUserResponse = {
   id?: number | string
@@ -14,6 +14,7 @@ type RawUserResponse = {
   created_at?: string
   password_updated_at?: string | null
   two_factor_enabled?: boolean
+  capabilities?: string[]
 }
 
 type RawLoginActivityEntry = {
@@ -103,6 +104,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
       group: buildGroupLabel(role, raw.group),
       registeredAt: formatDateTimeToSeconds(raw.created_at, timezone),
       twoFactorEnabled: Boolean(raw.two_factor_enabled),
+      capabilities: (raw.capabilities ?? []).map(String) as Capability[],
     },
     profile: {
       username,

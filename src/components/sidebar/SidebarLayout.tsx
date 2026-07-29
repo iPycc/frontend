@@ -56,13 +56,19 @@ export function SidebarLayout() {
     settings,
     loadDirectoryFolders,
     getFolderTreePageState,
+    currentUser,
   } = useAppState()
+  const isGuest = currentUser?.role === "guest"
   const { open, toggleSidebar } = useSidebar()
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
   const [sharedMounts, setSharedMounts] = useState<SharedMount[]>([])
 
   useEffect(() => {
+    if (isGuest) {
+      setSharedMounts([])
+      return
+    }
     let cancelled = false
     void listShared()
       .then((items) => {
@@ -72,7 +78,7 @@ export function SidebarLayout() {
         if (!cancelled) setSharedMounts([])
       })
     return () => { cancelled = true }
-  }, [location.pathname])
+  }, [isGuest, location.pathname])
 
   const sharedOwners = useMemo(() => {
     return groupSharedOwners(sharedMounts)
@@ -215,7 +221,7 @@ export function SidebarLayout() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          {!isGuest ? <div className="space-y-1.5">
             <SidebarNavItem
               to="/app/shared-with-me"
               active={location.pathname === "/app/shared-with-me" && !sharedOwnerId}
@@ -281,7 +287,7 @@ export function SidebarLayout() {
               <IconCloudDownload size={17} />
               <span>离线下载</span>
             </SidebarNavItem>
-          </div>
+          </div> : null}
         </div>
       </SidebarContent>
 
@@ -292,6 +298,7 @@ export function SidebarLayout() {
             total={activeBucket.quota.total}
             quotaRatio={quotaRatio}
             formatBytes={formatBytes}
+            showDetails={!isGuest}
           />
         ) : null}
         <SidebarFooterContent className="mt-3" />

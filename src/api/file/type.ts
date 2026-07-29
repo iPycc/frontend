@@ -23,6 +23,13 @@ export type ExplorerMount = {
   updated_at: string
 }
 
+export type MountUsage = {
+  mount_id: number
+  used_bytes: number
+  reserved_bytes: number
+  quota_bytes?: number | null
+}
+
 export type ExplorerNode = {
   id: number
   owner_id: number

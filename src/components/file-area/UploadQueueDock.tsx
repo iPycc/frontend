@@ -21,10 +21,14 @@ import { FILE_LIMIT } from "@/lib/upload/pool"
 function buildQueueFile(fileName: string): FileNode {
   return {
     id: `queue-${fileName}`,
+    backendId: null,
     bucketId: "queue",
+    mountBackendId: 0,
     parentId: null,
+    parentBackendId: null,
     kind: "file",
     name: fileName,
+    size: 0,
     ext: fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() : undefined,
     updatedAt: "",
   }

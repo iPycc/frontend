@@ -4,6 +4,7 @@ import { useAppState } from "@/state/app"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -57,19 +58,28 @@ export function UserMenu() {
         </div>
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
-          个人资料
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
+            个人资料
+          </DropdownMenuItem>
+          {currentUser?.role === "admin" ? (
+            <DropdownMenuItem onClick={() => navigate("/admin/guests")}>
+              访客管理
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-red-600 focus:text-red-600"
-          onClick={async () => {
-            await logout()
-            navigate("/login", { replace: true })
-          }}
-        >
-          退出登录
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            className="text-red-600 focus:text-red-600"
+            onClick={async () => {
+              await logout()
+              navigate("/login", { replace: true })
+            }}
+          >
+            退出登录
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

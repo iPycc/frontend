@@ -118,7 +118,9 @@ export function useUploadRun({
           ),
           controller.signal
         )
-        sessionId = plan.session_id
+        const activeSessionId = plan.session_id
+        if (!activeSessionId) throw new Error("Upload session id is missing")
+        sessionId = activeSessionId
         if (plan.is_duplicate) {
           updateUploadQueueItem(id, {
             sessionId,
@@ -136,7 +138,6 @@ export function useUploadRun({
           status: "uploading",
         })
         const heartbeatController = new AbortController()
-        const activeSessionId = plan.session_id
         const sendHeartbeat = () => {
           if (heartbeatController.signal.aborted) return
           void uploadApiSchedulerRef.current
@@ -198,7 +199,7 @@ export function useUploadRun({
           const requested = uploadApiSchedulerRef.current.run(
             () => getUploadPartUrl(
               session.tokens.accessToken,
-              sessionId,
+              activeSessionId,
               partNumber,
               controller.signal
             ),
@@ -239,7 +240,7 @@ export function useUploadRun({
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
                     session.tokens.accessToken,
-                    sessionId,
+                    activeSessionId,
                     chunk,
                     partNumber,
                     chunk.size,
@@ -277,7 +278,7 @@ export function useUploadRun({
               () => uploadApiSchedulerRef.current.run(
                 () => recordRemotePart(
                   session.tokens.accessToken,
-                  sessionId,
+                  activeSessionId,
                   partNumber,
                   uploaded.etag,
                   chunk.size,
@@ -330,7 +331,7 @@ export function useUploadRun({
         })
         await retryRateLimited(
           () => uploadApiSchedulerRef.current.run(
-            () => completeUpload(session.tokens.accessToken, sessionId, completedParts),
+            () => completeUpload(session.tokens.accessToken, activeSessionId, completedParts),
             controller.signal
           ),
           controller.signal
@@ -346,10 +347,11 @@ export function useUploadRun({
       } catch (error) {
         const aborted = error instanceof DOMException && error.name === "AbortError" && controller.signal.aborted
         if (sessionId) {
+          const cleanupSessionId = sessionId
           try {
             const cleanupSignal = new AbortController().signal
             await uploadApiSchedulerRef.current.run(
-              () => abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed"),
+              () => abortUpload(session.tokens.accessToken, cleanupSessionId, aborted ? "client_abort" : "client_failed"),
               cleanupSignal
             )
           } catch {

@@ -21,7 +21,9 @@ export function SettingsLayout() {
   const isMobile = useIsMobile()
   const { currentUser } = useAppState()
   const availableTabs = settingsTabs.filter(
-    (item) => item.id !== "website" || currentUser?.role === "admin"
+    (item) => currentUser?.role === "guest"
+      ? item.id === "security"
+      : item.id !== "website" || currentUser?.role === "admin"
   )
   const currentTab =
     availableTabs.find((item) => location.pathname.endsWith(`/${item.id}`)) ??

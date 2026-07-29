@@ -2,7 +2,6 @@ import * as React from "react"
 import { IconFileOff, IconFileText, IconLoader2, IconRefresh } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
-import { AudioPlayer } from "@/components/audio/AudioPlayer"
 import { Button } from "@/components/ui/button"
 
 const ImagePreview = React.lazy(() => import("./ImagePreview").then((module) => ({ default: module.ImagePreview })))
@@ -11,6 +10,7 @@ const PdfPreview = React.lazy(() => import("./PdfPreview").then((module) => ({ d
 const TextPreview = React.lazy(() => import("./TextPreview").then((module) => ({ default: module.TextPreview })))
 const OfficePreview = React.lazy(() => import("./OfficePreview").then((module) => ({ default: module.OfficePreview })))
 const ArchivePreview = React.lazy(() => import("./ArchivePreview").then((module) => ({ default: module.ArchivePreview })))
+const AudioPlayer = React.lazy(() => import("@/components/audio/AudioPlayer").then((module) => ({ default: module.AudioPlayer })))
 
 function LazyFallback() {
   return <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在加载预览器</div>

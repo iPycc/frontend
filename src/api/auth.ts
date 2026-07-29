@@ -1,5 +1,5 @@
 import { requestJson } from "./client"
-import type { AppUser, AuthSession, AuthTokens } from "@/lib/models"
+import type { AppUser, AuthSession, AuthTokens, Capability } from "@/lib/models"
 
 let refreshRequestInFlight: Promise<AuthTokens> | null = null
 
@@ -179,6 +179,9 @@ export function normalizeUser(raw: Record<string, unknown>): AppUser {
   const group = buildGroupLabel(role, raw.group)
   const avatar = String(raw.avatar ?? buildAvatar(username))
   const registeredAt = formatDateTimeToSeconds(raw.registeredAt ?? raw.registered_at ?? raw.created_at)
+  const capabilities = Array.isArray(raw.capabilities)
+    ? raw.capabilities.map(String) as Capability[]
+    : []
 
   return {
     id: uid,
@@ -188,6 +191,7 @@ export function normalizeUser(raw: Record<string, unknown>): AppUser {
     role,
     group,
     registeredAt,
+    capabilities,
   }
 }
 

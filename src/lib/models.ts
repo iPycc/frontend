@@ -7,6 +7,19 @@ export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "comple
 
 export type StorageStrategyKey = "tencent" | "local" | "aliyun"
 export type UserRole = "admin" | "user" | "guest"
+export type Capability =
+  | "file.read"
+  | "file.write"
+  | "file.copy"
+  | "file.edit"
+  | "share.manage"
+  | "shared.mount"
+  | "task.manage"
+  | "mount.manage"
+  | "profile.manage"
+  | "security.manage"
+  | "password.change"
+  | "admin"
 
 export interface UserProfile {
   username: string
@@ -50,6 +63,11 @@ export interface AppUser {
   group: string
   registeredAt: string
   twoFactorEnabled?: boolean
+  capabilities: Capability[]
+}
+
+export function hasCapability(user: AppUser | null | undefined, capability: Capability) {
+  return Boolean(user?.capabilities.includes(capability))
 }
 
 export interface AuthTokens {
@@ -89,14 +107,14 @@ export interface BucketStrategy {
 
 export interface BucketMount {
   id: string
-  backendId?: number
-  policyId?: number
+  backendId: number
+  policyId: number
   name: string
   provider: string
   providerLabel?: string
-  storageType?: StorageStrategyKey
+  storageType: StorageStrategyKey
   ownerId?: string
-  ownerBackendId?: number
+  ownerBackendId: number
   region?: string
   endpoint?: string
   bucket?: string
@@ -134,15 +152,15 @@ export interface BucketMount {
 
 export interface FileNode {
   id: string
-  backendId?: number
+  backendId: number | null
   bucketId: string
-  mountBackendId?: number
+  mountBackendId: number
   parentId: string | null
-  parentBackendId?: number | null
+  parentBackendId: number | null
   kind: "folder" | "file"
   name: string
   ext?: string
-  size?: number
+  size: number
   updatedAt: string
   createdAt?: string
   mediaType?: MediaType

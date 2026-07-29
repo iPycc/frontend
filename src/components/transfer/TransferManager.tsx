@@ -54,10 +54,14 @@ type TransferItem = {
 function buildQueueFile(fileName: string): FileNode {
   return {
     id: `transfer-${fileName}`,
+    backendId: null,
     bucketId: "transfer",
+    mountBackendId: 0,
     parentId: null,
+    parentBackendId: null,
     kind: "file",
     name: fileName,
+    size: 0,
     ext: fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() : undefined,
     updatedAt: "",
   }

@@ -32,7 +32,8 @@ import { isPasskeyCanceled, normalizeToastDescription } from "./security/util"
 
 export function SecuritySettingsPage() {
   const navigate = useNavigate()
-  const { authSession, logout, security, settings, updateSecurity } = useAppState()
+  const { authSession, currentUser, logout, security, settings, updateSecurity } = useAppState()
+  const isGuest = currentUser?.role === "guest"
   const token = authSession?.tokens.accessToken ?? null
 
   const [isLoadingActivity, setIsLoadingActivity] = React.useState(false)
@@ -49,6 +50,10 @@ export function SecuritySettingsPage() {
   const editingContainerRef = React.useRef<HTMLDivElement | null>(null)
 
   const loadLoginActivity = React.useCallback(async () => {
+    if (isGuest) {
+      setLoginActivity([])
+      return
+    }
     if (!token) {
       setLoginActivity([])
       return
@@ -67,13 +72,17 @@ export function SecuritySettingsPage() {
     } finally {
       setIsLoadingActivity(false)
     }
-  }, [settings.timezone, token])
+  }, [isGuest, settings.timezone, token])
 
   React.useEffect(() => {
     void loadLoginActivity()
   }, [loadLoginActivity])
 
   const loadPasskeyList = React.useCallback(async () => {
+    if (isGuest) {
+      updateSecurity({ passkeysEnabled: false, passkeys: [] })
+      return
+    }
     if (!token) {
       updateSecurity({
         passkeysEnabled: false,
@@ -105,7 +114,7 @@ export function SecuritySettingsPage() {
     } finally {
       setIsLoadingPasskeys(false)
     }
-  }, [settings.timezone, token, updateSecurity])
+  }, [isGuest, settings.timezone, token, updateSecurity])
 
   React.useEffect(() => {
     void loadPasskeyList()
@@ -249,6 +258,28 @@ export function SecuritySettingsPage() {
     } finally {
       setSavingPasskeyId(null)
     }
+  }
+
+  if (isGuest) {
+    return (
+      <div className="max-w-2xl">
+        <section className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-4">
+          <div>
+            <div className="text-sm font-medium">修改密码</div>
+            <div className="mt-1 text-sm text-muted-foreground">访客只能维护自己的登录密码，账号资料和存储空间由管理员管理。</div>
+          </div>
+          <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>修改密码</Button>
+        </section>
+        <ChangePasswordDialog
+          open={passwordDialogOpen}
+          onOpenChange={setPasswordDialogOpen}
+          token={token ?? ""}
+          userEmail={authSession?.user.email ?? ""}
+          hasPasskeys={false}
+          onSuccess={handlePasswordChanged}
+        />
+      </div>
+    )
   }
 
   return (

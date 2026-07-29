@@ -8,6 +8,7 @@ import type {
   ExplorerNodePage,
   ExplorerNodeSearchResult,
   ListNodePageOptions,
+  MountUsage,
   NodeActivity,
   RenameNodeInput,
   RestoreNodesInput,
@@ -18,6 +19,10 @@ export async function listUserMounts(token: string) {
   return requestJson<ExplorerMount[]>("/explorer/mount", {
     token,
   })
+}
+
+export async function listMountUsage(token: string) {
+  return requestJson<MountUsage[]>("/mounts/usage", { token })
 }
 
 export async function listNodes(token: string, mountId: number, parentId?: number | null) {

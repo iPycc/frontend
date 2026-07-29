@@ -5,6 +5,7 @@ import {
   buildPreviewImageUrl,
   buildPreviewVideoPosterUrl,
   listUserMounts,
+  listMountUsage,
   type ExplorerMount,
   type ExplorerNode,
 } from "@/api/files"
@@ -166,11 +167,49 @@ export type AppStateValue = {
 
 export const AppStateContext = React.createContext<AppStateValue | null>(null)
 
+export type AuthStateValue = Pick<
+  AppStateValue,
+  | "auth"
+  | "authSession"
+  | "authReady"
+  | "currentUser"
+  | "isAuthenticated"
+  | "login"
+  | "loginWithPasskey"
+  | "verifyTwoFactor"
+  | "register"
+  | "logout"
+>
+
+export type SettingsStateValue = Pick<
+  AppStateValue,
+  | "authSession"
+  | "currentUser"
+  | "profile"
+  | "settings"
+  | "security"
+  | "loginActivity"
+  | "effectiveTheme"
+  | "setThemeMode"
+  | "updateSettings"
+  | "updateProfile"
+  | "verifyPassword"
+  | "resetPasswordVerification"
+  | "updateSecurity"
+  | "logout"
+>
+
+export const AuthStateContext = React.createContext<AuthStateValue | null>(null)
+export const SettingsStateContext = React.createContext<SettingsStateValue | null>(null)
+
 export const EMPTY_BUCKET: BucketMount = {
   id: "",
+  backendId: 0,
+  policyId: 0,
   name: "我的文件",
   provider: "Local Storage",
   storageType: "local",
+  ownerBackendId: 0,
   strategy: {
     multipartThreshold: "25 MB",
     partSize: "25 MB",
@@ -465,6 +504,7 @@ export function removeCachedSubtrees(nodes: FileNode[], directIds: Set<string>) 
 export type WorkspaceBasics = {
   profilePayload: Awaited<ReturnType<typeof getCurrentProfile>>
   rawMounts: ExplorerMount[]
+  mountUsage: Awaited<ReturnType<typeof listMountUsage>>
 }
 
 let workspaceBasicsRequest: { token: string; promise: Promise<WorkspaceBasics> } | null = null
@@ -474,8 +514,8 @@ export async function fetchWorkspaceBasics(token: string): Promise<WorkspaceBasi
     return workspaceBasicsRequest.promise
   }
 
-  const promise = Promise.all([getCurrentProfile(token), listUserMounts(token)]).then(
-    ([profilePayload, rawMounts]) => ({ profilePayload, rawMounts })
+  const promise = Promise.all([getCurrentProfile(token), listUserMounts(token), listMountUsage(token)]).then(
+    ([profilePayload, rawMounts, mountUsage]) => ({ profilePayload, rawMounts, mountUsage })
   )
   workspaceBasicsRequest = { token, promise }
 
@@ -491,10 +531,14 @@ export async function fetchWorkspaceBasics(token: string): Promise<WorkspaceBasi
 export function createMountRootNode(bucket: BucketMount): FileNode {
   return {
     id: bucket.rootNodeId,
+    backendId: null,
     bucketId: bucket.id,
+    mountBackendId: bucket.backendId,
     parentId: null,
+    parentBackendId: null,
     kind: "folder",
     name: bucket.name,
+    size: 0,
     updatedAt: bucket.updatedAt || bucket.createdAt,
     createdAt: bucket.createdAt,
     isSystemRoot: true,

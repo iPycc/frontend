@@ -6,6 +6,8 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from "@/components/ui/context-menu"
+import { hasCapability } from "@/lib/models"
+import { useAppState } from "@/state/app"
 
 interface ItemContextMenuProps {
   item: FileNode
@@ -36,6 +38,9 @@ export function ItemContextMenu({
   onPropertiesRequest,
   onCreateChildFolder,
 }: ItemContextMenuProps) {
+  const { currentUser } = useAppState()
+  const canCopy = hasCapability(currentUser, "file.copy")
+  const canShare = hasCapability(currentUser, "share.manage")
   const multiple = ids.length > 1
   const isFolder = item.kind === "folder"
 
@@ -55,8 +60,8 @@ export function ItemContextMenu({
       ) : null}
       <ContextMenuSeparator />
       <ContextMenuItem onClick={() => onDownloadRequest(ids)}>下载</ContextMenuItem>
-      <ContextMenuItem onClick={() => onShareRequest(ids)}>分享</ContextMenuItem>
-      <ContextMenuItem onClick={() => onCopyRequest(ids)}>复制</ContextMenuItem>
+      {canShare ? <ContextMenuItem onClick={() => onShareRequest(ids)}>分享</ContextMenuItem> : null}
+      {canCopy ? <ContextMenuItem onClick={() => onCopyRequest(ids)}>复制</ContextMenuItem> : null}
       <ContextMenuItem onClick={() => onCutRequest(ids)}>剪切</ContextMenuItem>
       <ContextMenuItem onClick={() => onRenameRequest(ids)}>重命名</ContextMenuItem>
       <ContextMenuItem onClick={() => onMoveRequest(ids)}>移动到…</ContextMenuItem>

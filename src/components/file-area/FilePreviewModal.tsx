@@ -32,8 +32,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { PropertiesPanelContent, usePropertiesPanel } from "@/components/shared/PropertiesPanel"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { type FileNode } from "@/lib/models"
+import { hasCapability, type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { useAppState } from "@/state/app"
 import { PreviewRenderer } from "./preview/PreviewRenderer"
 
 interface FilePreviewModalProps {
@@ -75,6 +76,9 @@ export function FilePreviewModal({
   onPrev,
   onNext,
 }: FilePreviewModalProps) {
+  const { currentUser } = useAppState()
+  const canCopy = hasCapability(currentUser, "file.copy")
+  const canShare = hasCapability(currentUser, "share.manage")
   const { bucketName, formatBytes } = usePropertiesPanel()
   const isMobile = useIsMobile()
   const backendId = file?.backendId
@@ -277,11 +281,11 @@ export function FilePreviewModal({
               <DropdownMenu>
                 <DropdownMenuTrigger className={cn("inline-flex items-center justify-center rounded-md", iconButtonClass)} aria-label="更多操作"><IconDots size={20} /></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => onCopy([file.id])}><IconCopy />复制</DropdownMenuItem>
+                  {canCopy ? <DropdownMenuItem onClick={() => onCopy([file.id])}><IconCopy />复制</DropdownMenuItem> : null}
                   <DropdownMenuItem onClick={() => onCut([file.id])}><IconCut />剪切</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onRename([file.id])}><IconEdit />重命名</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onMove([file.id])}><IconArrowMoveRight />移动到…</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onShare([file.id])}><IconShare3 />分享</DropdownMenuItem>
+                  {canShare ? <DropdownMenuItem onClick={() => onShare([file.id])}><IconShare3 />分享</DropdownMenuItem> : null}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => onDelete([file.id])}><IconTrash />删除</DropdownMenuItem>
                 </DropdownMenuContent>
