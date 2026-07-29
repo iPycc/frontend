@@ -223,7 +223,7 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
   const dialogTitle = mode === "setup" ? "开启两步验证" : "关闭两步验证"
   const dialogDescription =
     step === "confirm" && mode === "disable"
-      ? "身份已验证，请输入两步验证验证码后关闭。"
+      ? "请输入两步验证验证码；提交后服务器会同时校验身份验证材料。"
       : mode === "setup"
         ? "为了保护你的账号安全，请先验证当前密码或通行密钥。"
         : "请输入当前两步验证验证码，并验证账号密码或通行密钥。"
@@ -302,7 +302,9 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
         {step === "confirm" && mode === "disable" ? (
           <div className="flex flex-col gap-4">
             <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
-              {passkeyCredential ? "已通过通行密钥验证身份" : "已通过密码验证身份"}
+              {passkeyCredential
+                ? "通行密钥响应已就绪，关闭两步验证时将由服务器完成校验"
+                : "密码将在关闭两步验证时由服务器校验"}
             </div>
             <FieldGroup>
               <Field>

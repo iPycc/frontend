@@ -30,6 +30,39 @@ const defaultSettings: WebsiteSettings = {
   filing_text: "",
 }
 
+type SiteUrlAssessment = {
+  valid: boolean
+  secure: boolean
+  scheme: string
+  hostname: string
+}
+
+function assessSiteUrl(value: string): SiteUrlAssessment {
+  const candidate = value.trim()
+  if (!candidate) {
+    return { valid: true, secure: true, scheme: "", hostname: "" }
+  }
+
+  try {
+    const parsed = new URL(candidate)
+    const scheme = parsed.protocol.replace(":", "").toLowerCase()
+    const hostname = parsed.hostname.toLowerCase()
+    const isLocal = hostname === "localhost"
+      || hostname.endsWith(".localhost")
+      || hostname.startsWith("127.")
+      || hostname === "[::1]"
+    const valid = (scheme === "http" || scheme === "https") && Boolean(hostname)
+    return {
+      valid,
+      secure: valid && (scheme === "https" || isLocal),
+      scheme,
+      hostname,
+    }
+  } catch {
+    return { valid: false, secure: false, scheme: "", hostname: "" }
+  }
+}
+
 export function WebsiteSettingsPage() {
   const { authSession } = useAppState()
   const token = authSession?.tokens.accessToken ?? null
@@ -64,6 +97,24 @@ export function WebsiteSettingsPage() {
   const isDirty = React.useMemo(() => {
     return JSON.stringify(settings) !== JSON.stringify(initialSettings)
   }, [settings, initialSettings])
+  const siteUrlAssessment = React.useMemo(
+    () => assessSiteUrl(settings.site_url),
+    [settings.site_url],
+  )
+  const initialSiteUrlAssessment = React.useMemo(
+    () => assessSiteUrl(initialSettings.site_url),
+    [initialSettings.site_url],
+  )
+  const siteUrlChanged = settings.site_url.trim().replace(/\/$/, "")
+    !== initialSettings.site_url.trim().replace(/\/$/, "")
+  const rpIdChanged = Boolean(
+    siteUrlChanged
+      && initialSiteUrlAssessment.hostname
+      && siteUrlAssessment.hostname
+      && initialSiteUrlAssessment.hostname !== siteUrlAssessment.hostname,
+  )
+  const siteUrlBlocksSave = siteUrlChanged
+    && (!siteUrlAssessment.valid || !siteUrlAssessment.secure)
 
   const updateField = <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }))
@@ -74,6 +125,12 @@ export function WebsiteSettingsPage() {
     try {
       const response = await getDetectedSiteUrl()
       updateField("site_url", response.site_url)
+      if (!response.is_secure_context) {
+        toast.warning("检测到 HTTP 地址", {
+          description: "非本地站点请先启用 HTTPS，再保存网站地址。",
+        })
+        return
+      }
       toast.success("已获取当前网站地址", {
         description: response.site_url,
       })
@@ -89,6 +146,14 @@ export function WebsiteSettingsPage() {
   const handleSave = async () => {
     if (!token) {
       toast.error("保存失败", { description: "请先登录" })
+      return
+    }
+    if (siteUrlBlocksSave) {
+      toast.error("网站地址不可用", {
+        description: siteUrlAssessment.valid
+          ? "非本地网站地址必须使用 HTTPS。"
+          : "请输入包含 http:// 或 https:// 的有效网站地址。",
+      })
       return
     }
     setSaving(true)
@@ -120,6 +185,7 @@ export function WebsiteSettingsPage() {
             onChange={(e) => updateField("site_url", e.target.value)}
             placeholder="https://cloud.example.com"
             disabled={loading}
+            aria-invalid={siteUrlChanged && (!siteUrlAssessment.valid || !siteUrlAssessment.secure)}
             className="flex-1"
           />
           <Button
@@ -133,6 +199,23 @@ export function WebsiteSettingsPage() {
             {detecting ? "检测中..." : "自动检测"}
           </Button>
         </div>
+        {siteUrlChanged && !siteUrlAssessment.valid ? (
+          <p className="text-sm text-destructive">
+            请输入包含 http:// 或 https:// 的完整网站地址。
+          </p>
+        ) : siteUrlChanged && !siteUrlAssessment.secure ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            非本地 HTTP 站点无法使用通行密钥，密码与 TOTP 验证数据也缺少传输加密。请先启用 HTTPS。
+          </p>
+        ) : rpIdChanged ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            域名变更后，已有通行密钥不能在新域名使用，需要重新注册；TOTP 密钥和密码不受影响。
+          </p>
+        ) : siteUrlChanged && siteUrlAssessment.scheme === "https" ? (
+          <p className="text-sm text-muted-foreground">
+            将使用 HTTPS 作为通行密钥验证来源；保存后请重新发起尚未完成的验证挑战。
+          </p>
+        ) : null}
       </FieldBlock>
 
       <FieldBlock label="网站标题" hint="显示在浏览器标签页与顶部导航，留空使用默认名称">
@@ -214,7 +297,7 @@ export function WebsiteSettingsPage() {
         <div className="sticky bottom-4 z-30 flex justify-end pt-2">
           <Button
             onClick={handleSave}
-            disabled={saving || loading}
+            disabled={saving || loading || siteUrlBlocksSave}
             className="gap-2 shadow-lg"
           >
             <IconDeviceFloppy size={16} />

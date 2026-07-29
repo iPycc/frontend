@@ -208,7 +208,7 @@ export function ChangePasswordDialog({ open, onOpenChange, token, userEmail, has
           <div className="flex flex-col gap-4">
             {authMethod === "passkey" ? (
               <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary">
-                已通过通行密钥验证身份
+                通行密钥响应已就绪，提交修改时将由服务器完成校验
               </div>
             ) : null}
             <FieldGroup>

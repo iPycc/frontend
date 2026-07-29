@@ -20,11 +20,17 @@ export type WebsiteSettingsResponse = {
 
 export type DetectedSiteUrlResponse = {
   site_url: string
+  scheme: string
+  is_secure_context: boolean
 }
 
 export type SiteUrlStatusResponse = {
   saved_site_url: string
   detected_site_url: string
+  saved_scheme: string
+  detected_scheme: string
+  detected_is_secure_context: boolean
+  passkey_rp_id_changed: boolean
   matches: boolean
 }
 
