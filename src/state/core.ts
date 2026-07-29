@@ -73,6 +73,9 @@ export type PageLoadState = {
   loaded: boolean
   nextCursor: string | null
   queryKey: string
+  totalCount: number
+  folderCount: number
+  fileCount: number
 }
 
 export type PageLoadOptions = {
@@ -86,6 +89,9 @@ export const EMPTY_PAGE_STATE: PageLoadState = {
   loaded: false,
   nextCursor: null,
   queryKey: "",
+  totalCount: 0,
+  folderCount: 0,
+  fileCount: 0,
 }
 
 export function directoryPageKey(mode: "content" | "folders", bucketId: string, parentId: string) {

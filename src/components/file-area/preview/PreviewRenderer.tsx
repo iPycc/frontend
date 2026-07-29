@@ -1,8 +1,9 @@
 import * as React from "react"
-import { IconFileOff, IconFileText, IconLoader2, IconRefresh } from "@tabler/icons-react"
+import { IconFileOff, IconFileText, IconRefresh } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 const ImagePreview = React.lazy(() => import("./ImagePreview").then((module) => ({ default: module.ImagePreview })))
 const MediaPreview = React.lazy(() => import("./MediaPreview").then((module) => ({ default: module.MediaPreview })))
@@ -11,10 +12,6 @@ const TextPreview = React.lazy(() => import("./TextPreview").then((module) => ({
 const OfficePreview = React.lazy(() => import("./OfficePreview").then((module) => ({ default: module.OfficePreview })))
 const ArchivePreview = React.lazy(() => import("./ArchivePreview").then((module) => ({ default: module.ArchivePreview })))
 const AudioPlayer = React.lazy(() => import("@/components/audio/AudioPlayer").then((module) => ({ default: module.AudioPlayer })))
-
-function LazyFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在加载预览器</div>
-}
 
 export function PreviewRenderer({
   manifest,
@@ -45,7 +42,7 @@ export function PreviewRenderer({
     }
   })()
 
-  return <React.Suspense fallback={<LazyFallback />}>{renderer}</React.Suspense>
+  return <React.Suspense fallback={<PreviewSkeleton kind={manifest.kind} compact={compactAudio} />}>{renderer}</React.Suspense>
 }
 
 function UnknownPreview({ manifest }: { manifest: PreviewManifest }) {
@@ -60,7 +57,7 @@ function UnknownPreview({ manifest }: { manifest: PreviewManifest }) {
       metadata: { ...manifest.metadata, max_bytes: 5 * 1024 * 1024, text_encoding: encoding },
       capabilities: [],
     }
-    return <React.Suspense fallback={<LazyFallback />}><TextPreview manifest={textManifest} /></React.Suspense>
+    return <React.Suspense fallback={<PreviewSkeleton kind="text" />}><TextPreview manifest={textManifest} /></React.Suspense>
   }
 
   const extension = String(manifest.metadata.extension || manifest.name.split(".").pop() || "未知")

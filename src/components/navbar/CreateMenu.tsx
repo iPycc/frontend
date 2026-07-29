@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react"
+import { lazy, Suspense, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { IconFileText, IconFolderPlus, IconFolderUp, IconMarkdown, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { CreateFileDialog, CreateFolderDialog, type NewTextFileType } from "@/components/file-area"
+import type { NewTextFileType } from "@/components/file-area/CreateFileDialog"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -15,6 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+const CreateFileDialog = lazy(() => import("@/components/file-area/CreateFileDialog").then((module) => ({ default: module.CreateFileDialog })))
+const CreateFolderDialog = lazy(() => import("@/components/file-area/CreateFolderDialog").then((module) => ({ default: module.CreateFolderDialog })))
 
 export function CreateMenu() {
   const navigate = useNavigate()
@@ -88,25 +91,29 @@ export function CreateMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateFolderDialog
-        open={createFolderOpen}
-        onOpenChange={setCreateFolderOpen}
-        title="新建文件夹"
-        description="创建一个新文件夹来整理文件。"
-        defaultName="新建文件夹"
-        locationLabel="当前文件夹"
-        onSubmit={(name) => void submitCreateFolder(name)}
-      />
-      {createFileType ? (
-        <CreateFileDialog
-          open
-          fileType={createFileType}
-          onOpenChange={(open) => {
-            if (!open) setCreateFileType(null)
-          }}
-          onSubmit={submitCreateFile}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {createFolderOpen ? (
+          <CreateFolderDialog
+            open
+            onOpenChange={setCreateFolderOpen}
+            title="新建文件夹"
+            description="创建一个新文件夹来整理文件。"
+            defaultName="新建文件夹"
+            locationLabel="当前文件夹"
+            onSubmit={(name) => void submitCreateFolder(name)}
+          />
+        ) : null}
+        {createFileType ? (
+          <CreateFileDialog
+            open
+            fileType={createFileType}
+            onOpenChange={(open) => {
+              if (!open) setCreateFileType(null)
+            }}
+            onSubmit={submitCreateFile}
+          />
+        ) : null}
+      </Suspense>
     </>
   )
 }

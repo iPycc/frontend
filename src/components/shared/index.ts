@@ -4,7 +4,6 @@ export { ModeToggle } from "./ModeToggle"
 export { SiteUrlMismatchAlert } from "./SiteUrlMismatchAlert"
 export {
   PropertiesPanel,
-  PropertiesPanelProvider,
   PropertiesPanelContent,
-  usePropertiesPanel,
 } from "./PropertiesPanel"
+export { PropertiesPanelProvider, usePropertiesPanel } from "./PropertiesPanelContext"

@@ -13,6 +13,7 @@ import {
 import type { PreviewManifest } from "@/api/files"
 import { previewSourceUrls } from "@/lib/preview-assets"
 import { cn } from "@/lib/utils"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 const videoControlButton = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
 
@@ -275,7 +276,7 @@ const toggleFullscreen = () => {
         </div>
       ) : null}
       {failed ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0b0c0e] px-6 text-center text-sm text-white/70">浏览器无法解码此媒体，兼容版本也尚未生成。仍可下载原文件。</div> : null}
-      {loading && manifest.status !== "processing" && !failed ? <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/65"><IconLoader2 size={22} className="animate-spin" /><span className="ml-2 text-sm">正在读取媒体信息</span></div> : null}
+      {loading && manifest.status !== "processing" && !failed ? <PreviewSkeleton kind="video" className="pointer-events-none absolute inset-0 z-10" /> : null}
 
       <div
         className={cn(

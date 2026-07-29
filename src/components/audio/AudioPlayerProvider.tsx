@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { buildDownloadUrl, getPreviewManifest, peekPreviewManifest, type PreviewManifest } from "@/api/files"
 import { requestResponse } from "@/api/client"
 import { Button } from "@/components/ui/button"
+import { PreviewSkeleton } from "@/components/file-area/preview/PreviewSkeleton"
 import type { FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
@@ -160,12 +161,9 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
                 {error}
               </div>
             ) : loading || !manifest ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-                <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                正在读取音频信息
-              </div>
+              <PreviewSkeleton kind="audio" compact={minimized} />
             ) : (
-              <React.Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-muted-foreground">正在加载播放器…</div>}>
+              <React.Suspense fallback={<PreviewSkeleton kind="audio" compact={minimized} />}>
                 <AudioPlayer
                   manifest={manifest}
                   fallbackName={activeFile.name}

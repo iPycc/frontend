@@ -2,7 +2,6 @@ import * as React from "react"
 import OpenSeadragon from "openseadragon"
 import {
   IconArrowsMaximize,
-  IconLoader2,
   IconRotate,
   IconRotateClockwise,
   IconZoomIn,
@@ -17,6 +16,7 @@ import {
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { previewSourceUrls } from "@/lib/preview-assets"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 type ImagePreviewProps = {
   manifest: PreviewManifest
@@ -103,10 +103,7 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
           />
         ) : null}
         {!loaded && !failed ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/70">
-            <IconLoader2 className="animate-spin" size={22} />
-            <span className="ml-2 text-sm">正在加载图片</span>
-          </div>
+          <PreviewSkeleton kind="image" className="pointer-events-none absolute inset-0 z-10" />
         ) : null}
         {failed ? (
           <div className="flex h-full items-center justify-center text-sm text-white/65">图片加载失败，请重试或下载原文件</div>

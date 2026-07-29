@@ -7,6 +7,7 @@ import { type FileNode } from "@/lib/models"
 import { requestResponse } from "@/api/client"
 import { buildPreviewAudioCoverUrl, buildPreviewImageUrl, buildPreviewUrl, buildPreviewVideoPosterUrl } from "@/api/files"
 import { useAppState } from "@/state/app"
+import { useNearViewport } from "@/hooks/use-near-viewport"
 import { cn, truncateFilename } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -69,9 +70,11 @@ export function FileCard({
   const [videoFrameReady, setVideoFrameReady] = useState(false)
   const [textPreview, setTextPreview] = useState("")
   const [textPreviewLoading, setTextPreviewLoading] = useState(false)
+  const { ref: previewHostRef, isNear: previewIsNear } = useNearViewport<HTMLDivElement>(hasThumbnail)
+  const previewActive = hasThumbnail && previewIsNear
 
   useEffect(() => {
-    if (!hasThumbnail || !isText || !item.backendId) {
+    if (!previewActive || !isText || !item.backendId) {
       setTextPreview("")
       setTextPreviewLoading(false)
       return
@@ -92,7 +95,7 @@ export function FileCard({
         if (!controller.signal.aborted) setTextPreviewLoading(false)
       })
     return () => controller.abort()
-  }, [hasThumbnail, isText, item.backendId, item.updatedAt])
+  }, [previewActive, isText, item.backendId, item.updatedAt])
 
   if (!showThumbnail || item.kind === "folder") {
     return (
@@ -167,6 +170,7 @@ export function FileCard({
     <ContextMenu>
       <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
         <div
+          ref={previewHostRef}
           className={cn(
             "group relative flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
             selected
@@ -186,7 +190,7 @@ export function FileCard({
             }}
             className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-muted-foreground/5"
           >
-            {hasPreviewImage && !imageFailed ? (
+            {previewActive && hasPreviewImage && !imageFailed ? (
               <>
                 {!imageLoaded && <Skeleton className="absolute inset-0 h-full w-full" />}
                 <img
@@ -203,19 +207,19 @@ export function FileCard({
                   onError={() => setImageFailed(true)}
                 />
               </>
-            ) : hasThumbnail && isPdf && item.backendId ? (
+            ) : previewActive && isPdf && item.backendId ? (
               <PdfCardPreview
                 nodeId={item.backendId}
                 version={item.updatedAt}
                 fallback={<FileGlyph item={item} size={64} />}
               />
-            ) : hasThumbnail && isOffice && item.backendId ? (
+            ) : previewActive && isOffice && item.backendId ? (
               <OfficeCardPreview
                 nodeId={item.backendId}
                 version={item.updatedAt}
                 fallback={<FileGlyph item={item} size={64} />}
               />
-            ) : hasThumbnail && item.mediaType === "video" && item.backendId ? (
+            ) : previewActive && item.mediaType === "video" && item.backendId ? (
               <>
                 {!videoFrameReady ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
                 <video
@@ -232,7 +236,7 @@ export function FileCard({
                   aria-label={`${item.name} 视频封面`}
                 />
               </>
-            ) : hasThumbnail && isText ? (
+            ) : previewActive && isText ? (
               <div className="absolute inset-0 overflow-hidden bg-background p-3">
                 {textPreviewLoading ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
                 <pre className="pointer-events-none h-full select-none overflow-hidden whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-[1.55] text-foreground">

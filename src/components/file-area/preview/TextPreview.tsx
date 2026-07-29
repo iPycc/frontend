@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
 import { MarkdownPreview } from "./MarkdownPreview"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 const languageByExtension: Record<string, string> = {
   c: "C", cpp: "C++", cs: "C#", css: "CSS", go: "Go", h: "C++", html: "HTML",
@@ -80,7 +81,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     return () => controller.abort()
   }, [isMarkdown, manifest, maxBytes, textEncoding, truncated])
 
-  if (loading) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在加载文本</div>
+  if (loading) return <PreviewSkeleton kind="text" />
   if (error) return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
 
   return (

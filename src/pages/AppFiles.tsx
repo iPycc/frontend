@@ -1,20 +1,28 @@
 import * as React from "react"
 import { useLocation } from "react-router-dom"
 import { toast } from "sonner"
-import { motion, AnimatePresence } from "motion/react"
 
-import { FileArea, RenameDialog, MoveDialog, CreateShareDialog, CreateFolderDialog, DeleteConfirmDialog, FilePreviewModal } from "@/components/file-area"
+import { FileAreaPending } from "@/components/file-area/FileAreaPending"
 import { Toolbar } from "@/components/toolbar/Toolbar"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
-import { usePropertiesPanel } from "@/components/shared/PropertiesPanel"
+import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest, recordNodeOpen } from "@/api/files"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
-import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
-import { TransferManager } from "@/components/transfer"
 import { useFileDownload } from "@/hooks/use-file-download"
+import { loadFileViewPreferences, saveFileViewPreferences } from "@/lib/file-view-preferences"
+
+const RenameDialog = React.lazy(() => import("@/components/file-area/RenameDialog").then((module) => ({ default: module.RenameDialog })))
+const FileArea = React.lazy(() => import("@/components/file-area/FileAreaLayout").then((module) => ({ default: module.FileArea })))
+const MoveDialog = React.lazy(() => import("@/components/file-area/MoveDialog").then((module) => ({ default: module.MoveDialog })))
+const CreateShareDialog = React.lazy(() => import("@/components/file-area/CreateShareDialog").then((module) => ({ default: module.CreateShareDialog })))
+const CreateFolderDialog = React.lazy(() => import("@/components/file-area/CreateFolderDialog").then((module) => ({ default: module.CreateFolderDialog })))
+const DeleteConfirmDialog = React.lazy(() => import("@/components/file-area/DeleteConfirmDialog").then((module) => ({ default: module.DeleteConfirmDialog })))
+const FilePreviewModal = React.lazy(() => import("@/components/file-area/FilePreviewModal").then((module) => ({ default: module.FilePreviewModal })))
+const DownloadMethodDialog = React.lazy(() => import("@/components/download/DownloadMethodDialog").then((module) => ({ default: module.DownloadMethodDialog })))
+const TransferManager = React.lazy(() => import("@/components/transfer/TransferManager").then((module) => ({ default: module.TransferManager })))
 
 const categoryMap = {
   image: "图片",
@@ -84,10 +92,8 @@ export function AppFiles() {
     nodes: panelNodes,
   } = usePropertiesPanel()
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
-  const [viewMode, setViewMode] = React.useState<ViewMode>("grid")
-  const [sortValue, setSortValue] = React.useState<SortValue>("name-asc")
-  const [thumbnailsEnabled, setThumbnailsEnabled] = React.useState(true)
-  const [pageSize, setPageSize] = React.useState(200)
+  const [viewPreferences, setViewPreferences] = React.useState(loadFileViewPreferences)
+  const { viewMode, sortValue, thumbnailsEnabled, pageSize } = viewPreferences
   const [renameTargetId, setRenameTargetId] = React.useState<string | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
   const [moveIds, setMoveIds] = React.useState<string[]>([])
@@ -100,6 +106,23 @@ export function AppFiles() {
   const [previewFile, setPreviewFile] = React.useState<FileNode | null>(null)
   const [resolvedFolderId, setResolvedFolderId] = React.useState<string | null>(null)
   const [routeLoading, setRouteLoading] = React.useState(true)
+
+  const setViewMode = React.useCallback((value: ViewMode) => {
+    setViewPreferences((current) => ({ ...current, viewMode: value }))
+  }, [])
+  const setSortValue = React.useCallback((value: SortValue) => {
+    setViewPreferences((current) => ({ ...current, sortValue: value }))
+  }, [])
+  const setThumbnailsEnabled = React.useCallback((value: boolean) => {
+    setViewPreferences((current) => ({ ...current, thumbnailsEnabled: value }))
+  }, [])
+  const setPageSize = React.useCallback((value: number) => {
+    setViewPreferences((current) => ({ ...current, pageSize: value }))
+  }, [])
+
+  React.useEffect(() => {
+    saveFileViewPreferences(viewPreferences)
+  }, [viewPreferences])
 
   const searchParams = new URLSearchParams(location.search)
   const rawCategory = searchParams.get("type")
@@ -501,15 +524,8 @@ export function AppFiles() {
         }}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname + location.search}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="flex min-w-0 flex-1"
-          >
+        <div key={location.pathname + location.search} className="flex min-w-0 flex-1">
+          <React.Suspense fallback={<FileAreaPending />}>
             <FileArea
               items={items}
               loading={routeLoading || pageState.loading}
@@ -544,88 +560,106 @@ export function AppFiles() {
               onViewModeChange={setViewMode}
               onSortChange={setSortValue}
             />
-          </motion.div>
-        </AnimatePresence>
+          </React.Suspense>
+        </div>
 
-        <TransferManager
-          parentId={currentFolderId}
-          downloadTask={fileDownload.task}
-          onCancelDownload={fileDownload.cancel}
-          onDismissDownload={fileDownload.dismiss}
-          placement="content"
-        />
+        <React.Suspense fallback={null}>
+          <TransferManager
+            parentId={currentFolderId}
+            downloadTask={fileDownload.task}
+            onCancelDownload={fileDownload.cancel}
+            onDismissDownload={fileDownload.dismiss}
+            placement="content"
+          />
+        </React.Suspense>
       </div>
-      <DownloadMethodDialog
-        open={downloadDialogNodes.length > 0}
-        itemCount={downloadDialogNodes.length}
-        supportsDirectoryDownload={fileDownload.supportsDirectoryDownload}
-        onOpenChange={(open) => !open && setDownloadDialogNodes([])}
-        onDirectoryDownload={() => void downloadAsDirectory()}
-        onArchiveDownload={() => void downloadAsArchive()}
-      />
+      <React.Suspense fallback={null}>
+        {downloadDialogNodes.length > 0 ? (
+          <DownloadMethodDialog
+            open
+            itemCount={downloadDialogNodes.length}
+            supportsDirectoryDownload={fileDownload.supportsDirectoryDownload}
+            onOpenChange={(open) => !open && setDownloadDialogNodes([])}
+            onDirectoryDownload={() => void downloadAsDirectory()}
+            onArchiveDownload={() => void downloadAsArchive()}
+          />
+        ) : null}
 
-      <FilePreviewModal
-        key={previewFile?.id ?? "preview-closed"}
-        open={Boolean(previewFile)}
-        file={previewFile}
-        preloadFiles={adjacentPreviewFiles}
-        currentIndex={previewIndex}
-        totalCount={previewableFiles.length}
-        onClose={() => setPreviewFile(null)}
-        onDownload={handleDownloadRequest}
-        onProperties={(id) => handlePropertiesRequest([id])}
-        onCopy={handleCopyIds}
-        onCut={handleCutIds}
-        onRename={handleRenameRequest}
-        onMove={handleMoveRequest}
-        onShare={(ids) => void handleShareRequest(ids)}
-        onDelete={handleDeleteRequest}
-        onPrev={handlePreviewPrev}
-        onNext={handlePreviewNext}
-      />
+        {previewFile ? (
+          <FilePreviewModal
+            key={previewFile.id}
+            open
+            file={previewFile}
+            preloadFiles={adjacentPreviewFiles}
+            currentIndex={previewIndex}
+            totalCount={previewableFiles.length}
+            onClose={() => setPreviewFile(null)}
+            onDownload={handleDownloadRequest}
+            onProperties={(id) => handlePropertiesRequest([id])}
+            onCopy={handleCopyIds}
+            onCut={handleCutIds}
+            onRename={handleRenameRequest}
+            onMove={handleMoveRequest}
+            onShare={(ids) => void handleShareRequest(ids)}
+            onDelete={handleDeleteRequest}
+            onPrev={handlePreviewPrev}
+            onNext={handlePreviewNext}
+          />
+        ) : null}
 
-      <RenameDialog
-        open={Boolean(renameTargetId)}
-        title="重命名"
-        value={renameValue}
-        onValueChange={setRenameValue}
-        onCancel={() => {
-          setRenameTargetId(null)
-          setRenameValue("")
-        }}
-        onSubmit={(value) => void submitRename(value)}
-      />
+        {renameTargetId ? (
+          <RenameDialog
+            open
+            title="重命名"
+            value={renameValue}
+            onValueChange={setRenameValue}
+            onCancel={() => {
+              setRenameTargetId(null)
+              setRenameValue("")
+            }}
+            onSubmit={(value) => void submitRename(value)}
+          />
+        ) : null}
 
-      <MoveDialog
-        open={moveIds.length > 0}
-        folders={folderOptions}
-        value={moveTargetId}
-        onValueChange={setMoveTargetId}
-        onCancel={() => setMoveIds([])}
-        onSubmit={(value) => void submitMove(value)}
-      />
+        {moveIds.length > 0 ? (
+          <MoveDialog
+            open
+            folders={folderOptions}
+            value={moveTargetId}
+            onValueChange={setMoveTargetId}
+            onCancel={() => setMoveIds([])}
+            onSubmit={(value) => void submitMove(value)}
+          />
+        ) : null}
 
-      <CreateShareDialog
-        open={shareDialogNodes.length > 0}
-        nodes={shareDialogNodes}
-        onOpenChange={(open) => !open && setShareDialogNodes([])}
-        onCreate={handleCreateShare}
-      />
+        {shareDialogNodes.length > 0 ? (
+          <CreateShareDialog
+            open
+            nodes={shareDialogNodes}
+            onOpenChange={(open) => !open && setShareDialogNodes([])}
+            onCreate={handleCreateShare}
+          />
+        ) : null}
 
-      <DeleteConfirmDialog
-        open={deleteIds.length > 0}
-        count={deleteIds.length}
-        onCancel={() => setDeleteIds([])}
-        onConfirm={() => void submitDelete()}
-      />
+        {deleteIds.length > 0 ? (
+          <DeleteConfirmDialog
+            open
+            count={deleteIds.length}
+            onCancel={() => setDeleteIds([])}
+            onConfirm={() => void submitDelete()}
+          />
+        ) : null}
 
-      <CreateFolderDialog
-        open={createFolderOpen}
-        onOpenChange={setCreateFolderOpen}
-        defaultName="新建文件夹"
-        locationLabel={currentPath ? `位置：${currentPath}` : activeBucket.name}
-        onSubmit={(name) => void submitCreateFolder(name)}
-      />
+        {createFolderOpen ? (
+          <CreateFolderDialog
+            open
+            onOpenChange={setCreateFolderOpen}
+            defaultName="新建文件夹"
+            locationLabel={currentPath ? `位置：${currentPath}` : activeBucket.name}
+            onSubmit={(name) => void submitCreateFolder(name)}
+          />
+        ) : null}
+      </React.Suspense>
     </>
   )
 }

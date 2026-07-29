@@ -6,7 +6,6 @@ import { IconChevronRight, IconFolder, IconLoader2 } from "@tabler/icons-react"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,6 +19,7 @@ import {
 } from "@/components/ui/context-menu"
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
+import { FileAreaPendingContent } from "./FileAreaPending"
 
 interface FileAreaProps {
   items: FileNode[]
@@ -159,73 +159,77 @@ export function FileArea({
           ) : null}
           <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
             {loading && items.length === 0 ? (
-              <DirectorySkeleton viewMode={viewMode} />
+              <FileAreaPendingContent />
             ) : items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
               </div>
-            ) : viewMode === "grid" ? (
-              <div className="flex flex-1 flex-col gap-4 md:gap-8">
-                {folders.length > 0 ? (
-                  <FileSection
-                    title="文件夹"
-                    items={folders}
-                    selectedIds={selectedIds}
-                    onSelectNode={onSelectNode}
-                    onPrepareContext={onPrepareContext}
-                    onOpenNode={openNode}
-                    onRenameRequest={onRenameRequest}
-                    onMoveRequest={onMoveRequest}
-                    onShareRequest={onShareRequest}
-                    onDownloadRequest={onDownloadRequest}
-                    onDeleteRequest={onDeleteRequest}
-                    onCopyRequest={onCopyRequest}
-                    onCutRequest={onCutRequest}
-                    onPropertiesRequest={onPropertiesRequest}
-                    onCreateChildFolder={onCreateChildFolder}
-                    getContextIds={getContextIds}
-                  />
-                ) : null}
-                {files.length > 0 ? (
-                  <FileSection
-                    title="文件"
-                    items={files}
-                    selectedIds={selectedIds}
-                    showThumbnail={showThumbnail}
-                    onSelectNode={onSelectNode}
-                    onPrepareContext={onPrepareContext}
-                    onOpenNode={openNode}
-                    onRenameRequest={onRenameRequest}
-                    onMoveRequest={onMoveRequest}
-                    onShareRequest={onShareRequest}
-                    onDownloadRequest={onDownloadRequest}
-                    onDeleteRequest={onDeleteRequest}
-                    onCopyRequest={onCopyRequest}
-                    onCutRequest={onCutRequest}
-                    onPropertiesRequest={onPropertiesRequest}
-                    onCreateChildFolder={onCreateChildFolder}
-                    getContextIds={getContextIds}
-                  />
-                ) : null}
-              </div>
             ) : (
-              <FileList
-                items={items}
-                selectedIds={selectedIds}
-                onSelectNode={onSelectNode}
-                onPrepareContext={onPrepareContext}
-                onOpenNode={openNode}
-                onRenameRequest={onRenameRequest}
-                onMoveRequest={onMoveRequest}
-                onShareRequest={onShareRequest}
-                onDownloadRequest={onDownloadRequest}
-                onDeleteRequest={onDeleteRequest}
-                onCopyRequest={onCopyRequest}
-                onCutRequest={onCutRequest}
-                onPropertiesRequest={onPropertiesRequest}
-                onCreateChildFolder={onCreateChildFolder}
-                getContextIds={getContextIds}
-              />
+              <div className="flex min-h-full flex-col" aria-label={`目录内容，共 ${items.length} 项`}>
+                {viewMode === "grid" ? (
+                  <div className="flex flex-1 flex-col gap-4 md:gap-8">
+                    {folders.length > 0 ? (
+                      <FileSection
+                        title="文件夹"
+                        items={folders}
+                        selectedIds={selectedIds}
+                        onSelectNode={onSelectNode}
+                        onPrepareContext={onPrepareContext}
+                        onOpenNode={openNode}
+                        onRenameRequest={onRenameRequest}
+                        onMoveRequest={onMoveRequest}
+                        onShareRequest={onShareRequest}
+                        onDownloadRequest={onDownloadRequest}
+                        onDeleteRequest={onDeleteRequest}
+                        onCopyRequest={onCopyRequest}
+                        onCutRequest={onCutRequest}
+                        onPropertiesRequest={onPropertiesRequest}
+                        onCreateChildFolder={onCreateChildFolder}
+                        getContextIds={getContextIds}
+                      />
+                    ) : null}
+                    {files.length > 0 ? (
+                      <FileSection
+                        title="文件"
+                        items={files}
+                        selectedIds={selectedIds}
+                        showThumbnail={showThumbnail}
+                        onSelectNode={onSelectNode}
+                        onPrepareContext={onPrepareContext}
+                        onOpenNode={openNode}
+                        onRenameRequest={onRenameRequest}
+                        onMoveRequest={onMoveRequest}
+                        onShareRequest={onShareRequest}
+                        onDownloadRequest={onDownloadRequest}
+                        onDeleteRequest={onDeleteRequest}
+                        onCopyRequest={onCopyRequest}
+                        onCutRequest={onCutRequest}
+                        onPropertiesRequest={onPropertiesRequest}
+                        onCreateChildFolder={onCreateChildFolder}
+                        getContextIds={getContextIds}
+                      />
+                    ) : null}
+                  </div>
+                ) : (
+                  <FileList
+                    items={items}
+                    selectedIds={selectedIds}
+                    onSelectNode={onSelectNode}
+                    onPrepareContext={onPrepareContext}
+                    onOpenNode={openNode}
+                    onRenameRequest={onRenameRequest}
+                    onMoveRequest={onMoveRequest}
+                    onShareRequest={onShareRequest}
+                    onDownloadRequest={onDownloadRequest}
+                    onDeleteRequest={onDeleteRequest}
+                    onCopyRequest={onCopyRequest}
+                    onCutRequest={onCutRequest}
+                    onPropertiesRequest={onPropertiesRequest}
+                    onCreateChildFolder={onCreateChildFolder}
+                    getContextIds={getContextIds}
+                  />
+                )}
+              </div>
             )}
             {hasMore ? (
               <div className="flex flex-wrap items-center justify-center gap-3 py-6">
@@ -341,24 +345,4 @@ async function walkDroppedEntry(
   for (const child of children) {
     await walkDroppedEntry(child, path, result)
   }
-}
-
-function DirectorySkeleton({ viewMode }: { viewMode: ViewMode }) {
-  if (viewMode === "list") {
-    return (
-      <div className="flex flex-col gap-3" aria-label="正在加载目录">
-        {Array.from({ length: 6 }, (_, index) => (
-          <Skeleton key={index} className="h-11 w-full rounded-lg" />
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className="file-section-grid" aria-label="正在加载目录">
-      {Array.from({ length: 8 }, (_, index) => (
-        <Skeleton key={index} className="h-28 w-full rounded-xl" />
-      ))}
-    </div>
-  )
 }

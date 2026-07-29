@@ -1,8 +1,9 @@
 import * as React from "react"
-import { IconArrowsMaximize, IconExternalLink, IconLoader2, IconRefresh } from "@tabler/icons-react"
+import { IconArrowsMaximize, IconExternalLink, IconRefresh } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 export function OfficePreview({ manifest }: { manifest: PreviewManifest }) {
   const source = manifest.assets.office_viewer?.url
@@ -60,12 +61,10 @@ export function OfficePreview({ manifest }: { manifest: PreviewManifest }) {
         </div>
       ) : null}
       {loading ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background px-6 text-center">
-          <IconLoader2 size={22} className="mb-3 animate-spin text-primary" />
-          <p className="text-sm text-foreground">正在连接 Microsoft Office Web Viewer</p>
-          <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">Office 文档会通过短时签名的公网 HTTPS 地址交给微软服务读取；本模式仅支持预览。</p>
+        <div className="absolute inset-0">
+          <PreviewSkeleton kind="office" />
           {timedOut ? (
-            <div className="mt-4 flex gap-2">
+            <div className="absolute inset-x-0 bottom-5 flex justify-center gap-2">
               <Button size="sm" variant="outline" onClick={() => setReloadKey((value) => value + 1)}><IconRefresh size={15} className="mr-1.5" />重试</Button>
               <Button size="sm" onClick={() => window.open(source, "_blank", "noopener,noreferrer")}><IconExternalLink size={15} className="mr-1.5" />新窗口打开</Button>
             </div>

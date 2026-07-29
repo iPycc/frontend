@@ -178,6 +178,9 @@ export function useNav({
             loaded: true,
             nextCursor: response.next_cursor,
             queryKey,
+            totalCount: response.total,
+            folderCount: response.folder_count,
+            fileCount: response.file_count,
           }))
         } catch (error) {
           updatePageState(stateKey, (current) => ({ ...current, loading: false }))
@@ -384,6 +387,9 @@ export function useNav({
             loaded: true,
             nextCursor: response.next_cursor,
             queryKey,
+            totalCount: response.total,
+            folderCount: response.folder_count,
+            fileCount: response.file_count,
           }))
         } catch (error) {
           updatePageState(stateKey, (current) => ({ ...current, loading: false }))

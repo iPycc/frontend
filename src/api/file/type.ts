@@ -78,6 +78,9 @@ export type RestoreNodesInput = {
 export type ExplorerNodePage = {
   items: ExplorerNode[]
   next_cursor: string | null
+  total: number
+  folder_count: number
+  file_count: number
 }
 
 export type ListNodePageOptions = {

@@ -15,6 +15,7 @@ import type { PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { isSameOriginPreviewUrl, previewSourceUrls } from "@/lib/preview-assets"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
@@ -165,10 +166,7 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
 
       <div ref={viewportHostRef} className="relative min-h-0 flex-1 overflow-auto p-6">
         {loading ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-muted-foreground">
-            <IconLoader2 size={22} className="animate-spin" />
-            <span className="ml-2 text-sm">正在渲染 PDF</span>
-          </div>
+          <PreviewSkeleton kind="pdf" className="pointer-events-none absolute inset-0 z-10" />
         ) : null}
         {error && !document ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>

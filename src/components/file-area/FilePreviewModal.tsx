@@ -9,7 +9,6 @@ import {
   IconDownload,
   IconEdit,
   IconInfoCircle,
-  IconLoader2,
   IconMinus,
   IconArrowsMaximize,
   IconArrowsMinimize,
@@ -30,12 +29,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { PropertiesPanelContent, usePropertiesPanel } from "@/components/shared/PropertiesPanel"
+import { PropertiesPanelContent } from "@/components/shared/PropertiesPanel"
+import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { hasCapability, type FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 import { useAppState } from "@/state/app"
 import { PreviewRenderer } from "./preview/PreviewRenderer"
+import { inferPreviewKind, PreviewSkeleton } from "./preview/PreviewSkeleton"
 
 interface FilePreviewModalProps {
   open: boolean
@@ -306,7 +307,7 @@ export function FilePreviewModal({
               </>
             ) : null}
             {loading ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在准备预览</div>
+              <PreviewSkeleton kind={manifest?.kind ?? inferPreviewKind(file)} compact={minimized} />
             ) : error ? (
               <div className="flex h-full flex-col items-center justify-center px-6 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="outline" size="sm" className="mt-4" onClick={retry}><IconRefresh size={15} className="mr-1.5" />重试</Button></div>
             ) : manifest ? (

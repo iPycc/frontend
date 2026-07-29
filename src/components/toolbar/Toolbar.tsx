@@ -103,7 +103,7 @@ export function Toolbar({
   const canShare = hasCapability(currentUser, "share.manage")
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait" initial={false}>
         {selectedCount > 0 ? (
           <motion.div
             key="selected"

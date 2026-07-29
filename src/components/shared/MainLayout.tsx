@@ -1,11 +1,14 @@
+import * as React from "react"
 import { Outlet } from "react-router-dom"
 
 import { NavbarLayout } from "@/components/navbar"
 import { SidebarLayout } from "@/components/sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { useAppState } from "@/state/app"
-import { PropertiesPanelProvider, PropertiesPanel } from "./PropertiesPanel"
-import { SiteUrlMismatchAlert } from "./SiteUrlMismatchAlert"
+import { PropertiesPanelProvider, usePropertiesPanel } from "./PropertiesPanelContext"
+
+const PropertiesPanel = React.lazy(() => import("./PropertiesPanel").then((module) => ({ default: module.PropertiesPanel })))
+const SiteUrlMismatchAlert = React.lazy(() => import("./SiteUrlMismatchAlert").then((module) => ({ default: module.SiteUrlMismatchAlert })))
 
 export function MainLayout() {
   const { activeBucket, formatBytes } = useAppState()
@@ -21,12 +24,24 @@ export function MainLayout() {
               <div className="relative flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden transition-[width] duration-200 ease-out sm:gap-2">
                 <Outlet />
               </div>
-              <PropertiesPanel />
+              <PropertiesPanelSlot />
             </main>
           </div>
         </div>
-        <SiteUrlMismatchAlert />
+        <React.Suspense fallback={null}><SiteUrlMismatchAlert /></React.Suspense>
       </PropertiesPanelProvider>
     </SidebarProvider>
   )
+}
+
+function PropertiesPanelSlot() {
+  const { node } = usePropertiesPanel()
+  const [activated, setActivated] = React.useState(false)
+
+  React.useEffect(() => {
+    if (node) setActivated(true)
+  }, [node])
+
+  if (!activated) return null
+  return <React.Suspense fallback={null}><PropertiesPanel /></React.Suspense>
 }
