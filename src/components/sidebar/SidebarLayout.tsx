@@ -36,7 +36,7 @@ import { SidebarFolderTree, buildTree } from "./SidebarFolderTree"
 import { SidebarNavItem } from "./SidebarNavItem"
 import { SidebarQuota } from "./SidebarQuota"
 import { SidebarFooterContent } from "@/components/shared/SidebarFooterContent"
-import { getSharedSummary, groupSharedOwners, listShared, type SharedMount } from "@/api/shared"
+import { useSharedOwners } from "@/hooks/use-shared-owners"
 
 const utilityPaths = [
   "/app/shared-with-me",
@@ -64,43 +64,8 @@ export function SidebarLayout() {
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
   const [sharedOwnersOpen, setSharedOwnersOpen] = useState(true)
-  const [sharedMounts, setSharedMounts] = useState<SharedMount[]>([])
-  const [sharedOwnerPlaceholderCount, setSharedOwnerPlaceholderCount] = useState(0)
-  const [sharedOwnersLoading, setSharedOwnersLoading] = useState(false)
-
-  useEffect(() => {
-    if (isGuest) {
-      setSharedMounts([])
-      setSharedOwnerPlaceholderCount(0)
-      setSharedOwnersLoading(false)
-      return
-    }
-    let cancelled = false
-    setSharedOwnersLoading(true)
-    const loadSharedOwners = async () => {
-      try {
-        const summary = await getSharedSummary()
-        if (!cancelled) setSharedOwnerPlaceholderCount(summary.owner_count)
-      } catch {
-        if (!cancelled) setSharedOwnerPlaceholderCount(0)
-      }
-
-      try {
-        const items = await listShared()
-        if (!cancelled) setSharedMounts(items)
-      } catch {
-        if (!cancelled) setSharedMounts([])
-      } finally {
-        if (!cancelled) setSharedOwnersLoading(false)
-      }
-    }
-    void loadSharedOwners()
-    return () => { cancelled = true }
-  }, [isGuest, location.pathname])
-
-  const sharedOwners = useMemo(() => {
-    return groupSharedOwners(sharedMounts)
-  }, [sharedMounts])
+  const { owners: sharedOwners, loading: sharedOwnersLoading, error: sharedOwnersError, retry: retrySharedOwners } =
+    useSharedOwners(!isGuest && currentUser ? currentUser.id : null)
 
   const rootFolders = useMemo(
     () => buildTree(getFoldersForBucket, activeBucket.rootNodeId),
@@ -288,13 +253,13 @@ export function SidebarLayout() {
                       </AvatarFallback>
                     </Avatar>
                     <span className="min-w-0 flex-1 truncate">{owner.name}</span>
-                    <span className="tabular-nums" title={`${owner.shareCount} 个共享`} aria-label={`${owner.shareCount} 个共享`}>{owner.shareCount}</span>
+                    <span className="tabular-nums" title={`${owner.share_count} 个共享`} aria-label={`${owner.share_count} 个共享`}>{owner.share_count}</span>
                   </Link>
                 ))}
               </div>
-            ) : sharedOwnersLoading && sharedOwnerPlaceholderCount > 0 ? (
+            ) : sharedOwnersLoading ? (
               <div className="space-y-0.5 pb-1 pl-7" aria-label="正在加载共享用户">
-                {Array.from({ length: sharedOwnerPlaceholderCount }, (_, index) => (
+                {Array.from({ length: 2 }, (_, index) => (
                   <div key={index} className="flex h-8 items-center gap-2 rounded-full px-3" aria-hidden="true">
                     <Skeleton className="size-5 shrink-0 rounded-full" />
                     <Skeleton className="h-3 min-w-0 flex-1" />
@@ -302,6 +267,12 @@ export function SidebarLayout() {
                   </div>
                 ))}
               </div>
+            ) : null}
+            {sharedOwnersError ? (
+              <button type="button" onClick={retrySharedOwners} disabled={sharedOwnersLoading}
+                className="px-8 py-1 text-left text-xs text-muted-foreground underline underline-offset-4 disabled:opacity-50">
+                共享列表刷新失败，点击重试
+              </button>
             ) : null}
             </div>
             <SidebarNavItem

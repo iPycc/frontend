@@ -44,8 +44,24 @@ export type SharedSummary = {
   share_count: number
 }
 
-export function mountShared(body: SharedCreate) {
-  return requestJson<SharedMount>("/shared", { method: "POST", body })
+export const SHARED_CHANGED_EVENT = "cloudrave-shared-changed"
+
+export type SharedOwnerSummary = {
+  id: number
+  name: string
+  avatar: string | null
+  share_count: number
+  latest_shared_at: string
+}
+
+export function getSharedOwners(signal?: AbortSignal) {
+  return requestJson<SharedOwnerSummary[]>("/shared/owners", { signal, cache: "no-store" })
+}
+
+export async function mountShared(body: SharedCreate) {
+  const result = await requestJson<SharedMount>("/shared", { method: "POST", body })
+  window.dispatchEvent(new Event(SHARED_CHANGED_EVENT))
+  return result
 }
 
 export function listShared() {
@@ -63,8 +79,10 @@ export function listSharedNodes(mountId: number, parentId?: number | null) {
   return requestJson<SharedItem[]>(`/shared/${mountId}/nodes${suffix}`)
 }
 
-export function unmountShared(mountId: number) {
-  return requestJson<{ message: string }>(`/shared/${mountId}`, { method: "DELETE" })
+export async function unmountShared(mountId: number) {
+  const result = await requestJson<{ message: string }>(`/shared/${mountId}`, { method: "DELETE" })
+  window.dispatchEvent(new Event(SHARED_CHANGED_EVENT))
+  return result
 }
 
 export function saveShared(
