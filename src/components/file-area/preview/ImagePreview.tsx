@@ -1,4 +1,5 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 import OpenSeadragon from "openseadragon"
 import {
   IconArrowsMaximize,
@@ -21,18 +22,19 @@ import { PreviewSkeleton } from "./PreviewSkeleton"
 
 type ImagePreviewProps = {
   manifest: PreviewManifest
+  toolbarTarget?: HTMLElement | null
 }
 
 const controlClass = "size-8 sm:size-9 text-foreground hover:bg-accent"
 
-export function ImagePreview({ manifest }: ImagePreviewProps) {
+export function ImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
   if (manifest.assets.dzi) {
-    return <TiledImagePreview manifest={manifest} />
+    return <TiledImagePreview manifest={manifest} toolbarTarget={toolbarTarget} />
   }
-  return <StandardImagePreview manifest={manifest} />
+  return <StandardImagePreview manifest={manifest} toolbarTarget={toolbarTarget} />
 }
 
-function StandardImagePreview({ manifest }: ImagePreviewProps) {
+function StandardImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
   const transformRef = React.useRef<ReactZoomPanPinchContentRef>(null)
   const imageRef = React.useRef<HTMLImageElement>(null)
   const [rotation, setRotation] = React.useState(0)
@@ -92,6 +94,7 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   return (
     <div className="relative flex h-full w-full min-h-0 flex-col bg-[#111214]">
       <ImageToolbar
+        target={toolbarTarget}
         scale={scale}
         onZoomOut={() => transformRef.current?.zoomOut(0.25, 120)}
         onZoomIn={() => transformRef.current?.zoomIn(0.25, 120)}
@@ -160,7 +163,7 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
   )
 }
 
-function TiledImagePreview({ manifest }: ImagePreviewProps) {
+function TiledImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const viewerRef = React.useRef<OpenSeadragon.Viewer | null>(null)
   const [scale, setScale] = React.useState(1)
@@ -193,6 +196,7 @@ function TiledImagePreview({ manifest }: ImagePreviewProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-[#111214]">
       <ImageToolbar
+        target={toolbarTarget}
         scale={scale}
         onZoomOut={() => viewerRef.current?.viewport.zoomBy(0.8)}
         onZoomIn={() => viewerRef.current?.viewport.zoomBy(1.25)}
@@ -223,6 +227,7 @@ function TiledImagePreview({ manifest }: ImagePreviewProps) {
 }
 
 function ImageToolbar({
+  target,
   scale,
   onZoomOut,
   onZoomIn,
@@ -232,6 +237,7 @@ function ImageToolbar({
   onRotateLeft,
   onRotateRight,
 }: {
+  target?: HTMLElement | null
   scale: number
   onZoomOut: () => void
   onZoomIn: () => void
@@ -241,8 +247,8 @@ function ImageToolbar({
   onRotateLeft: () => void
   onRotateRight: () => void
 }) {
-  return (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-center gap-0 border-b border-border bg-background px-2 py-1 sm:justify-start sm:gap-1 sm:px-3">
+  const toolbar = (
+    <div aria-label="图片工具栏" className={cn("flex shrink-0 items-center gap-0 bg-background sm:gap-1", target ? "h-10 w-max" : "min-h-12 flex-wrap justify-center border-b border-border px-2 py-1 sm:justify-start sm:px-3")}>
       <Button variant="ghost" size="icon" className={controlClass} onClick={onZoomOut} title="缩小 (-)" aria-label="缩小">
         <IconZoomOut size={18} />
       </Button>
@@ -271,4 +277,5 @@ function ImageToolbar({
       </Button>
     </div>
   )
+  return target ? createPortal(toolbar, target) : toolbar
 }

@@ -17,10 +17,12 @@ export function PreviewRenderer({
   manifest,
   onRetry,
   compactAudio = false,
+  imageToolbarTarget,
 }: {
   manifest: PreviewManifest
   onRetry?: () => void
   compactAudio?: boolean
+  imageToolbarTarget?: HTMLElement | null
 }) {
   if (manifest.status === "failed") {
     return <EmptyState message={manifest.error || "预览生成失败，请下载后查看。"} onRetry={onRetry} />
@@ -31,7 +33,7 @@ export function PreviewRenderer({
 
   const renderer = (() => {
     switch (manifest.kind) {
-      case "image": return <ImagePreview manifest={manifest} />
+      case "image": return <ImagePreview manifest={manifest} toolbarTarget={imageToolbarTarget} />
       case "video": return <MediaPreview manifest={manifest} />
       case "audio": return <AudioPlayer manifest={manifest} compact={compactAudio} />
       case "pdf": return <PdfPreview manifest={manifest} />

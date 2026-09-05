@@ -84,6 +84,7 @@ export function FilePreviewModal({
   const isMobile = useIsMobile()
   const backendId = file?.backendId
   const cachedManifest = backendId ? peekPreviewManifest(backendId) : null
+  const [imageToolbarTarget, setImageToolbarTarget] = React.useState<HTMLDivElement | null>(null)
   const [showPanel, setShowPanel] = React.useState(false)
   const [displayMode, setDisplayMode] = React.useState<"window" | "fullscreen" | "minimized">("window")
   const [manifest, setManifest] = React.useState<PreviewManifest | null>(cachedManifest)
@@ -224,11 +225,15 @@ export function FilePreviewModal({
         <div
           className="flex min-w-0 flex-1 flex-col"
         >
-          <header className={cn("flex shrink-0 items-center gap-1 border-b border-border px-3 sm:gap-3", minimized ? "h-11" : "h-14 md:px-4")}>
+          <header className={cn("flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 sm:gap-3", minimized ? "h-11" : "min-h-14 py-1 md:px-4")}>
             <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onClose} aria-label="关闭预览"><IconX size={20} /></Button>
-            <div className="min-w-0 flex-1">
+            <div className="w-32 min-w-0 shrink-0 sm:w-40">
               <DialogTitle className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</DialogTitle>
             </div>
+            <div
+              ref={setImageToolbarTarget}
+              className={cn("min-w-0 flex-1 overflow-x-auto", manifest?.kind === "image" && !minimized && "order-last basis-full lg:order-none lg:basis-0")}
+            />
             {!minimized && totalCount > 1 ? (
               <div className="flex shrink-0 items-center gap-1">
                 <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onPrev} aria-label="上一个"><IconChevronLeft size={20} /></Button>
@@ -281,7 +286,7 @@ export function FilePreviewModal({
             ) : error ? (
               <div className="flex h-full flex-col items-center justify-center px-6 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="outline" size="sm" className="mt-4" onClick={retry}><IconRefresh size={15} className="mr-1.5" />重试</Button></div>
             ) : manifest ? (
-              <PreviewRenderer manifest={manifest} onRetry={() => void retry()} compactAudio={minimized} />
+              <PreviewRenderer manifest={manifest} onRetry={() => void retry()} compactAudio={minimized} imageToolbarTarget={imageToolbarTarget} />
             ) : null}
           </main>
         </div>
