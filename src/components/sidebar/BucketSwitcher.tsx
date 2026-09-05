@@ -79,20 +79,20 @@ export function BucketSwitcher({ className }: { className?: string }) {
           className
         )}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="shrink-0">
-            <ProviderIcon provider={activeBucket.provider} />
+            <ProviderIcon provider={/local|本机/i.test(activeBucket.provider) ? "本机存储" : activeBucket.provider} />
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm text-foreground">
               {activeBucket.name}
             </div>
             <div className="truncate text-xs text-muted-foreground">
-              {activeBucket.provider}
+              {/local|本机/i.test(activeBucket.provider) ? "本机存储" : activeBucket.provider}
             </div>
           </div>
         </div>
-        <IconChevronDown size={18} className="text-muted-foreground" />
+        <IconChevronDown size={18} className="shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={0} className="w-72 rounded-xl">
         <DropdownMenuGroup>

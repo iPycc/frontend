@@ -136,6 +136,8 @@ export function SidebarFolderTree({
                     <button
                       type="button"
                       onClick={(event) => toggle(folder.id, !isOpen, event)}
+                      aria-label={`${isOpen ? "收起" : "展开"}${folder.name}`}
+                      aria-expanded={isOpen}
                       className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors"
                     >
                       {childState.loading ? (
@@ -156,7 +158,7 @@ export function SidebarFolderTree({
                     isCurrent ? "text-primary" : ""
                   )}
                 />
-                <span className="truncate">{folder.name}</span>
+                <span className="truncate" title={folder.name}>{folder.name}</span>
               </SidebarTreeItem>
             </div>
             <AnimatePresence initial={false}>
