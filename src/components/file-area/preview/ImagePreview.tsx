@@ -23,7 +23,7 @@ type ImagePreviewProps = {
   manifest: PreviewManifest
 }
 
-const controlClass = "h-9 w-9 text-foreground hover:bg-accent"
+const controlClass = "size-8 sm:size-9 text-foreground hover:bg-accent"
 
 export function ImagePreview({ manifest }: ImagePreviewProps) {
   if (manifest.assets.dzi) {
@@ -91,6 +91,16 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
 
   return (
     <div className="relative flex h-full w-full min-h-0 flex-col bg-[#111214]">
+      <ImageToolbar
+        scale={scale}
+        onZoomOut={() => transformRef.current?.zoomOut(0.25, 120)}
+        onZoomIn={() => transformRef.current?.zoomIn(0.25, 120)}
+        onFit={fit}
+        onActual={actualSize}
+        rotation={rotation}
+        onRotateLeft={() => setRotation((value) => value - 90)}
+        onRotateRight={() => setRotation((value) => value + 90)}
+      />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {!loaded && !failed ? (
           <PreviewSkeleton kind="image" className="pointer-events-none absolute inset-0 z-10" />
@@ -145,16 +155,7 @@ function StandardImagePreview({ manifest }: ImagePreviewProps) {
         )}
       </div>
 
-      <ImageToolbar
-        scale={scale}
-        onZoomOut={() => transformRef.current?.zoomOut(0.25, 120)}
-        onZoomIn={() => transformRef.current?.zoomIn(0.25, 120)}
-        onFit={fit}
-        onActual={actualSize}
-        rotation={rotation}
-        onRotateLeft={() => setRotation((value) => value - 90)}
-        onRotateRight={() => setRotation((value) => value + 90)}
-      />
+
     </div>
   )
 }
@@ -191,7 +192,6 @@ function TiledImagePreview({ manifest }: ImagePreviewProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-[#111214]">
-      <div ref={hostRef} className="min-h-0 flex-1" aria-label={`${manifest.name} 超大图查看器`} />
       <ImageToolbar
         scale={scale}
         onZoomOut={() => viewerRef.current?.viewport.zoomBy(0.8)}
@@ -216,6 +216,8 @@ function TiledImagePreview({ manifest }: ImagePreviewProps) {
           }
         }}
       />
+      <div ref={hostRef} className="min-h-0 flex-1" aria-label={`${manifest.name} 超大图查看器`} />
+
     </div>
   )
 }
@@ -240,28 +242,28 @@ function ImageToolbar({
   onRotateRight: () => void
 }) {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-center gap-1 border-t border-border bg-background px-3">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-center gap-0 border-b border-border bg-background px-2 py-1 sm:justify-start sm:gap-1 sm:px-3">
       <Button variant="ghost" size="icon" className={controlClass} onClick={onZoomOut} title="缩小 (-)" aria-label="缩小">
         <IconZoomOut size={18} />
       </Button>
-      <button type="button" className="min-w-16 px-2 text-center text-xs tabular-nums text-muted-foreground" onClick={onFit}>
+      <button type="button" className="min-w-12 px-1 sm:min-w-16 sm:px-2 text-center text-xs tabular-nums text-muted-foreground" onClick={onFit}>
         {Math.round(scale * 100)}%
       </button>
       <Button variant="ghost" size="icon" className={controlClass} onClick={onZoomIn} title="放大 (+)" aria-label="放大">
         <IconZoomIn size={18} />
       </Button>
-      <span className="mx-1 h-5 w-px bg-border" />
+      <span className="mx-0.5 h-5 w-px sm:mx-1 bg-border" />
       <Button variant="ghost" size="icon" className={controlClass} onClick={onFit} title="适应窗口 (0)" aria-label="适应窗口">
         <IconArrowsMaximize size={18} />
       </Button>
       <Button variant="ghost" size="sm" className="h-9 px-2.5 text-xs" onClick={onActual} title="原始尺寸 (1)">
         1:1
       </Button>
-      <span className="mx-1 h-5 w-px bg-border" />
+      <span className="mx-0.5 h-5 w-px sm:mx-1 bg-border" />
       <Button variant="ghost" size="icon" className={controlClass} onClick={onRotateLeft} title="逆时针旋转" aria-label="逆时针旋转">
         <IconRotate size={18} />
       </Button>
-      <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground" title="当前旋转角度">
+      <span className="min-w-8 sm:min-w-12 text-center text-xs tabular-nums text-muted-foreground" title="当前旋转角度">
         {rotation}°
       </span>
       <Button variant="ghost" size="icon" className={controlClass} onClick={onRotateRight} title="顺时针旋转 (R)" aria-label="顺时针旋转">

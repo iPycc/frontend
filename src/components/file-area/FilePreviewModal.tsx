@@ -21,7 +21,7 @@ import { AnimatePresence, motion } from "motion/react"
 
 import { getPreviewManifest, peekPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +57,7 @@ interface FilePreviewModalProps {
   onNext: () => void
 }
 
-const iconButtonClass = "h-9 w-9 text-muted-foreground hover:bg-accent hover:text-foreground"
+const iconButtonClass = "size-8 sm:size-9 text-muted-foreground hover:bg-accent hover:text-foreground"
 
 export function FilePreviewModal({
   open,
@@ -90,14 +90,6 @@ export function FilePreviewModal({
   const [loading, setLoading] = React.useState(!cachedManifest)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshKey, setRefreshKey] = React.useState(0)
-  const [viewport, setViewport] = React.useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
-
-  React.useEffect(() => {
-    const update = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
-    window.addEventListener("resize", update)
-    return () => window.removeEventListener("resize", update)
-  }, [])
-
   const loadManifest = React.useCallback(async (signal?: AbortSignal) => {
     if (!backendId) throw new Error("文件缺少后端标识")
     return getPreviewManifest(backendId, signal)
@@ -212,21 +204,6 @@ export function FilePreviewModal({
       embedded
     />
   )
-  const mediaWidth = typeof manifest?.metadata.width === "number" ? manifest.metadata.width : 0
-  const mediaHeight = typeof manifest?.metadata.height === "number" ? manifest.metadata.height : 0
-  const adaptiveMedia = !isMobile && displayMode === "window" &&
-    (manifest?.kind === "image" || manifest?.kind === "video") && mediaWidth > 0 && mediaHeight > 0
-  const mediaRatio = adaptiveMedia ? mediaWidth / mediaHeight : undefined
-  const imageToolbarHeight = manifest?.kind === "image" ? 48 : 0
-  const availableMediaWidth = Math.max(320, viewport.width * 0.92 - (showPanel ? 340 : 0))
-  const availableMediaStageHeight = Math.max(240, viewport.height * 0.84 - 56 - imageToolbarHeight)
-  const mediaContentWidth = adaptiveMedia && mediaRatio
-    ? Math.min(mediaWidth, availableMediaWidth, availableMediaStageHeight * mediaRatio)
-    : undefined
-  const mediaContentHeight = mediaContentWidth && mediaRatio
-    ? mediaContentWidth / mediaRatio + imageToolbarHeight
-    : undefined
-  const adaptiveDialogHeight = mediaContentHeight ? mediaContentHeight + 56 : undefined
   const minimized = displayMode === "minimized" && manifest?.kind === "audio"
 
   return (
@@ -241,21 +218,23 @@ export function FilePreviewModal({
             ? "right-4 bottom-4 left-auto top-auto h-28 w-[min(28rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 rounded-xl border border-border shadow-xl"
             : isMobile || displayMode === "fullscreen"
             ? "h-[100dvh] w-[100dvw] max-w-none rounded-none border-0 shadow-none"
-            : adaptiveMedia
-              ? "h-auto w-auto max-w-none rounded-xl border border-border shadow-xl"
-              : "h-[min(84dvh,54rem)] w-[min(92vw,80rem)] max-w-[80rem] rounded-xl border border-border shadow-xl"
+            : "h-[min(760px,calc(100dvh-48px))] w-[min(1120px,calc(100vw-48px))] max-w-none rounded-xl border border-border shadow-xl"
         )}
-        style={!minimized && adaptiveMedia && adaptiveDialogHeight ? { height: adaptiveDialogHeight } : undefined}
       >
         <div
           className="flex min-w-0 flex-1 flex-col"
-          style={!minimized && adaptiveMedia && mediaContentWidth ? { width: mediaContentWidth } : undefined}
         >
-          <header className={cn("flex shrink-0 items-center gap-3 border-b border-border px-3", minimized ? "h-11" : "h-14 md:px-4")}>
+          <header className={cn("flex shrink-0 items-center gap-1 border-b border-border px-3 sm:gap-3", minimized ? "h-11" : "h-14 md:px-4")}>
             <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onClose} aria-label="关闭预览"><IconX size={20} /></Button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</p>
+              <DialogTitle className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</DialogTitle>
             </div>
+            {!minimized && totalCount > 1 ? (
+              <div className="flex shrink-0 items-center gap-1">
+                <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onPrev} aria-label="上一个"><IconChevronLeft size={20} /></Button>
+                <Button variant="ghost" size="icon" className={iconButtonClass} onClick={onNext} aria-label="下一个"><IconChevronRight size={20} /></Button>
+              </div>
+            ) : null}
             {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
             <div className="flex shrink-0 items-center gap-1">
               {minimized ? (
@@ -296,16 +275,7 @@ export function FilePreviewModal({
             </div>
           </header>
 
-          <main
-            className={cn("relative min-h-0 flex-1 overflow-hidden bg-background", adaptiveMedia && "flex-none")}
-            style={adaptiveMedia && mediaContentHeight ? { height: mediaContentHeight } : undefined}
-          >
-            {!minimized && totalCount > 1 ? (
-              <>
-                <Button variant="secondary" size="icon" className="absolute left-3 top-1/2 z-30 h-10 w-10 -translate-y-1/2 rounded-full shadow-sm" onClick={onPrev} aria-label="上一个"><IconChevronLeft size={22} /></Button>
-                <Button variant="secondary" size="icon" className="absolute right-3 top-1/2 z-30 h-10 w-10 -translate-y-1/2 rounded-full shadow-sm" onClick={onNext} aria-label="下一个"><IconChevronRight size={22} /></Button>
-              </>
-            ) : null}
+          <main className="relative min-h-0 flex-1 overflow-hidden bg-background">
             {loading ? (
               <PreviewSkeleton kind={manifest?.kind ?? inferPreviewKind(file)} compact={minimized} />
             ) : error ? (

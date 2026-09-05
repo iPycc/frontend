@@ -90,7 +90,7 @@ export function SharedPreviewDialog({
           "flex gap-0 overflow-hidden bg-background p-0",
           fullscreen
             ? "h-[100dvh] w-[100dvw] max-w-none rounded-none border-0"
-            : "h-[min(84dvh,54rem)] w-[min(92vw,80rem)] max-w-[80rem]"
+            : "h-[min(760px,calc(100dvh-48px))] w-[min(1120px,calc(100vw-48px))] max-w-none"
         )}
       >
         <div className="flex min-w-0 flex-1 flex-col">
