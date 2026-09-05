@@ -13,9 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?: "trigger" | "menu" }) {
+function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?: "trigger" | "menu" | "compact" }) {
   const p = provider.toLowerCase()
-  const px = size === "menu" ? 28 : 28
+  const px = size === "compact" ? 18 : 28
 
   if (p.includes("腾讯") || p.includes("tencent") || p.includes("cos")) {
     return (
@@ -67,19 +67,28 @@ function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?:
   )
 }
 
-export function BucketSwitcher({ className }: { className?: string }) {
+export function BucketSwitcher({ className, compact = false }: { className?: string; compact?: boolean }) {
   const navigate = useNavigate()
   const { buckets, activeBucket, setActiveBucket } = useAppState()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        aria-label={`切换存储桶：${activeBucket.name}`}
+        title={activeBucket.name}
         className={cn(
-          "flex h-14 w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-card/90 dark:shadow-none",
+          compact
+            ? "flex h-9 min-w-0 max-w-36 items-center gap-1 rounded-md px-1 text-left text-[13px] text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            : "flex h-14 w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-left shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] transition-colors hover:bg-card/90 dark:shadow-none",
           className
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        {compact ? (
+          <>
+            <ProviderIcon provider={activeBucket.provider} size="compact" />
+            <span className="truncate">{activeBucket.name}</span>
+          </>
+        ) : <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="shrink-0">
             <ProviderIcon provider={/local|本机/i.test(activeBucket.provider) ? "本机存储" : activeBucket.provider} />
           </div>
@@ -91,17 +100,21 @@ export function BucketSwitcher({ className }: { className?: string }) {
               {/local|本机/i.test(activeBucket.provider) ? "本机存储" : activeBucket.provider}
             </div>
           </div>
-        </div>
-        <IconChevronDown size={18} className="shrink-0 text-muted-foreground" />
+        </div>}
+        <IconChevronDown size={compact ? 14 : 18} className="shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={0} className="w-72 rounded-xl">
+      <DropdownMenuContent align="start" sideOffset={compact ? 4 : 0} className="w-72 max-w-[calc(100vw-1rem)] rounded-xl">
         <DropdownMenuGroup>
           <DropdownMenuLabel>已挂载存储桶</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {buckets.map((bucket) => (
             <DropdownMenuItem
               key={bucket.id}
-              onClick={() => setActiveBucket(bucket.id)}
+              onClick={() => {
+                if (bucket.id === activeBucket.id) return
+                setActiveBucket(bucket.id)
+                if (compact) navigate("/app")
+              }}
               className="flex items-center gap-3 rounded-lg px-3 py-2.5"
             >
               <div className="shrink-0">

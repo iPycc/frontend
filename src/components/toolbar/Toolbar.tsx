@@ -38,6 +38,7 @@ import { ButtonGroup } from "@/components/ui/button-group"
 import { hasCapability, type SortValue, type ViewMode } from "@/lib/models"
 import { useAppState } from "@/state/app"
 import { ViewSettingsPopover } from "./ViewSettingsPopover"
+import { BucketSwitcher } from "@/components/sidebar/BucketSwitcher"
 
 interface ToolbarProps {
   pathParts?: string[]
@@ -164,7 +165,13 @@ export function Toolbar({
           >
             <div className="min-w-0 flex-1">
               <Breadcrumb>
-                <BreadcrumbList className="gap-1.5 text-[13px]">
+                <BreadcrumbList className="flex-nowrap gap-1.5 text-[13px] [&>li]:shrink-0">
+                  <BreadcrumbItem className="min-w-0 md:hidden">
+                    <BucketSwitcher compact />
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="md:hidden">
+                    <IconChevronRight size={14} className="text-muted-foreground" />
+                  </BreadcrumbSeparator>
                   <BreadcrumbItem>
                     <BreadcrumbLink asChild>
                       <Link
@@ -181,8 +188,8 @@ export function Toolbar({
                       <BreadcrumbSeparator>
                         <IconChevronRight size={14} className="text-muted-foreground" />
                       </BreadcrumbSeparator>
-                      <BreadcrumbItem>
-                        <BreadcrumbPage className="text-foreground">
+                      <BreadcrumbItem className="min-w-0 !shrink">
+                        <BreadcrumbPage className="truncate text-foreground">
                           {currentLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
@@ -202,9 +209,9 @@ export function Toolbar({
                           <BreadcrumbSeparator>
                             <IconChevronRight size={14} className="text-muted-foreground" />
                           </BreadcrumbSeparator>
-                          <BreadcrumbItem>
+                          <BreadcrumbItem className="min-w-0 !shrink">
                             {isLast ? (
-                              <BreadcrumbPage className="text-foreground">
+                              <BreadcrumbPage className="truncate text-foreground" title={part}>
                                 {part}
                               </BreadcrumbPage>
                             ) : (
@@ -226,7 +233,7 @@ export function Toolbar({
               </Breadcrumb>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <ButtonGroup className="hidden md:flex [&>[data-slot=dropdown-menu-trigger]]:flex [&>[data-slot=dropdown-menu-trigger]]:h-10 [&>[data-slot=dropdown-menu-trigger]]:items-center [&>[data-slot=dropdown-menu-trigger]]:gap-2 [&>[data-slot=dropdown-menu-trigger]]:bg-card [&>[data-slot=dropdown-menu-trigger]]:px-3.5 [&>[data-slot=dropdown-menu-trigger]]:text-sm [&>[data-slot=dropdown-menu-trigger]]:text-foreground [&>[data-slot=dropdown-menu-trigger]]:transition-colors [&>[data-slot=dropdown-menu-trigger]]:hover:bg-muted">
                 <ViewSettingsPopover
                   viewMode={viewMode}
