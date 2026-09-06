@@ -1,11 +1,11 @@
 import * as React from "react"
-import { IconKey, IconPlus, IconSettings } from "@tabler/icons-react"
+import { KeyRound, Plus, Settings } from "lucide-react"
 import { toast } from "sonner"
 
 import { createGuest, listGuests, resetGuestPassword, updateGuest, type GuestAccount, type GuestCredentials } from "@/api/guests"
 import { listMounts, type BucketMount } from "@/api/storage"
-import { PageShell } from "@/components/shared/PageShell"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { usePageTitle } from "@/hooks/use-page-title"
@@ -70,14 +71,19 @@ export function Guests() {
   }
 
   return (
-    <PageShell title="访客管理" description="为临时用户生成独立账号，并限制存储空间与有效期。">
-      <div className="flex justify-end">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold">访客管理</h2>
+          <p className="text-sm text-muted-foreground">创建临时账号，并控制其存储空间与使用期限。</p>
+        </div>
         <Button onClick={() => setCreateOpen(true)} disabled={!mounts.length}>
-          <IconPlus size={16} /> 新增访客
+          <Plus data-icon="inline-start" />
+          新增访客
         </Button>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+      <div className="hidden overflow-hidden rounded-xl border border-border @5xl/settings-content:block">
         <Table className="min-w-[900px]">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -98,8 +104,12 @@ export function Guests() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Switch checked={guest.enabled && !guest.expired} onCheckedChange={(value) => void toggleGuest(guest, value)} />
-                    <span className="text-sm">{guest.expired ? "已到期" : guest.enabled ? "已启用" : "已停用"}</span>
+                    <Switch
+                      checked={guest.enabled && !guest.expired}
+                      onCheckedChange={(value) => void toggleGuest(guest, value)}
+                      aria-label={`${guest.username}账号状态`}
+                    />
+                    <span className="whitespace-nowrap text-sm">{guest.expired ? "已到期" : guest.enabled ? "已启用" : "已停用"}</span>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -110,8 +120,8 @@ export function Guests() {
                 <TableCell className="max-w-56 truncate font-mono text-xs" title={guest.workspace_prefix}>{guest.workspace_prefix}</TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => void resetPassword(guest)}><IconKey size={15} /> 重置密码</Button>
-                    <Button variant="outline" size="sm" onClick={() => setEditing(guest)}><IconSettings size={15} /> 设置</Button>
+                    <Button variant="outline" size="sm" onClick={() => void resetPassword(guest)}><KeyRound data-icon="inline-start" /> 重置密码</Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(guest)}><Settings data-icon="inline-start" /> 设置</Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -124,6 +134,64 @@ export function Guests() {
             ) : null}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="flex flex-col gap-3 @5xl/settings-content:hidden">
+        {loading ? (
+          <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Spinner />
+            正在加载访客账号…
+          </div>
+        ) : guests.length ? guests.map((guest) => (
+          <Card key={guest.id} className="gap-4 py-4 shadow-none">
+            <CardHeader className="grid-cols-[minmax(0,1fr)_auto] gap-3 px-4">
+              <div className="min-w-0">
+                <CardTitle className="truncate text-sm" title={guest.username}>{guest.username}</CardTitle>
+                <CardDescription className="mt-1 break-all">{guest.email}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  {guest.expired ? "已到期" : guest.enabled ? "已启用" : "已停用"}
+                </span>
+                <Switch
+                  checked={guest.enabled && !guest.expired}
+                  onCheckedChange={(value) => void toggleGuest(guest, value)}
+                  aria-label={`${guest.username}账号状态`}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="px-4">
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">空间用量</dt>
+                  <dd>{formatBytes(guest.used_bytes + guest.reserved_bytes)} / {formatBytes(guest.quota_bytes)}</dd>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">有效期</dt>
+                  <dd>{guest.expires_at ? new Date(guest.expires_at).toLocaleString("zh-CN", { hour12: false }) : "长期有效"}</dd>
+                </div>
+                <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">隔离目录</dt>
+                  <dd className="truncate font-mono text-xs" title={guest.workspace_prefix}>{guest.workspace_prefix}</dd>
+                </div>
+              </dl>
+            </CardContent>
+            <CardFooter className="justify-end gap-2 px-4">
+              <Button variant="outline" size="sm" onClick={() => void resetPassword(guest)}>
+                <KeyRound data-icon="inline-start" />
+                重置密码
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(guest)}>
+                <Settings data-icon="inline-start" />
+                设置
+              </Button>
+            </CardFooter>
+          </Card>
+        )) : (
+          <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+            尚未创建访客账号。
+          </div>
+        )}
       </div>
 
       <GuestFormDialog
@@ -147,7 +215,7 @@ export function Guests() {
         }}
       />
       <CredentialsDialog credentials={credentials} onOpenChange={(open) => !open && setCredentials(null)} />
-    </PageShell>
+    </div>
   )
 }
 

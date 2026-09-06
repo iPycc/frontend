@@ -62,11 +62,6 @@ export function UserMenu() {
           <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
             个人资料
           </DropdownMenuItem>
-          {currentUser?.role === "admin" ? (
-            <DropdownMenuItem onClick={() => navigate("/admin/guests")}>
-              访客管理
-            </DropdownMenuItem>
-          ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

@@ -427,7 +427,7 @@ export function SecuritySettingsPage() {
       <section className="space-y-3">
         <div className="text-sm font-medium">最近登录活动</div>
 
-        <div className="space-y-3 md:hidden">
+        <div className="flex flex-col gap-3 @5xl/settings-content:hidden">
           {activityRows.map((item) => (
             <div
               key={item.id}
@@ -461,7 +461,7 @@ export function SecuritySettingsPage() {
           ))}
         </div>
 
-        <div className="hidden overflow-hidden rounded-xl border border-border/70 md:block">
+        <div className="hidden overflow-hidden rounded-xl border border-border/70 @5xl/settings-content:block">
           <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow className="hover:bg-transparent">

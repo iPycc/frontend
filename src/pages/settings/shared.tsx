@@ -1,4 +1,5 @@
 import * as React from "react"
+import { UserRoundCog } from "lucide-react"
 import {
   IconBucket,
   IconEyeOff,
@@ -28,6 +29,7 @@ export type SettingsTabId =
   | "personalization"
   | "security"
   | "storage"
+  | "guests"
   | "website"
 
 export const settingsTabs: Array<{
@@ -59,6 +61,12 @@ export const settingsTabs: Array<{
     label: "存储空间",
     description: "COS 连接策略与挂载配置",
     icon: IconBucket,
+  },
+  {
+    id: "guests",
+    label: "访客管理",
+    description: "临时账号、空间配额与有效期",
+    icon: UserRoundCog,
   },
   {
     id: "website",
@@ -150,7 +158,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
+        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs",
         active
           ? "bg-primary/10 text-primary"
           : "bg-muted text-muted-foreground"
@@ -304,4 +312,3 @@ export function BucketMeta({
     </div>
   )
 }
-

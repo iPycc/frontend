@@ -77,12 +77,13 @@ export default function App() {
                 <Route path="personalization" element={isGuest ? <Navigate to="/settings/security" replace /> : <Deferred><PersonalizationSettingsPage /></Deferred>} />
                 <Route path="security" element={<Deferred><SecuritySettingsPage /></Deferred>} />
                 <Route path="storage" element={isGuest ? <Navigate to="/settings/security" replace /> : <Deferred><StorageSettingsPage /></Deferred>} />
+                <Route path="guests" element={isAdmin ? <Deferred><Guests /></Deferred> : <Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
                 <Route path="website" element={isAdmin ? <Deferred><WebsiteSettingsPage /></Deferred> : <Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
               </Route>
 
               <Route path="/images" element={<AppFiles />} />
               <Route path="/admin/users" element={isAdmin ? <Deferred><Users /></Deferred> : <Navigate to="/app" replace />} />
-              <Route path="/admin/guests" element={isAdmin ? <Deferred><Guests /></Deferred> : <Navigate to="/app" replace />} />
+              <Route path="/admin/guests" element={isAdmin ? <Navigate to="/settings/guests" replace /> : <Navigate to="/app" replace />} />
               <Route path="/admin/system" element={isAdmin ? <Deferred><System /></Deferred> : <Navigate to="/app" replace />} />
             </Route>
 
