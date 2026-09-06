@@ -275,7 +275,7 @@ export function useActions({
     const session = snapshotRef.current.auth.session
     const backendIds = nodeIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
     if (!session || backendIds.length === 0) {
-      return
+      return false
     }
     const selectedNodes = nodeIds.map(getNodeById).filter(Boolean) as FileNode[]
     const deletingFolder = selectedNodes.some((node) => node.kind === "folder")
@@ -344,12 +344,14 @@ export function useActions({
       if (!deletingFolder) {
         await Promise.all(affectedBucketIds.map(refreshLoadedCategories))
       }
+      return true
     } catch (error) {
       updateSnapshot((current) => ({
         ...current,
         nodes: previousNodes,
       }))
       toast.error(error instanceof Error ? error.message : "删除失败")
+      return false
     }
   }, [getNodeById, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 

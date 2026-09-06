@@ -1,5 +1,5 @@
 ﻿import { type FileNode } from "@/lib/models"
-import { type ItemHandlers } from "./types"
+import { type InlineNameEdit, type ItemHandlers } from "./types"
 import { FileCard } from "./FileCard"
 
 interface FileSectionProps extends ItemHandlers {
@@ -8,6 +8,7 @@ interface FileSectionProps extends ItemHandlers {
   items: FileNode[]
   selectedIds: string[]
   showThumbnail?: boolean
+  inlineEdit?: InlineNameEdit
 }
 
 export function FileSection({
@@ -16,6 +17,7 @@ export function FileSection({
   items,
   selectedIds,
   showThumbnail = false,
+  inlineEdit,
   onSelectNode,
   onPrepareContext,
   onOpenNode,
@@ -45,6 +47,7 @@ export function FileSection({
                 item={item}
                 selected={selectedIds.includes(item.id)}
                 showThumbnail={showThumbnail}
+                inlineEdit={inlineEdit}
                 onSelectNode={onSelectNode}
                 onPrepareContext={onPrepareContext}
                 onOpenNode={onOpenNode}

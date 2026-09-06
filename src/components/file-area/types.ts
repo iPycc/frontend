@@ -17,3 +17,14 @@ export interface ItemHandlers {
   getContextIds: (nodeId: string) => string[]
 }
 
+export interface InlineNameEdit {
+  itemId: string
+  mode: "create" | "rename"
+  value: string
+  pending?: boolean
+  error?: string
+  onValueChange: (value: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+}
+

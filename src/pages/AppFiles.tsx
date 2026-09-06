@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Toolbar } from "@/components/toolbar/Toolbar"
@@ -14,12 +14,12 @@ import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { loadFileViewPreferences, saveFileViewPreferences } from "@/lib/file-view-preferences"
 import { EMPTY_PAGE_STATE } from "@/state/core"
+import { CREATE_FOLDER_EVENT } from "@/lib/file-area-events"
+import type { InlineNameEdit } from "@/components/file-area/types"
 
-const RenameDialog = React.lazy(() => import("@/components/file-area/RenameDialog").then((module) => ({ default: module.RenameDialog })))
 const FileArea = React.lazy(() => import("@/components/file-area/FileAreaLayout").then((module) => ({ default: module.FileArea })))
 const MoveDialog = React.lazy(() => import("@/components/file-area/MoveDialog").then((module) => ({ default: module.MoveDialog })))
 const CreateShareDialog = React.lazy(() => import("@/components/file-area/CreateShareDialog").then((module) => ({ default: module.CreateShareDialog })))
-const CreateFolderDialog = React.lazy(() => import("@/components/file-area/CreateFolderDialog").then((module) => ({ default: module.CreateFolderDialog })))
 const DeleteConfirmDialog = React.lazy(() => import("@/components/file-area/DeleteConfirmDialog").then((module) => ({ default: module.DeleteConfirmDialog })))
 const FilePreviewModal = React.lazy(() => import("@/components/file-area/FilePreviewModal").then((module) => ({ default: module.FilePreviewModal })))
 const DownloadMethodDialog = React.lazy(() => import("@/components/download/DownloadMethodDialog").then((module) => ({ default: module.DownloadMethodDialog })))
@@ -31,6 +31,18 @@ const categoryMap = {
   audio: "音频",
   document: "文档",
 } as const
+
+const INLINE_FOLDER_ID = "__cloudrave-new-folder__"
+
+type InlineEditState = {
+  mode: "create" | "rename"
+  itemId: string
+  parentId: string | null
+  value: string
+  originalName?: string
+  pending: boolean
+  error?: string
+}
 
 function getPageTitle(category: keyof typeof categoryMap | null, currentPath: string) {
   if (category && category in categoryMap) {
@@ -52,8 +64,17 @@ function isPreviewable(file: FileNode) {
   return ["txt", "md", "json", "log", "csv", "xml", "yaml", "yml", "ini", "conf", "zip", "tar", "gz", "tgz", "7z", "rar"].includes(ext)
 }
 
+function getAvailableFolderName(siblingNames: Set<string>) {
+  const base = "新建文件夹"
+  if (!siblingNames.has(base)) return base
+  let index = 2
+  while (siblingNames.has(`${base} (${index})`)) index += 1
+  return `${base} (${index})`
+}
+
 export function AppFiles() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { openAudio } = useAudioPlayer()
   const fileDownload = useFileDownload()
   const {
@@ -63,6 +84,7 @@ export function AppFiles() {
     authSession,
     isAuthenticated,
     settings,
+    nodes,
     updateSettings,
     getCategoryNodes,
     getFolderPathId,
@@ -70,6 +92,7 @@ export function AppFiles() {
     getNodeById,
     getNodesInFolder,
     loadDirectory,
+    loadDirectoryFolders,
     resolveFolderPath,
     getDirectoryPageState,
     loadCategory,
@@ -102,15 +125,12 @@ export function AppFiles() {
   const { viewMode, sortValue, pageSize } = viewPreferences
   const thumbnailsEnabled = settings.thumbnailsEnabled
   const thumbnailPreferenceRequestRef = React.useRef(0)
-  const [renameTargetId, setRenameTargetId] = React.useState<string | null>(null)
-  const [renameValue, setRenameValue] = React.useState("")
+  const [inlineEdit, setInlineEdit] = React.useState<InlineEditState | null>(null)
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
   const [shareDialogNodes, setShareDialogNodes] = React.useState<FileNode[]>([])
   const [downloadDialogNodes, setDownloadDialogNodes] = React.useState<FileNode[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
-  const [createFolderOpen, setCreateFolderOpen] = React.useState(false)
-  const [createFolderParentId, setCreateFolderParentId] = React.useState<string | null>(null)
   const [previewFile, setPreviewFile] = React.useState<FileNode | null>(null)
   const [resolvedFolder, setResolvedFolder] = React.useState<{ path: string; id: string } | null>(null)
   const [routeLoading, setRouteLoading] = React.useState(true)
@@ -169,6 +189,25 @@ export function AppFiles() {
     return category && category in categoryMap ? getCategoryNodes(category) : getNodesInFolder(currentPath)
   }, [category, currentPath, getCategoryNodes, getNodesInFolder])
 
+  const fileAreaItems = React.useMemo(() => {
+    if (inlineEdit?.mode !== "create" || inlineEdit.parentId !== currentFolderId) return items
+    const draft: FileNode = {
+      id: INLINE_FOLDER_ID,
+      backendId: null,
+      bucketId: activeBucket.id,
+      mountBackendId: activeBucket.backendId,
+      parentId: inlineEdit.parentId,
+      parentBackendId: inlineEdit.parentId && !inlineEdit.parentId.startsWith("root:")
+        ? Number(inlineEdit.parentId)
+        : null,
+      kind: "folder",
+      name: inlineEdit.value,
+      size: 0,
+      updatedAt: new Date().toISOString(),
+    }
+    return [draft, ...items]
+  }, [activeBucket.backendId, activeBucket.id, currentFolderId, inlineEdit, items])
+
   const selectedNodes = React.useMemo(
     () => selectedIds.map(getNodeById).filter(Boolean) as FileNode[],
     [getNodeById, selectedIds]
@@ -197,9 +236,32 @@ export function AppFiles() {
 
   const pathParts = currentPath.split("/").filter(Boolean)
   const folderOptions = React.useMemo(() => {
-    const root = { id: activeBucket.rootNodeId, name: `${activeBucket.name} /` }
-    return [root, ...getFoldersForBucket(undefined, false).map((node) => ({ id: node.id, name: node.name }))]
-  }, [activeBucket.name, activeBucket.rootNodeId, getFoldersForBucket])
+    return getFoldersForBucket(undefined, false).map((node) => ({
+      id: node.id,
+      name: node.name,
+      parentId: node.parentId,
+    }))
+  }, [getFoldersForBucket])
+
+  const moveBrowserItems = React.useMemo(
+    () => nodes.filter((node) => node.bucketId === activeBucket.id && !node.deletedAt && !node.isSystemRoot),
+    [activeBucket.id, nodes]
+  )
+
+  const blockedMoveFolderIds = React.useMemo(() => {
+    const blocked = new Set(moveIds)
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const folder of folderOptions) {
+        if (folder.parentId && blocked.has(folder.parentId) && !blocked.has(folder.id)) {
+          blocked.add(folder.id)
+          changed = true
+        }
+      }
+    }
+    return Array.from(blocked)
+  }, [folderOptions, moveIds])
 
   React.useEffect(() => {
     let cancelled = false
@@ -294,17 +356,86 @@ export function AppFiles() {
     setSelectedIds((current) => (current.includes(id) ? current : [id]))
   }
 
-  const handleCreateFolder = (parentId = currentFolderId) => {
-    setCreateFolderParentId(parentId)
-    setCreateFolderOpen(true)
-  }
+  const handleCreateFolder = React.useCallback((parentId: string | null = currentFolderId) => {
+    const targetParentId = parentId || activeBucket.rootNodeId
+    const siblingNames = new Set(
+      getFoldersForBucket(undefined, false)
+        .filter((folder) => folder.parentId === targetParentId)
+        .map((folder) => folder.name)
+    )
+    const name = getAvailableFolderName(siblingNames)
 
-  const submitCreateFolder = async (name: string) => {
-    const created = await createFolder(createFolderParentId, name)
-    if (created) {
-      toast.success("文件夹已创建")
+    if (targetParentId !== currentFolderId) {
+      const parent = getNodeById(targetParentId)
+      if (parent?.kind === "folder") {
+        const parentPath = currentPath === "/" ? "" : currentPath
+        const nextPath = `${parentPath}/${parent.name}`.replace(/^\//, "")
+        navigate(`/app?folder=${encodeURIComponent(nextPath)}`)
+      }
     }
-  }
+
+    setSelectedIds([])
+    setInlineEdit({
+      mode: "create",
+      itemId: INLINE_FOLDER_ID,
+      parentId: targetParentId,
+      value: name,
+      pending: false,
+    })
+  }, [activeBucket.rootNodeId, currentFolderId, currentPath, getFoldersForBucket, getNodeById, navigate])
+
+  React.useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<{ parentId?: string | null }>).detail
+      handleCreateFolder(detail?.parentId ?? currentFolderId)
+    }
+    window.addEventListener(CREATE_FOLDER_EVENT, listener)
+    return () => window.removeEventListener(CREATE_FOLDER_EVENT, listener)
+  }, [currentFolderId, handleCreateFolder])
+
+  const updateInlineName = React.useCallback((value: string) => {
+    setInlineEdit((current) => current ? { ...current, value, error: undefined } : current)
+  }, [])
+
+  const cancelInlineEdit = React.useCallback(() => setInlineEdit(null), [])
+
+  const submitInlineEdit = React.useCallback(async () => {
+    if (!inlineEdit || inlineEdit.pending) return
+    const name = inlineEdit.value.trim()
+    if (!name) {
+      setInlineEdit(null)
+      return
+    }
+    if (/[\\/]/.test(name)) {
+      setInlineEdit((current) => current ? { ...current, error: "名称不能包含路径分隔符" } : current)
+      return
+    }
+
+    const editing = inlineEdit
+    if (editing.mode === "rename" && name === editing.originalName?.trim()) {
+      setInlineEdit(null)
+      return
+    }
+    setInlineEdit((current) => current ? { ...current, value: name, pending: true, error: undefined } : current)
+    if (editing.mode === "create") {
+      const created = await createFolder(editing.parentId, name)
+      if (created) {
+        setInlineEdit(null)
+      } else {
+        setInlineEdit((current) => current?.itemId === editing.itemId ? { ...current, pending: false } : current)
+      }
+      return
+    }
+
+    try {
+      await renameNode(editing.itemId, name)
+      setInlineEdit(null)
+    } catch (error) {
+      setInlineEdit((current) => current?.itemId === editing.itemId
+        ? { ...current, pending: false, error: error instanceof Error ? error.message : "重命名失败" }
+        : current)
+    }
+  }, [createFolder, inlineEdit, renameNode])
 
   const handleUpload = () => {
     requestUpload(currentFolderId)
@@ -345,13 +476,26 @@ export function AppFiles() {
   const handleRenameRequest = (ids: string[]) => {
     const node = getNodeById(ids[0])
     if (!node || ids.length !== 1) return
-    setRenameTargetId(node.id)
-    setRenameValue(node.name)
+    setPreviewFile(null)
+    setSelectedIds([])
+    setInlineEdit({
+      mode: "rename",
+      itemId: node.id,
+      parentId: node.parentId,
+      value: node.name,
+      originalName: node.name,
+      pending: false,
+    })
   }
 
   const handleMoveRequest = (ids: string[]) => {
+    const initialTargetId = currentFolderId || activeBucket.rootNodeId
     setMoveIds(ids)
-    setMoveTargetId(currentFolderId || activeBucket.rootNodeId)
+    setMoveTargetId(initialTargetId)
+    void Promise.all([
+      loadDirectory(initialTargetId, activeBucket.id, { reset: true, limit: pageSize, sort: sortValue }),
+      loadDirectoryFolders(initialTargetId, activeBucket.id),
+    ]).catch((error) => toast.error(error instanceof Error ? error.message : "目录加载失败"))
   }
 
   const handleShareRequest = (ids: string[]) => {
@@ -474,14 +618,6 @@ export function AppFiles() {
     await pasteNodes(currentFolderId)
   }
 
-  const submitRename = async (name: string) => {
-    if (!renameTargetId) return
-    await renameNode(renameTargetId, name)
-    setRenameTargetId(null)
-    setRenameValue("")
-    toast.success("已重命名")
-  }
-
   const submitMove = async (targetId: string) => {
     if (!moveIds.length) return
     await moveNodes(moveIds, targetId)
@@ -532,6 +668,19 @@ export function AppFiles() {
     setPreviewFile(next)
   }, [previewIndex, previewableFiles])
 
+  const inlineNameEdit: InlineNameEdit | undefined = inlineEdit
+    ? {
+        itemId: inlineEdit.itemId,
+        mode: inlineEdit.mode,
+        value: inlineEdit.value,
+        pending: inlineEdit.pending,
+        error: inlineEdit.error,
+        onValueChange: updateInlineName,
+        onSubmit: () => void submitInlineEdit(),
+        onCancel: cancelInlineEdit,
+      }
+    : undefined
+
   return (
     <>
       <Toolbar
@@ -580,7 +729,7 @@ export function AppFiles() {
             )}
           >
             <FileArea
-              items={items}
+              items={fileAreaItems}
               loading={routeLoading || unresolvedFolder || pageState.loading}
               loaded={pageState.loaded}
               metadataLoaded={pageState.metadataLoaded}
@@ -589,12 +738,14 @@ export function AppFiles() {
               hasMore={Boolean(pageState.nextCursor)}
               currentPath={currentPath}
               selectedIds={selectedIds}
+              inlineEdit={inlineNameEdit}
               viewMode={viewMode}
               sortValue={sortValue}
               pageSize={pageSize}
               showThumbnail={thumbnailsEnabled}
               canPaste={Boolean(clipboard)}
               onSelectNode={handleSelectNode}
+              onSelectIds={setSelectedIds}
               onPrepareContext={handlePrepareContext}
               onClearSelection={() => setSelectedIds([])}
               onRenameRequest={handleRenameRequest}
@@ -664,26 +815,21 @@ export function AppFiles() {
           />
         ) : null}
 
-        {renameTargetId ? (
-          <RenameDialog
-            open
-            title="重命名"
-            value={renameValue}
-            onValueChange={setRenameValue}
-            onCancel={() => {
-              setRenameTargetId(null)
-              setRenameValue("")
-            }}
-            onSubmit={(value) => void submitRename(value)}
-          />
-        ) : null}
-
         {moveIds.length > 0 ? (
           <MoveDialog
             open
             folders={folderOptions}
+            items={moveBrowserItems}
+            root={{ id: activeBucket.rootNodeId, name: activeBucket.name }}
+            disabledFolderIds={blockedMoveFolderIds}
             value={moveTargetId}
             onValueChange={setMoveTargetId}
+            onBrowseFolder={async (folderId) => {
+              await Promise.all([
+                loadDirectory(folderId, activeBucket.id, { reset: true, limit: pageSize, sort: "name-asc" }),
+                loadDirectoryFolders(folderId, activeBucket.id),
+              ])
+            }}
             onCancel={() => setMoveIds([])}
             onSubmit={(value) => void submitMove(value)}
           />
@@ -707,15 +853,6 @@ export function AppFiles() {
           />
         ) : null}
 
-        {createFolderOpen ? (
-          <CreateFolderDialog
-            open
-            onOpenChange={setCreateFolderOpen}
-            defaultName="新建文件夹"
-            locationLabel={currentPath ? `位置：${currentPath}` : activeBucket.name}
-            onSubmit={(name) => void submitCreateFolder(name)}
-          />
-        ) : null}
       </React.Suspense>
     </>
   )

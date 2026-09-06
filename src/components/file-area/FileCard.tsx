@@ -11,8 +11,9 @@ import { useNearViewport } from "@/hooks/use-near-viewport"
 import { cn, truncateFilename } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type ItemHandlers } from "./types"
+import { type InlineNameEdit, type ItemHandlers } from "./types"
 import { FileGlyph } from "./FileGlyph"
+import { InlineNameEditor } from "./InlineNameEditor"
 import { ItemContextMenu } from "./ItemContextMenu"
 import { isOfficeFile, OfficeCardPreview } from "./OfficeCardPreview"
 import { PdfCardPreview } from "./PdfCardPreview"
@@ -21,6 +22,7 @@ interface FileCardProps extends ItemHandlers {
   item: FileNode
   selected: boolean
   showThumbnail?: boolean
+  inlineEdit?: InlineNameEdit
 }
 
 function canShowThumbnail(item: FileNode) {
@@ -40,6 +42,7 @@ export function FileCard({
   item,
   selected,
   showThumbnail = false,
+  inlineEdit,
   onSelectNode,
   onPrepareContext,
   onOpenNode,
@@ -72,6 +75,7 @@ export function FileCard({
   const [textPreviewLoading, setTextPreviewLoading] = useState(false)
   const { ref: previewHostRef, isNear: previewIsNear } = useNearViewport<HTMLDivElement>(hasThumbnail)
   const previewActive = hasThumbnail && previewIsNear
+  const isEditing = inlineEdit?.itemId === item.id
 
   useEffect(() => {
     if (!previewActive || !isText || !item.backendId) {
@@ -97,11 +101,33 @@ export function FileCard({
     return () => controller.abort()
   }, [previewActive, isText, item.backendId, item.updatedAt])
 
+  if (isEditing && (!showThumbnail || item.kind === "folder")) {
+    return (
+      <div
+        data-file-card
+        data-file-card-id={item.id}
+        className="flex min-h-12 w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-2 dark:border-white/10 dark:bg-white/5"
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/70">
+          <FileGlyph item={item} />
+        </div>
+        <InlineNameEditor edit={inlineEdit} originalName={inlineEdit.mode === "rename" ? item.name : undefined} />
+      </div>
+    )
+  }
+
   if (!showThumbnail || item.kind === "folder") {
     return (
       <ContextMenu>
-        <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
+        <ContextMenuTrigger
+          onContextMenu={(event) => {
+            event.stopPropagation()
+            onPrepareContext(item.id)
+          }}
+        >
           <div
+            data-file-card
+            data-file-card-id={item.id}
             className={cn(
               "group flex h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition-colors",
               selected
@@ -150,7 +176,7 @@ export function FileCard({
         </ContextMenuTrigger>
         <ItemContextMenu
           item={item}
-          ids={getContextIds(item.id)}
+          getIds={() => getContextIds(item.id)}
           onOpenNode={onOpenNode}
           onRenameRequest={onRenameRequest}
           onMoveRequest={onMoveRequest}
@@ -168,9 +194,16 @@ export function FileCard({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
+      <ContextMenuTrigger
+        onContextMenu={(event) => {
+          event.stopPropagation()
+          onPrepareContext(item.id)
+        }}
+      >
         <div
           ref={previewHostRef}
+          data-file-card
+          data-file-card-id={item.id}
           className={cn(
             "group relative flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
             selected
@@ -278,28 +311,32 @@ export function FileCard({
                 <IconCheck size={12} stroke={2.5} />
               </span>
             </button>
-            <button
-              type="button"
-              onClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onSelectNode(item.id, event)
-              }}
-              onDoubleClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onOpenNode(item)
-              }}
-              className="min-w-0 flex-1 text-left"
-            >
-              <div className="truncate text-sm font-medium text-foreground" title={item.name}>
-                {truncateFilename(item.name, 20)}
-              </div>
-            </button>
+            {isEditing ? (
+              <InlineNameEditor edit={inlineEdit} originalName={inlineEdit.mode === "rename" ? item.name : undefined} />
+            ) : (
+              <button
+                type="button"
+                onClick={(event: MouseEvent) => {
+                  event.stopPropagation()
+                  onSelectNode(item.id, event)
+                }}
+                onDoubleClick={(event: MouseEvent) => {
+                  event.stopPropagation()
+                  onOpenNode(item)
+                }}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="truncate text-sm font-medium text-foreground" title={item.name}>
+                  {truncateFilename(item.name, 20)}
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </ContextMenuTrigger>
       <ItemContextMenu
         item={item}
-        ids={getContextIds(item.id)}
+        getIds={() => getContextIds(item.id)}
         onOpenNode={onOpenNode}
         onRenameRequest={onRenameRequest}
         onMoveRequest={onMoveRequest}

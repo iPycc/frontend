@@ -1,5 +1,5 @@
 import * as React from "react"
-import { IconFolderPlus, IconMapPin } from "@tabler/icons-react"
+import { FolderPlus, MapPin } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -10,9 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
+import { Spinner } from "@/components/ui/spinner"
 
 interface CreateFolderDialogProps {
   open: boolean
@@ -77,25 +77,26 @@ export function CreateFolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 sm:max-w-[28rem]">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-6">
-            <DialogHeader className="text-left">
-              <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <IconFolderPlus size={21} stroke={1.7} />
-              </div>
-              <DialogTitle className="text-lg">{title}</DialogTitle>
-              <DialogDescription>{description}</DialogDescription>
-            </DialogHeader>
+      <DialogContent className="sm:max-w-[30rem]">
+        <form onSubmit={handleSubmit} className="contents">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <FolderPlus className="text-primary" aria-hidden="true" />
+              <DialogTitle>{title}</DialogTitle>
+            </div>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
 
+          <FieldGroup>
             {locationLabel ? (
-              <div className="flex items-start gap-2 rounded-lg bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
-                <IconMapPin size={15} className="mt-0.5 shrink-0" />
-                <span className="line-clamp-2">{locationLabel}</span>
+              <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
+                <MapPin className="shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate" title={locationLabel}>{locationLabel}</span>
               </div>
             ) : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="folder-name">文件夹名称</Label>
+            <Field data-invalid={Boolean(error)}>
+              <FieldLabel htmlFor="folder-name">文件夹名称</FieldLabel>
               <Input
                 id="folder-name"
                 ref={inputRef}
@@ -111,21 +112,25 @@ export function CreateFolderDialog({
                   }
                 }}
                 placeholder="例如：工作文档"
-                className={cn(error && "border-destructive focus-visible:ring-destructive")}
+                aria-invalid={Boolean(error)}
                 disabled={isSubmitting}
               />
-              {error ? <p className="text-xs text-destructive">{error}</p> : null}
-            </div>
+              {error ? <FieldError>{error}</FieldError> : (
+                <FieldDescription>名称最多 255 个字符，不能包含路径分隔符。</FieldDescription>
+              )}
+            </Field>
+          </FieldGroup>
 
-            <DialogFooter className="pt-1">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-                取消
-              </Button>
-              <Button type="submit" disabled={isSubmitting || !name.trim()}>
-                {isSubmitting ? "创建中..." : "创建"}
-              </Button>
-            </DialogFooter>
-          </form>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+              取消
+            </Button>
+            <Button type="submit" disabled={isSubmitting || !name.trim()}>
+              {isSubmitting ? <Spinner data-icon="inline-start" /> : <FolderPlus data-icon="inline-start" />}
+              {isSubmitting ? "创建中…" : "创建文件夹"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

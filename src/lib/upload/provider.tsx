@@ -47,7 +47,7 @@ export interface UploadProviderProps {
   getBuckets: () => BucketMount[]
   getActiveBucketId: () => string
   getNodes: () => FileNode[]
-  deleteNodes: (nodeIds: string[]) => Promise<void>
+  deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<boolean>
   onUploadComplete: (parentId: string | null, bucketId: string) => void
 }
 
@@ -253,7 +253,8 @@ export function UploadProvider({
         continue
       }
       if (choice === "replace") {
-        await deleteNodesRef.current([existing.id])
+        const deleted = await deleteNodesRef.current([existing.id], true)
+        if (!deleted) return
         reservedNames.delete(topName)
         continue
       }

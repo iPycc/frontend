@@ -1,7 +1,16 @@
 import * as React from "react"
 import type { MouseEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { IconChevronRight, IconFolder, IconLoader2 } from "@tabler/icons-react"
+import {
+  IconClipboard,
+  IconFolderPlus,
+  IconLayoutGrid,
+  IconList,
+  IconLoader2,
+  IconRefresh,
+  IconSortAscending,
+  IconUpload,
+} from "@tabler/icons-react"
 
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -20,6 +29,7 @@ import {
 import { FileSection } from "./FileSection"
 import { FileList } from "./FileList"
 import { FileAreaPendingContent } from "./FileAreaPending"
+import type { InlineNameEdit } from "./types"
 
 interface FileAreaProps {
   items: FileNode[]
@@ -31,12 +41,14 @@ interface FileAreaProps {
   hasMore: boolean
   currentPath: string
   selectedIds: string[]
+  inlineEdit?: InlineNameEdit
   viewMode: ViewMode
   sortValue: SortValue
   pageSize: number
   showThumbnail?: boolean
   canPaste: boolean
   onSelectNode: (id: string, event: MouseEvent) => void
+  onSelectIds: (ids: string[]) => void
   onPrepareContext: (id: string) => void
   onClearSelection?: () => void
   onRenameRequest: (ids: string[]) => void
@@ -78,12 +90,14 @@ export function FileArea({
   hasMore,
   currentPath,
   selectedIds,
+  inlineEdit,
   viewMode,
   sortValue,
   pageSize,
   showThumbnail = false,
   canPaste,
   onSelectNode,
+  onSelectIds,
   onPrepareContext,
   onClearSelection,
   onRenameRequest,
@@ -108,15 +122,91 @@ export function FileArea({
 }: FileAreaProps) {
   const navigate = useNavigate()
   const [dragActive, setDragActive] = React.useState(false)
+  const [selectionBox, setSelectionBox] = React.useState<SelectionBox | null>(null)
   const dragDepthRef = React.useRef(0)
+  const selectionRef = React.useRef<SelectionState | null>(null)
+  const selectedIdsRef = React.useRef(selectedIds)
+  const ignoreNextBackgroundClickRef = React.useRef(false)
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  selectedIdsRef.current = selectedIds
   const folders = items.filter((item) => item.kind === "folder")
   const files = items.filter((item) => item.kind === "file")
 
   const handleBackgroundClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement
+    // React events from portalled overlays still bubble through the component
+    // tree. Only treat clicks whose DOM target is actually inside the file area
+    // as background clicks.
+    if (!event.currentTarget.contains(target)) return
     if (target.closest("[data-file-card]")) return
+    if (ignoreNextBackgroundClickRef.current) {
+      ignoreNextBackgroundClickRef.current = false
+      event.stopPropagation()
+      return
+    }
     onClearSelection?.()
   }
+
+  const handleSelectionStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement
+    // Context menus and dialogs are portalled outside this element, even though
+    // their React events bubble through it. Do not let those presses start a
+    // marquee selection or capture the pointer away from the overlay.
+    if (!event.currentTarget.contains(target)) return
+    if (event.button !== 0 || target.closest("[data-file-card]")) return
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    window.getSelection()?.removeAllRanges()
+    const initialIds = event.ctrlKey || event.metaKey ? selectedIds : []
+    selectionRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      initialIds,
+      moved: false,
+    }
+    onSelectIds(initialIds)
+  }
+
+  React.useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const selection = selectionRef.current
+      const container = contentRef.current
+      if (!selection || !container) return
+      event.preventDefault()
+
+      const left = Math.min(selection.startX, event.clientX)
+      const top = Math.min(selection.startY, event.clientY)
+      const width = Math.abs(event.clientX - selection.startX)
+      const height = Math.abs(event.clientY - selection.startY)
+      if (!selection.moved && width < 4 && height < 4) return
+      selection.moved = true
+
+      const bounds = { left, top, right: left + width, bottom: top + height }
+      const ids = Array.from(container.querySelectorAll<HTMLElement>("[data-file-card]"))
+        .filter((element) => rectanglesIntersect(bounds, element.getBoundingClientRect()))
+        .map((element) => element.dataset.fileCardId)
+        .filter((id): id is string => Boolean(id))
+
+      onSelectIds(Array.from(new Set([...selection.initialIds, ...ids])))
+      setSelectionBox({ left, top, width, height })
+    }
+
+    const handlePointerUp = () => {
+      const selection = selectionRef.current
+      if (!selection) return
+      if (selection.moved) ignoreNextBackgroundClickRef.current = true
+      selectionRef.current = null
+      setSelectionBox(null)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+    }
+  }, [onSelectIds])
 
   const openNode = (node: FileNode) => {
     if (node.kind === "folder") {
@@ -128,7 +218,17 @@ export function FileArea({
     onOpenFile(node)
   }
 
-  const getContextIds = (nodeId: string) => (selectedIds.includes(nodeId) && selectedIds.length > 1 ? selectedIds : [nodeId])
+  const prepareItemContext = (nodeId: string) => {
+    const currentIds = selectedIdsRef.current
+    const contextIds = currentIds.includes(nodeId) && currentIds.length > 1 ? currentIds : [nodeId]
+    selectedIdsRef.current = contextIds
+    onPrepareContext(nodeId)
+  }
+
+  const getContextIds = (nodeId: string) => {
+    const currentIds = selectedIdsRef.current
+    return currentIds.includes(nodeId) && currentIds.length > 1 ? currentIds : [nodeId]
+  }
 
   return (
     <ContextMenu>
@@ -165,7 +265,12 @@ export function FileArea({
               </div>
             </div>
           ) : null}
-          <div className="custom-scrollbar flex-1 overflow-y-auto pr-0.5 md:pr-2" onClick={handleBackgroundClick}>
+          <div
+            ref={contentRef}
+            className="custom-scrollbar flex-1 select-none overflow-y-auto pr-0.5 md:pr-2"
+            onClick={handleBackgroundClick}
+            onPointerDown={handleSelectionStart}
+          >
             {items.length === 0 && !metadataLoaded ? null : loading && items.length === 0 ? (
               <FileAreaPendingContent
                 metadataLoaded
@@ -188,8 +293,9 @@ export function FileArea({
                         title="文件夹"
                         items={folders}
                         selectedIds={selectedIds}
+                        inlineEdit={inlineEdit}
                         onSelectNode={onSelectNode}
-                        onPrepareContext={onPrepareContext}
+                        onPrepareContext={prepareItemContext}
                         onOpenNode={openNode}
                         onRenameRequest={onRenameRequest}
                         onMoveRequest={onMoveRequest}
@@ -208,9 +314,10 @@ export function FileArea({
                         title="文件"
                         items={files}
                         selectedIds={selectedIds}
+                        inlineEdit={inlineEdit}
                         showThumbnail={showThumbnail}
                         onSelectNode={onSelectNode}
-                        onPrepareContext={onPrepareContext}
+                        onPrepareContext={prepareItemContext}
                         onOpenNode={openNode}
                         onRenameRequest={onRenameRequest}
                         onMoveRequest={onMoveRequest}
@@ -229,8 +336,9 @@ export function FileArea({
                   <FileList
                     items={items}
                     selectedIds={selectedIds}
+                    inlineEdit={inlineEdit}
                     onSelectNode={onSelectNode}
-                    onPrepareContext={onPrepareContext}
+                    onPrepareContext={prepareItemContext}
                     onOpenNode={openNode}
                     onRenameRequest={onRenameRequest}
                     onMoveRequest={onMoveRequest}
@@ -257,37 +365,46 @@ export function FileArea({
                 </Button>
               </div>
             ) : null}
+            {selectionBox ? (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none fixed z-30 border border-white bg-white/[0.14]"
+                style={selectionBox}
+              />
+            ) : null}
           </div>
         </div>
       </ContextMenuTrigger>
 
       <ContextMenuContent>
-        <ContextMenuItem onClick={onCreateFolder}>新建文件夹</ContextMenuItem>
+        <ContextMenuItem onClick={onCreateFolder}><IconFolderPlus />新建文件夹</ContextMenuItem>
         <ContextMenuSub>
-          <ContextMenuSubTrigger>上传</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger><IconUpload />上传</ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem onClick={onUploadRequest}>上传文件</ContextMenuItem>
-            <ContextMenuItem onClick={onUploadFolderRequest}>上传文件夹</ContextMenuItem>
+            <ContextMenuItem onClick={onUploadRequest}><IconUpload />上传文件</ContextMenuItem>
+            <ContextMenuItem onClick={onUploadFolderRequest}><IconFolderPlus />上传文件夹</ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
-        <ContextMenuItem onClick={onRefresh}>刷新</ContextMenuItem>
+        <ContextMenuItem onClick={onRefresh}><IconRefresh />刷新</ContextMenuItem>
         <ContextMenuItem disabled={!canPaste} onClick={onPaste}>
+          <IconClipboard />
           粘贴
           <ContextMenuShortcut>{canPaste ? "Ctrl+V" : ""}</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuSub>
-          <ContextMenuSubTrigger>视图</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger><IconLayoutGrid />视图</ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem onClick={() => onViewModeChange("grid")}>网格视图</ContextMenuItem>
-            <ContextMenuItem onClick={() => onViewModeChange("list")}>列表视图</ContextMenuItem>
+            <ContextMenuItem onClick={() => onViewModeChange("grid")}><IconLayoutGrid />网格视图</ContextMenuItem>
+            <ContextMenuItem onClick={() => onViewModeChange("list")}><IconList />列表视图</ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSub>
-          <ContextMenuSubTrigger>排序</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger><IconSortAscending />排序</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {sortLabels.map((item) => (
               <ContextMenuItem key={item.value} onClick={() => onSortChange(item.value)}>
+                <IconSortAscending />
                 {item.label}
                 <ContextMenuShortcut>{sortValue === item.value ? "当前" : ""}</ContextMenuShortcut>
               </ContextMenuItem>
@@ -360,4 +477,25 @@ async function walkDroppedEntry(
   for (const child of children) {
     await walkDroppedEntry(child, path, result)
   }
+}
+
+type SelectionBox = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+type SelectionState = {
+  startX: number
+  startY: number
+  initialIds: string[]
+  moved: boolean
+}
+
+function rectanglesIntersect(
+  first: { left: number; top: number; right: number; bottom: number },
+  second: DOMRect
+) {
+  return first.left < second.right && first.right > second.left && first.top < second.bottom && first.bottom > second.top
 }
