@@ -152,7 +152,13 @@ export function SidebarLayout() {
                 )}
               </button>
               <NavLink to="/app" className="flex min-w-0 flex-1 items-center gap-3">
-                <IconHome size={17} className="shrink-0 text-muted-foreground" />
+                <IconHome
+                  size={17}
+                  className={cn(
+                    "shrink-0",
+                    isMyFilesActive ? "text-nav-active-fg" : "text-muted-foreground"
+                  )}
+                />
                 <span>我的文件</span>
               </NavLink>
             </div>
