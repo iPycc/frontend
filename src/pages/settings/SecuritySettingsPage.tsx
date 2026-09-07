@@ -1,7 +1,19 @@
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
-import { IconPlus, IconX } from "@tabler/icons-react"
-import { KeyRound } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
+import {
+  Check,
+  Github,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  Power,
+  Save,
+  ScanFace,
+  ShieldCheck,
+  ShieldOff,
+  Unlink,
+  X,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -13,8 +25,23 @@ import {
   renamePasskey,
   type UserLoginActivityEntry,
 } from "@/api/user"
+import {
+  getGitHubOAuthConnection,
+  getGitHubOAuthSettings,
+  unlinkGitHubOAuthConnection,
+  updateGitHubOAuthSettings,
+} from "@/api/oauth"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  openGitHubOAuthPopup,
+  readGitHubOAuthPopupResult,
+  subscribeGitHubOAuthResults,
+  type GitHubOAuthMessage,
+} from "@/lib/github-oauth-popup"
 import {
   Table,
   TableBody,
@@ -30,10 +57,22 @@ import { ChangePasswordDialog } from "./security/pass"
 import { TwoFactorDialog } from "./security/two"
 import { isPasskeyCanceled, normalizeToastDescription } from "./security/util"
 
+const GITHUB_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "GitHub 授权已取消。",
+  account_not_found: "Cloudrave 账号不存在或已被禁用。",
+  guest_not_supported: "访客账号不能关联 GitHub。",
+  identity_conflict: "该 GitHub 账号或当前 Cloudrave 账号已存在其他关联。",
+  invalid_state: "关联请求已失效，请重新发起。",
+  not_configured: "管理员尚未完成 GitHub OAuth 配置。",
+  provider_error: "GitHub 暂时无法完成授权，请稍后再试。",
+}
+
 export function SecuritySettingsPage() {
+  const location = useLocation()
   const navigate = useNavigate()
   const { authSession, currentUser, logout, security, settings, updateSecurity } = useAppState()
   const isGuest = currentUser?.role === "guest"
+  const isAdmin = currentUser?.role === "admin"
   const token = authSession?.tokens.accessToken ?? null
 
   const [isLoadingActivity, setIsLoadingActivity] = React.useState(false)
@@ -47,7 +86,102 @@ export function SecuritySettingsPage() {
   const [twoFactorDialogOpen, setTwoFactorDialogOpen] = React.useState(false)
   const [twoFactorDialogMode, setTwoFactorDialogMode] = React.useState<"setup" | "disable">("setup")
   const [passwordDialogOpen, setPasswordDialogOpen] = React.useState(false)
+  const [githubOAuthEnabled, setGitHubOAuthEnabled] = React.useState(false)
+  const [githubClientId, setGitHubClientId] = React.useState("")
+  const [githubClientSecret, setGitHubClientSecret] = React.useState("")
+  const [githubSecretConfigured, setGitHubSecretConfigured] = React.useState(false)
+  const [githubCallbackUrl, setGitHubCallbackUrl] = React.useState("")
+  const [githubConfigExpanded, setGitHubConfigExpanded] = React.useState(false)
+  const [githubLinked, setGitHubLinked] = React.useState(false)
+  const [githubUsername, setGitHubUsername] = React.useState<string | null>(null)
+  const [githubAvatarUrl, setGitHubAvatarUrl] = React.useState<string | null>(null)
+  const [githubLinkUrl, setGitHubLinkUrl] = React.useState("/api/v1/oauth/github/link")
+  const [isLoadingGitHubOAuth, setIsLoadingGitHubOAuth] = React.useState(false)
+  const [isLoadingGitHubConnection, setIsLoadingGitHubConnection] = React.useState(false)
+  const [isUnlinkingGitHub, setIsUnlinkingGitHub] = React.useState(false)
+  const [githubOAuthSavingAction, setGitHubOAuthSavingAction] = React.useState<"enable" | "disable" | null>(null)
+  const [isLinkingGitHub, setIsLinkingGitHub] = React.useState(false)
   const editingContainerRef = React.useRef<HTMLDivElement | null>(null)
+  const handledOAuthLinkResult = React.useRef<string | null>(null)
+  const githubOAuthPopupRef = React.useRef<Window | null>(null)
+  const isSavingGitHubOAuth = githubOAuthSavingAction !== null
+
+  React.useEffect(() => {
+    if (!isAdmin || !token) {
+      return
+    }
+
+    const controller = new AbortController()
+    setIsLoadingGitHubOAuth(true)
+    getGitHubOAuthSettings(token, controller.signal)
+      .then((response) => {
+        setGitHubOAuthEnabled(response.enabled)
+        setGitHubClientId(response.client_id)
+        setGitHubSecretConfigured(response.client_secret_configured)
+        setGitHubCallbackUrl(response.callback_url)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+        toast.error("加载 GitHub OAuth 配置失败", {
+          description: error instanceof Error ? error.message : "请稍后再试。",
+        })
+      })
+      .finally(() => setIsLoadingGitHubOAuth(false))
+
+    return () => controller.abort()
+  }, [isAdmin, token])
+
+  const loadGitHubConnection = React.useCallback(async (signal?: AbortSignal) => {
+    if (isGuest || !token) {
+      return
+    }
+
+    setIsLoadingGitHubConnection(true)
+    try {
+      const response = await getGitHubOAuthConnection(token, signal)
+      setGitHubOAuthEnabled(response.enabled)
+      setGitHubLinked(response.linked)
+      setGitHubUsername(response.provider_username)
+      setGitHubAvatarUrl(response.provider_avatar_url)
+      setGitHubLinkUrl(response.link_url)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      toast.error("加载 GitHub 关联状态失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoadingGitHubConnection(false)
+      }
+    }
+  }, [isGuest, token])
+
+  React.useEffect(() => {
+    const controller = new AbortController()
+    void loadGitHubConnection(controller.signal)
+    return () => controller.abort()
+  }, [loadGitHubConnection])
+
+  React.useEffect(() => {
+    const result = new URLSearchParams(location.search).get("oauth_link")
+    if (!result || handledOAuthLinkResult.current === result) {
+      return
+    }
+    handledOAuthLinkResult.current = result
+
+    if (result === "success") {
+      toast.success("GitHub 账号已关联")
+    } else {
+      toast.error("关联 GitHub 失败", {
+        description: GITHUB_LINK_ERROR_DESCRIPTIONS[result] ?? "当前无法完成 GitHub 关联。",
+      })
+    }
+    navigate(location.pathname, { replace: true })
+  }, [location.pathname, location.search, navigate])
 
   const loadLoginActivity = React.useCallback(async () => {
     if (isGuest) {
@@ -260,6 +394,130 @@ export function SecuritySettingsPage() {
     }
   }
 
+  const saveGitHubOAuth = async (enabled = true) => {
+    if (!token || !isAdmin) {
+      return
+    }
+
+    setGitHubOAuthSavingAction(enabled ? "enable" : "disable")
+    try {
+      const response = await updateGitHubOAuthSettings(token, {
+        enabled,
+        clientId: githubClientId.trim(),
+        clientSecret: githubClientSecret,
+      })
+      setGitHubOAuthEnabled(response.enabled)
+      setGitHubClientId(response.client_id)
+      setGitHubClientSecret("")
+      setGitHubSecretConfigured(response.client_secret_configured)
+      setGitHubCallbackUrl(response.callback_url)
+      if (!response.enabled) {
+        setGitHubConfigExpanded(false)
+      }
+      toast.success(response.enabled ? "GitHub OAuth 已开启" : "GitHub OAuth 已关闭")
+    } catch (error) {
+      toast.error("保存 GitHub OAuth 配置失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setGitHubOAuthSavingAction(null)
+    }
+  }
+
+  const linkGitHub = () => {
+    if (isLinkingGitHub) {
+      return
+    }
+
+    const popup = openGitHubOAuthPopup(githubLinkUrl, "link")
+    if (!popup) {
+      toast.error("无法打开 GitHub 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+
+    githubOAuthPopupRef.current = popup
+    setIsLinkingGitHub(true)
+  }
+
+  const handleGitHubLinkResult = React.useCallback((message: GitHubOAuthMessage) => {
+    if (!githubOAuthPopupRef.current) {
+      return
+    }
+
+    githubOAuthPopupRef.current.close()
+    githubOAuthPopupRef.current = null
+    setIsLinkingGitHub(false)
+
+    if (message.result === "success") {
+      void loadGitHubConnection().then(() => toast.success("GitHub 账号已关联"))
+      return
+    }
+
+    toast.error("关联 GitHub 失败", {
+      description:
+        GITHUB_LINK_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 GitHub 关联。",
+    })
+  }, [loadGitHubConnection])
+
+  React.useEffect(() => {
+    return subscribeGitHubOAuthResults(
+      "link",
+      () => githubOAuthPopupRef.current,
+      handleGitHubLinkResult
+    )
+  }, [handleGitHubLinkResult])
+
+  React.useEffect(() => {
+    if (!isLinkingGitHub) {
+      return
+    }
+
+    const closeWatcher = window.setInterval(() => {
+      const popup = githubOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        githubOAuthPopupRef.current = null
+        setIsLinkingGitHub(false)
+        return
+      }
+
+      const result = readGitHubOAuthPopupResult(popup, "link")
+      if (result) {
+        handleGitHubLinkResult(result)
+      }
+    }, 250)
+
+    return () => window.clearInterval(closeWatcher)
+  }, [handleGitHubLinkResult, isLinkingGitHub])
+
+  React.useEffect(() => {
+    return () => githubOAuthPopupRef.current?.close()
+  }, [])
+
+  const unlinkGitHub = async () => {
+    if (!token || !githubLinked) {
+      return
+    }
+
+    setIsUnlinkingGitHub(true)
+    try {
+      const response = await unlinkGitHubOAuthConnection(token)
+      setGitHubOAuthEnabled(response.enabled)
+      setGitHubLinked(response.linked)
+      setGitHubUsername(response.provider_username)
+      setGitHubAvatarUrl(response.provider_avatar_url)
+      setGitHubLinkUrl(response.link_url)
+      toast.success("GitHub 账号已解绑")
+    } catch (error) {
+      toast.error("解绑 GitHub 账号失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setIsUnlinkingGitHub(false)
+    }
+  }
+
   if (isGuest) {
     return (
       <div className="max-w-2xl">
@@ -268,7 +526,10 @@ export function SecuritySettingsPage() {
             <div className="text-sm font-medium">修改密码</div>
             <div className="mt-1 text-sm text-muted-foreground">访客只能维护自己的登录密码，账号资料和存储空间由管理员管理。</div>
           </div>
-          <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>修改密码</Button>
+          <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>
+            <LockKeyhole data-icon="inline-start" />
+            修改密码
+          </Button>
         </section>
         <ChangePasswordDialog
           open={passwordDialogOpen}
@@ -288,6 +549,7 @@ export function SecuritySettingsPage() {
         <section className="space-y-3">
           <div className="text-sm font-medium">修改密码</div>
           <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>
+            <LockKeyhole data-icon="inline-start" />
             修改密码
           </Button>
           <ChangePasswordDialog
@@ -299,6 +561,162 @@ export function SecuritySettingsPage() {
             onSuccess={handlePasswordChanged}
           />
         </section>
+
+        {isAdmin ? (
+          <section className="flex flex-col items-start gap-4">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">GitHub OAuth 登录</div>
+              <StatusBadge active={githubOAuthEnabled}>
+                {githubOAuthEnabled ? "已开启" : "已关闭"}
+              </StatusBadge>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setGitHubConfigExpanded((expanded) => !expanded)}
+              disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}
+              aria-expanded={githubConfigExpanded}
+            >
+              {isLoadingGitHubOAuth ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <Github data-icon="inline-start" />
+              )}
+              {githubConfigExpanded ? "收起配置" : "配置 GitHub OAuth"}
+            </Button>
+
+            {githubConfigExpanded ? (
+              <FieldGroup className="max-w-xl gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field data-disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}>
+                    <FieldLabel htmlFor="github-client-id">Client ID</FieldLabel>
+                    <Input
+                      id="github-client-id"
+                      value={githubClientId}
+                      onChange={(event) => setGitHubClientId(event.target.value)}
+                      placeholder="GitHub OAuth App Client ID"
+                      disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}
+                      autoComplete="off"
+                    />
+                  </Field>
+                  <Field data-disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}>
+                    <FieldLabel htmlFor="github-client-secret">Client Secret</FieldLabel>
+                    <Input
+                      id="github-client-secret"
+                      type="password"
+                      value={githubClientSecret}
+                      onChange={(event) => setGitHubClientSecret(event.target.value)}
+                      placeholder={githubSecretConfigured ? "已配置，留空保持不变" : "填写 Client Secret"}
+                      disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                </div>
+
+                <Field data-disabled={isLoadingGitHubOAuth}>
+                  <FieldLabel htmlFor="github-callback-url">Authorization callback URL</FieldLabel>
+                  <Input
+                    id="github-callback-url"
+                    value={githubCallbackUrl}
+                    placeholder="请先在站点设置中保存网站链接"
+                    readOnly
+                    disabled={isLoadingGitHubOAuth}
+                  />
+                </Field>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => void saveGitHubOAuth(true)}
+                    disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}
+                    aria-busy={githubOAuthSavingAction === "enable"}
+                  >
+                    {githubOAuthSavingAction === "enable" ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <Save data-icon="inline-start" />
+                    )}
+                    {githubOAuthSavingAction === "enable" ? "保存中..." : "保存并开启"}
+                  </Button>
+                  {githubOAuthEnabled ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void saveGitHubOAuth(false)}
+                      disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}
+                      aria-busy={githubOAuthSavingAction === "disable"}
+                    >
+                      {githubOAuthSavingAction === "disable" ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <Power data-icon="inline-start" />
+                      )}
+                      {githubOAuthSavingAction === "disable" ? "关闭中..." : "关闭 GitHub OAuth"}
+                    </Button>
+                  ) : null}
+                </div>
+              </FieldGroup>
+            ) : null}
+          </section>
+        ) : null}
+
+        {githubOAuthEnabled ? (
+          <section>
+            {isLoadingGitHubConnection ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner />
+                正在加载 GitHub 关联状态...
+              </div>
+            ) : githubLinked ? (
+              <div className="flex w-full max-w-md items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar size="lg">
+                    <AvatarImage
+                      src={
+                        githubAvatarUrl ??
+                        (githubUsername
+                          ? `https://github.com/${encodeURIComponent(githubUsername)}.png?size=80`
+                          : undefined)
+                      }
+                      alt={githubUsername ? `${githubUsername} 的 GitHub 头像` : "GitHub 头像"}
+                    />
+                    <AvatarFallback>
+                      <Github aria-hidden="true" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="truncate text-sm font-medium">
+                    {githubUsername ?? "GitHub 用户"}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void unlinkGitHub()}
+                  disabled={isUnlinkingGitHub}
+                  aria-busy={isUnlinkingGitHub}
+                >
+                  {isUnlinkingGitHub ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <Unlink data-icon="inline-start" />
+                  )}
+                  {isUnlinkingGitHub ? "解绑中..." : "解绑"}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={linkGitHub}
+                disabled={isLinkingGitHub}
+                aria-busy={isLinkingGitHub}
+              >
+                {isLinkingGitHub ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <Github data-icon="inline-start" />
+                )}
+                {isLinkingGitHub ? "等待 GitHub 授权..." : "关联 GitHub"}
+              </Button>
+            )}
+          </section>
+        ) : null}
 
         <section className="space-y-3">
           <div className="flex items-center gap-2">
@@ -314,6 +732,11 @@ export function SecuritySettingsPage() {
               setTwoFactorDialogOpen(true)
             }}
           >
+            {security.twoFactorEnabled ? (
+              <ShieldOff data-icon="inline-start" />
+            ) : (
+              <ShieldCheck data-icon="inline-start" />
+            )}
             {security.twoFactorEnabled ? "关闭两步验证" : "开启两步验证"}
           </Button>
           <TwoFactorDialog
@@ -334,7 +757,10 @@ export function SecuritySettingsPage() {
           <div className="space-y-3">
             {isLoadingPasskeys ? (
               <div className="rounded-xl border border-border/70 px-4 py-6 text-sm text-muted-foreground">
-                正在加载通行密钥...
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  正在加载通行密钥...
+                </span>
               </div>
             ) : null}
             {security.passkeys.map((item) => (
@@ -344,7 +770,7 @@ export function SecuritySettingsPage() {
               >
                 <div className="flex min-w-0 flex-1 items-start gap-4">
                   <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
-                    <KeyRound size={22} />
+                    <ScanFace size={22} />
                   </div>
                   <div className="min-w-0">
                     {editingPasskeyId === item.id ? (
@@ -372,6 +798,11 @@ export function SecuritySettingsPage() {
                           disabled={savingPasskeyId === item.id}
                           onClick={() => void handleSavePasskeyName(item.id)}
                         >
+                          {savingPasskeyId === item.id ? (
+                            <Spinner data-icon="inline-start" />
+                          ) : (
+                            <Check data-icon="inline-start" />
+                          )}
                           {savingPasskeyId === item.id ? "修改中..." : "修改"}
                         </Button>
                         <Button
@@ -380,6 +811,7 @@ export function SecuritySettingsPage() {
                           disabled={savingPasskeyId === item.id}
                           onClick={cancelEditingPasskey}
                         >
+                          <X data-icon="inline-start" />
                           取消
                         </Button>
                       </div>
@@ -389,6 +821,7 @@ export function SecuritySettingsPage() {
                         className="truncate text-left text-sm font-medium transition-colors hover:text-primary"
                         onClick={() => startEditingPasskey(item.id, item.name)}
                       >
+                        <Pencil className="mr-1 inline size-3.5" aria-hidden="true" />
                         {item.name}
                       </button>
                     )}
@@ -407,7 +840,7 @@ export function SecuritySettingsPage() {
                   disabled={deletingPasskeyId === item.id || savingPasskeyId === item.id}
                   aria-label={`删除 ${item.name}`}
                 >
-                  <IconX size={18} />
+                  <X size={18} />
                 </button>
               </div>
             ))}
@@ -418,7 +851,11 @@ export function SecuritySettingsPage() {
             ) : null}
           </div>
           <Button variant="outline" onClick={() => void addPasskey()} disabled={isRegisteringPasskey}>
-            <IconPlus size={16} />
+            {isRegisteringPasskey ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <Plus data-icon="inline-start" />
+            )}
             {isRegisteringPasskey ? "添加中..." : "添加新通行密钥"}
           </Button>
         </section>

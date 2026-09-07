@@ -54,7 +54,7 @@ export type RawAuthResponse = {
 
 export type LoginResult =
   | ({ kind: "session" } & AuthSession)
-  | { kind: "2fa"; twoFactorToken: string; method: "password" | "passkey"; message?: string }
+  | { kind: "2fa"; twoFactorToken: string; method: "password" | "passkey" | "github"; message?: string }
 
 export function normalizeRole(value: unknown): AppUser["role"] {
   const role = String(value ?? "").toLowerCase()
@@ -308,14 +308,14 @@ export async function finishPasskeyLogin(payload: {
 }
 
 export async function verifyTwoFactorLogin(payload: {
-  twoFactorToken: string
+  twoFactorToken?: string
   code: string
-  method?: "password" | "passkey"
+  method?: "password" | "passkey" | "github"
 }): Promise<AuthSession> {
   const response = await requestJson<RawAuthResponse>("/session/2fa/verify", {
     method: "POST",
     body: {
-      two_factor_token: payload.twoFactorToken,
+      ...(payload.twoFactorToken ? { two_factor_token: payload.twoFactorToken } : {}),
       code: payload.code,
       method: payload.method ?? "password",
     },
