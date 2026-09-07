@@ -28,9 +28,14 @@ import {
 import {
   getGitHubOAuthConnection,
   getGitHubOAuthSettings,
+  getGoogleOAuthConnection,
+  getGoogleOAuthSettings,
   unlinkGitHubOAuthConnection,
+  unlinkGoogleOAuthConnection,
   updateGitHubOAuthSettings,
+  updateGoogleOAuthSettings,
 } from "@/api/oauth"
+import { GoogleIcon } from "@/components/icons/google-icon"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -42,6 +47,12 @@ import {
   subscribeGitHubOAuthResults,
   type GitHubOAuthMessage,
 } from "@/lib/github-oauth-popup"
+import {
+  openGoogleOAuthPopup,
+  readGoogleOAuthPopupResult,
+  subscribeGoogleOAuthResults,
+  type GoogleOAuthMessage,
+} from "@/lib/google-oauth-popup"
 import {
   Table,
   TableBody,
@@ -65,6 +76,16 @@ const GITHUB_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
   invalid_state: "关联请求已失效，请重新发起。",
   not_configured: "管理员尚未完成 GitHub OAuth 配置。",
   provider_error: "GitHub 暂时无法完成授权，请稍后再试。",
+}
+
+const GOOGLE_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "Google 授权已取消。",
+  account_not_found: "Cloudrave 账号不存在或已被禁用。",
+  guest_not_supported: "访客账号不能关联 Google。",
+  identity_conflict: "该 Google 账号或当前 Cloudrave 账号已存在其他关联。",
+  invalid_state: "关联请求已失效，请重新发起。",
+  not_configured: "管理员尚未完成 Google OAuth 配置。",
+  provider_error: "Google 暂时无法完成授权，请稍后再试。",
 }
 
 export function SecuritySettingsPage() {
@@ -101,10 +122,28 @@ export function SecuritySettingsPage() {
   const [isUnlinkingGitHub, setIsUnlinkingGitHub] = React.useState(false)
   const [githubOAuthSavingAction, setGitHubOAuthSavingAction] = React.useState<"enable" | "disable" | null>(null)
   const [isLinkingGitHub, setIsLinkingGitHub] = React.useState(false)
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = React.useState(false)
+  const [googleClientId, setGoogleClientId] = React.useState("")
+  const [googleClientSecret, setGoogleClientSecret] = React.useState("")
+  const [googleSecretConfigured, setGoogleSecretConfigured] = React.useState(false)
+  const [googleCallbackUrl, setGoogleCallbackUrl] = React.useState("")
+  const [googleConfigExpanded, setGoogleConfigExpanded] = React.useState(false)
+  const [googleLinked, setGoogleLinked] = React.useState(false)
+  const [googleUsername, setGoogleUsername] = React.useState<string | null>(null)
+  const [googleAvatarUrl, setGoogleAvatarUrl] = React.useState<string | null>(null)
+  const [googleLinkUrl, setGoogleLinkUrl] = React.useState("/api/v1/oauth/google/link")
+  const [isLoadingGoogleOAuth, setIsLoadingGoogleOAuth] = React.useState(false)
+  const [isLoadingGoogleConnection, setIsLoadingGoogleConnection] = React.useState(false)
+  const [isUnlinkingGoogle, setIsUnlinkingGoogle] = React.useState(false)
+  const [googleOAuthSavingAction, setGoogleOAuthSavingAction] = React.useState<"enable" | "disable" | null>(null)
+  const [isLinkingGoogle, setIsLinkingGoogle] = React.useState(false)
   const editingContainerRef = React.useRef<HTMLDivElement | null>(null)
   const handledOAuthLinkResult = React.useRef<string | null>(null)
+  const handledGoogleOAuthLinkResult = React.useRef<string | null>(null)
   const githubOAuthPopupRef = React.useRef<Window | null>(null)
+  const googleOAuthPopupRef = React.useRef<Window | null>(null)
   const isSavingGitHubOAuth = githubOAuthSavingAction !== null
+  const isSavingGoogleOAuth = googleOAuthSavingAction !== null
 
   React.useEffect(() => {
     if (!isAdmin || !token) {
@@ -129,6 +168,33 @@ export function SecuritySettingsPage() {
         })
       })
       .finally(() => setIsLoadingGitHubOAuth(false))
+
+    return () => controller.abort()
+  }, [isAdmin, token])
+
+  React.useEffect(() => {
+    if (!isAdmin || !token) {
+      return
+    }
+
+    const controller = new AbortController()
+    setIsLoadingGoogleOAuth(true)
+    getGoogleOAuthSettings(token, controller.signal)
+      .then((response) => {
+        setGoogleOAuthEnabled(response.enabled)
+        setGoogleClientId(response.client_id)
+        setGoogleSecretConfigured(response.client_secret_configured)
+        setGoogleCallbackUrl(response.callback_url)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+        toast.error("加载 Google OAuth 配置失败", {
+          description: error instanceof Error ? error.message : "请稍后再试。",
+        })
+      })
+      .finally(() => setIsLoadingGoogleOAuth(false))
 
     return () => controller.abort()
   }, [isAdmin, token])
@@ -166,6 +232,39 @@ export function SecuritySettingsPage() {
     return () => controller.abort()
   }, [loadGitHubConnection])
 
+  const loadGoogleConnection = React.useCallback(async (signal?: AbortSignal) => {
+    if (isGuest || !token) {
+      return
+    }
+
+    setIsLoadingGoogleConnection(true)
+    try {
+      const response = await getGoogleOAuthConnection(token, signal)
+      setGoogleOAuthEnabled(response.enabled)
+      setGoogleLinked(response.linked)
+      setGoogleUsername(response.provider_username)
+      setGoogleAvatarUrl(response.provider_avatar_url)
+      setGoogleLinkUrl(response.link_url)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      toast.error("加载 Google 关联状态失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoadingGoogleConnection(false)
+      }
+    }
+  }, [isGuest, token])
+
+  React.useEffect(() => {
+    const controller = new AbortController()
+    void loadGoogleConnection(controller.signal)
+    return () => controller.abort()
+  }, [loadGoogleConnection])
+
   React.useEffect(() => {
     const result = new URLSearchParams(location.search).get("oauth_link")
     if (!result || handledOAuthLinkResult.current === result) {
@@ -178,6 +277,23 @@ export function SecuritySettingsPage() {
     } else {
       toast.error("关联 GitHub 失败", {
         description: GITHUB_LINK_ERROR_DESCRIPTIONS[result] ?? "当前无法完成 GitHub 关联。",
+      })
+    }
+    navigate(location.pathname, { replace: true })
+  }, [location.pathname, location.search, navigate])
+
+  React.useEffect(() => {
+    const result = new URLSearchParams(location.search).get("google_oauth_link")
+    if (!result || handledGoogleOAuthLinkResult.current === result) {
+      return
+    }
+    handledGoogleOAuthLinkResult.current = result
+
+    if (result === "success") {
+      toast.success("Google 账号已关联")
+    } else {
+      toast.error("关联 Google 失败", {
+        description: GOOGLE_LINK_ERROR_DESCRIPTIONS[result] ?? "当前无法完成 Google 关联。",
       })
     }
     navigate(location.pathname, { replace: true })
@@ -518,6 +634,130 @@ export function SecuritySettingsPage() {
     }
   }
 
+  const saveGoogleOAuth = async (enabled = true) => {
+    if (!token || !isAdmin) {
+      return
+    }
+
+    setGoogleOAuthSavingAction(enabled ? "enable" : "disable")
+    try {
+      const response = await updateGoogleOAuthSettings(token, {
+        enabled,
+        clientId: googleClientId.trim(),
+        clientSecret: googleClientSecret,
+      })
+      setGoogleOAuthEnabled(response.enabled)
+      setGoogleClientId(response.client_id)
+      setGoogleClientSecret("")
+      setGoogleSecretConfigured(response.client_secret_configured)
+      setGoogleCallbackUrl(response.callback_url)
+      if (!response.enabled) {
+        setGoogleConfigExpanded(false)
+      }
+      toast.success(response.enabled ? "Google OAuth 已开启" : "Google OAuth 已关闭")
+    } catch (error) {
+      toast.error("保存 Google OAuth 配置失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setGoogleOAuthSavingAction(null)
+    }
+  }
+
+  const linkGoogle = () => {
+    if (isLinkingGoogle) {
+      return
+    }
+
+    const popup = openGoogleOAuthPopup(googleLinkUrl, "link")
+    if (!popup) {
+      toast.error("无法打开 Google 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+
+    googleOAuthPopupRef.current = popup
+    setIsLinkingGoogle(true)
+  }
+
+  const handleGoogleLinkResult = React.useCallback((message: GoogleOAuthMessage) => {
+    if (!googleOAuthPopupRef.current) {
+      return
+    }
+
+    googleOAuthPopupRef.current.close()
+    googleOAuthPopupRef.current = null
+    setIsLinkingGoogle(false)
+
+    if (message.result === "success") {
+      void loadGoogleConnection().then(() => toast.success("Google 账号已关联"))
+      return
+    }
+
+    toast.error("关联 Google 失败", {
+      description:
+        GOOGLE_LINK_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 Google 关联。",
+    })
+  }, [loadGoogleConnection])
+
+  React.useEffect(() => {
+    return subscribeGoogleOAuthResults(
+      "link",
+      () => googleOAuthPopupRef.current,
+      handleGoogleLinkResult
+    )
+  }, [handleGoogleLinkResult])
+
+  React.useEffect(() => {
+    if (!isLinkingGoogle) {
+      return
+    }
+
+    const closeWatcher = window.setInterval(() => {
+      const popup = googleOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        googleOAuthPopupRef.current = null
+        setIsLinkingGoogle(false)
+        return
+      }
+
+      const result = readGoogleOAuthPopupResult(popup, "link")
+      if (result) {
+        handleGoogleLinkResult(result)
+      }
+    }, 250)
+
+    return () => window.clearInterval(closeWatcher)
+  }, [handleGoogleLinkResult, isLinkingGoogle])
+
+  React.useEffect(() => {
+    return () => googleOAuthPopupRef.current?.close()
+  }, [])
+
+  const unlinkGoogle = async () => {
+    if (!token || !googleLinked) {
+      return
+    }
+
+    setIsUnlinkingGoogle(true)
+    try {
+      const response = await unlinkGoogleOAuthConnection(token)
+      setGoogleOAuthEnabled(response.enabled)
+      setGoogleLinked(response.linked)
+      setGoogleUsername(response.provider_username)
+      setGoogleAvatarUrl(response.provider_avatar_url)
+      setGoogleLinkUrl(response.link_url)
+      toast.success("Google 账号已解绑")
+    } catch (error) {
+      toast.error("解绑 Google 账号失败", {
+        description: error instanceof Error ? error.message : "请稍后再试。",
+      })
+    } finally {
+      setIsUnlinkingGoogle(false)
+    }
+  }
+
   if (isGuest) {
     return (
       <div className="max-w-2xl">
@@ -560,6 +800,114 @@ export function SecuritySettingsPage() {
             hasPasskeys={security.passkeys.length > 0}
             onSuccess={handlePasswordChanged}
           />
+        </section>
+
+        <section className="space-y-3">
+          <div className="text-sm font-medium">通行密钥</div>
+          <div className="space-y-3">
+            {isLoadingPasskeys ? (
+              <div className="rounded-xl border border-border/70 px-4 py-6 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  正在加载通行密钥...
+                </span>
+              </div>
+            ) : null}
+            {security.passkeys.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-4 py-4 sm:items-center"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-4">
+                  <div className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
+                    <ScanFace size={22} />
+                  </div>
+                  <div className="min-w-0">
+                    {editingPasskeyId === item.id ? (
+                      <div ref={editingContainerRef} className="flex flex-wrap items-center gap-2">
+                        <Input
+                          autoFocus
+                          value={editingPasskeyName}
+                          className="h-9 w-full min-w-[220px] max-w-[320px]"
+                          maxLength={128}
+                          onChange={(event) => setEditingPasskeyName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault()
+                              void handleSavePasskeyName(item.id)
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault()
+                              cancelEditingPasskey()
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={savingPasskeyId === item.id}
+                          onClick={() => void handleSavePasskeyName(item.id)}
+                        >
+                          {savingPasskeyId === item.id ? (
+                            <Spinner data-icon="inline-start" />
+                          ) : (
+                            <Check data-icon="inline-start" />
+                          )}
+                          {savingPasskeyId === item.id ? "修改中..." : "修改"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingPasskeyId === item.id}
+                          onClick={cancelEditingPasskey}
+                        >
+                          <X data-icon="inline-start" />
+                          取消
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="truncate text-left text-sm font-medium transition-colors hover:text-primary"
+                        onClick={() => startEditingPasskey(item.id, item.name)}
+                      >
+                        <Pencil className="mr-1 inline size-3.5" aria-hidden="true" />
+                        {item.name}
+                      </button>
+                    )}
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      创建于 {item.createdAt}
+                    </div>
+                    <div className="text-sm text-green-600 dark:text-green-400">
+                      上次使用于 {item.lastUsedAt}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                  onClick={() => void handleDeletePasskey(item.id, item.name)}
+                  disabled={deletingPasskeyId === item.id || savingPasskeyId === item.id}
+                  aria-label={`删除 ${item.name}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ))}
+            {!isLoadingPasskeys && security.passkeys.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+                当前还没有已绑定的通行密钥。
+              </div>
+            ) : null}
+          </div>
+          <Button variant="outline" onClick={() => void addPasskey()} disabled={isRegisteringPasskey}>
+            {isRegisteringPasskey ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <Plus data-icon="inline-start" />
+            )}
+            {isRegisteringPasskey ? "添加中..." : "添加新通行密钥"}
+          </Button>
         </section>
 
         {isAdmin ? (
@@ -718,6 +1066,157 @@ export function SecuritySettingsPage() {
           </section>
         ) : null}
 
+        {isAdmin ? (
+          <section className="flex flex-col items-start gap-4">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Google OAuth 登录</div>
+              <StatusBadge active={googleOAuthEnabled}>
+                {googleOAuthEnabled ? "已开启" : "已关闭"}
+              </StatusBadge>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setGoogleConfigExpanded((expanded) => !expanded)}
+              disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+              aria-expanded={googleConfigExpanded}
+            >
+              {isLoadingGoogleOAuth ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <GoogleIcon data-icon="inline-start" />
+              )}
+              {googleConfigExpanded ? "收起配置" : "配置 Google OAuth"}
+            </Button>
+
+            {googleConfigExpanded ? (
+              <FieldGroup className="max-w-xl gap-4">
+                <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                  <Field data-disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}>
+                    <FieldLabel htmlFor="google-client-id">Client ID</FieldLabel>
+                    <Input
+                      id="google-client-id"
+                      value={googleClientId}
+                      onChange={(event) => setGoogleClientId(event.target.value)}
+                      placeholder="Google OAuth Client ID"
+                      disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                      autoComplete="off"
+                    />
+                  </Field>
+                  <Field data-disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}>
+                    <FieldLabel htmlFor="google-client-secret">Client Secret</FieldLabel>
+                    <Input
+                      id="google-client-secret"
+                      type="password"
+                      value={googleClientSecret}
+                      onChange={(event) => setGoogleClientSecret(event.target.value)}
+                      placeholder={googleSecretConfigured ? "已配置，留空保持不变" : "填写 Client Secret"}
+                      disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                      autoComplete="new-password"
+                    />
+                  </Field>
+                </FieldGroup>
+
+                <Field data-disabled={isLoadingGoogleOAuth}>
+                  <FieldLabel htmlFor="google-callback-url">Authorized redirect URI</FieldLabel>
+                  <Input
+                    id="google-callback-url"
+                    value={googleCallbackUrl}
+                    placeholder="请先在站点设置中保存网站链接"
+                    readOnly
+                    disabled={isLoadingGoogleOAuth}
+                  />
+                </Field>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => void saveGoogleOAuth(true)}
+                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                    aria-busy={googleOAuthSavingAction === "enable"}
+                  >
+                    {googleOAuthSavingAction === "enable" ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <Save data-icon="inline-start" />
+                    )}
+                    {googleOAuthSavingAction === "enable" ? "保存中..." : "保存并开启"}
+                  </Button>
+                  {googleOAuthEnabled ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void saveGoogleOAuth(false)}
+                      disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                      aria-busy={googleOAuthSavingAction === "disable"}
+                    >
+                      {googleOAuthSavingAction === "disable" ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <Power data-icon="inline-start" />
+                      )}
+                      {googleOAuthSavingAction === "disable" ? "关闭中..." : "关闭 Google OAuth"}
+                    </Button>
+                  ) : null}
+                </div>
+              </FieldGroup>
+            ) : null}
+          </section>
+        ) : null}
+
+        {googleOAuthEnabled ? (
+          <section>
+            {isLoadingGoogleConnection ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner />
+                正在加载 Google 关联状态...
+              </div>
+            ) : googleLinked ? (
+              <div className="flex w-full max-w-md items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar size="lg">
+                    <AvatarImage
+                      src={googleAvatarUrl ?? undefined}
+                      alt={googleUsername ? `${googleUsername} 的 Google 头像` : "Google 头像"}
+                    />
+                    <AvatarFallback>
+                      <GoogleIcon />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="truncate text-sm font-medium">
+                    {googleUsername ?? "Google 用户"}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void unlinkGoogle()}
+                  disabled={isUnlinkingGoogle}
+                  aria-busy={isUnlinkingGoogle}
+                >
+                  {isUnlinkingGoogle ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <Unlink data-icon="inline-start" />
+                  )}
+                  {isUnlinkingGoogle ? "解绑中..." : "解绑"}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={linkGoogle}
+                disabled={isLinkingGoogle}
+                aria-busy={isLinkingGoogle}
+              >
+                {isLinkingGoogle ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <GoogleIcon data-icon="inline-start" />
+                )}
+                {isLinkingGoogle ? "等待 Google 授权..." : "关联 Google"}
+              </Button>
+            )}
+          </section>
+        ) : null}
+
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium">两步验证</div>
@@ -752,113 +1251,6 @@ export function SecuritySettingsPage() {
           />
         </section>
 
-        <section className="space-y-3">
-          <div className="text-sm font-medium">通行密钥</div>
-          <div className="space-y-3">
-            {isLoadingPasskeys ? (
-              <div className="rounded-xl border border-border/70 px-4 py-6 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2">
-                  <Spinner />
-                  正在加载通行密钥...
-                </span>
-              </div>
-            ) : null}
-            {security.passkeys.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-4 py-4 sm:items-center"
-              >
-                <div className="flex min-w-0 flex-1 items-start gap-4">
-                  <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
-                    <ScanFace size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    {editingPasskeyId === item.id ? (
-                      <div ref={editingContainerRef} className="flex flex-wrap items-center gap-2">
-                        <Input
-                          autoFocus
-                          value={editingPasskeyName}
-                          className="h-9 w-full min-w-[220px] max-w-[320px]"
-                          maxLength={128}
-                          onChange={(event) => setEditingPasskeyName(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault()
-                              void handleSavePasskeyName(item.id)
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault()
-                              cancelEditingPasskey()
-                            }
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={savingPasskeyId === item.id}
-                          onClick={() => void handleSavePasskeyName(item.id)}
-                        >
-                          {savingPasskeyId === item.id ? (
-                            <Spinner data-icon="inline-start" />
-                          ) : (
-                            <Check data-icon="inline-start" />
-                          )}
-                          {savingPasskeyId === item.id ? "修改中..." : "修改"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={savingPasskeyId === item.id}
-                          onClick={cancelEditingPasskey}
-                        >
-                          <X data-icon="inline-start" />
-                          取消
-                        </Button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="truncate text-left text-sm font-medium transition-colors hover:text-primary"
-                        onClick={() => startEditingPasskey(item.id, item.name)}
-                      >
-                        <Pencil className="mr-1 inline size-3.5" aria-hidden="true" />
-                        {item.name}
-                      </button>
-                    )}
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      创建于 {item.createdAt}
-                    </div>
-                    <div className="text-sm text-green-600 dark:text-green-400">
-                      上次使用于 {item.lastUsedAt}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-                  onClick={() => void handleDeletePasskey(item.id, item.name)}
-                  disabled={deletingPasskeyId === item.id || savingPasskeyId === item.id}
-                  aria-label={`删除 ${item.name}`}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            ))}
-            {!isLoadingPasskeys && security.passkeys.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
-                当前还没有已绑定的通行密钥。
-              </div>
-            ) : null}
-          </div>
-          <Button variant="outline" onClick={() => void addPasskey()} disabled={isRegisteringPasskey}>
-            {isRegisteringPasskey ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <Plus data-icon="inline-start" />
-            )}
-            {isRegisteringPasskey ? "添加中..." : "添加新通行密钥"}
-          </Button>
-        </section>
       </div>
 
       <section className="space-y-3">

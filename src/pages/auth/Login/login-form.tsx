@@ -17,7 +17,8 @@ import { toast } from "sonner"
 import { FilingLink } from "@/components/shared/FilingBar"
 import { ModeToggle } from "@/components/shared/ModeToggle"
 import { useWebsiteSettings } from "@/components/shared/useWebsiteSettings"
-import { getGitHubOAuthStatus } from "@/api/oauth"
+import { getGitHubOAuthStatus, getGoogleOAuthStatus } from "@/api/oauth"
+import { GoogleIcon } from "@/components/icons/google-icon"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -42,6 +43,12 @@ import {
   subscribeGitHubOAuthResults,
   type GitHubOAuthMessage,
 } from "@/lib/github-oauth-popup"
+import {
+  openGoogleOAuthPopup,
+  readGoogleOAuthPopupResult,
+  subscribeGoogleOAuthResults,
+  type GoogleOAuthMessage,
+} from "@/lib/google-oauth-popup"
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
@@ -65,6 +72,18 @@ const GITHUB_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
   provider_error: "GitHub 暂时无法完成授权，请稍后再试。",
 }
 
+const GOOGLE_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "Google 授权已取消。",
+  account_not_found: "关联的 Cloudrave 账号不存在。",
+  account_disabled: "账号已被禁用。",
+  guest_not_supported: "访客账号不能使用 Google 登录。",
+  identity_conflict: "该 Cloudrave 账号已关联其他 Google 身份。",
+  invalid_state: "登录请求已失效，请重新发起 Google 登录。",
+  not_linked: "该 Google 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
+  not_configured: "管理员尚未完成 Google OAuth 配置。",
+  provider_error: "Google 暂时无法完成授权，请稍后再试。",
+}
+
 export function LoginForm({
   className,
   ...props
@@ -79,10 +98,13 @@ export function LoginForm({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [twoFactorToken, setTwoFactorToken] = useState<string>("")
-  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey" | "github">("password")
+  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey" | "github" | "google">("password")
   const [githubOAuthUrl, setGitHubOAuthUrl] = useState<string | null>(null)
   const [isGitHubOAuthLoading, setIsGitHubOAuthLoading] = useState(true)
   const [isGitHubLoginLoading, setIsGitHubLoginLoading] = useState(false)
+  const [googleOAuthUrl, setGoogleOAuthUrl] = useState<string | null>(null)
+  const [isGoogleOAuthLoading, setIsGoogleOAuthLoading] = useState(true)
+  const [isGoogleLoginLoading, setIsGoogleLoginLoading] = useState(false)
   const [otpCode, setOtpCode] = useState("")
   const [slideTransition, setSlideTransition] = useState<{
     isAnimating: boolean
@@ -100,8 +122,10 @@ export function LoginForm({
   )
   const contentRef = useRef<HTMLDivElement>(null)
   const githubOAuthPopupRef = useRef<Window | null>(null)
+  const googleOAuthPopupRef = useRef<Window | null>(null)
   const handledOAuthLoginResultRef = useRef<string | null>(null)
   const hasMeasuredInitialHeight = useRef(false)
+  const isOAuthLoginLoading = isGitHubLoginLoading || isGoogleLoginLoading
 
   useEffect(() => {
     const controller = new AbortController()
@@ -125,21 +149,57 @@ export function LoginForm({
   }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
+    getGoogleOAuthStatus(controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) {
+          setGoogleOAuthUrl(settings.enabled ? settings.authorize_url : null)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGoogleOAuthUrl(null)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsGoogleOAuthLoading(false)
+        }
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search)
     const oauthError = params.get("oauth_error")
+    const googleOAuthError = params.get("google_oauth_error")
     const oauthTwoFactor = params.get("oauth_2fa")
-    const resultKey = oauthTwoFactor ? `2fa:${oauthTwoFactor}` : oauthError ? `error:${oauthError}` : null
+    const resultKey = oauthTwoFactor
+      ? `2fa:${oauthTwoFactor}`
+      : googleOAuthError
+        ? `google-error:${googleOAuthError}`
+        : oauthError
+          ? `github-error:${oauthError}`
+          : null
 
     if (!resultKey || handledOAuthLoginResultRef.current === resultKey) {
       return
     }
     handledOAuthLoginResultRef.current = resultKey
 
-    if (oauthTwoFactor === "github") {
+    if (oauthTwoFactor === "github" || oauthTwoFactor === "google") {
       setTwoFactorToken("")
-      setTwoFactorMethod("github")
+      setTwoFactorMethod(oauthTwoFactor)
       setOtpCode("")
       setPhase("twoFactor")
+      navigate("/login", { replace: true })
+      return
+    }
+
+    if (googleOAuthError) {
+      toast.error("Google 登录失败", {
+        description: GOOGLE_OAUTH_ERROR_DESCRIPTIONS[googleOAuthError] ?? "当前无法完成 Google 登录。",
+      })
       navigate("/login", { replace: true })
       return
     }
@@ -193,7 +253,15 @@ export function LoginForm({
         cancelAnimationFrame(animationFrame)
       }
     }
-  }, [githubOAuthUrl, isGitHubOAuthLoading, phase, state?.fromRegister, isLeavingToRegister])
+  }, [
+    githubOAuthUrl,
+    googleOAuthUrl,
+    isGitHubOAuthLoading,
+    isGoogleOAuthLoading,
+    phase,
+    state?.fromRegister,
+    isLeavingToRegister,
+  ])
 
   const handlePhaseChange = (nextPhase: LoginPhase, goingBack = false) => {
     if (phase === nextPhase) {
@@ -275,6 +343,69 @@ export function LoginForm({
     return () => githubOAuthPopupRef.current?.close()
   }, [])
 
+  const handleGoogleOAuthResult = React.useCallback((message: GoogleOAuthMessage) => {
+    if (!googleOAuthPopupRef.current) {
+      return
+    }
+
+    googleOAuthPopupRef.current.close()
+    googleOAuthPopupRef.current = null
+    setIsGoogleLoginLoading(false)
+
+    if (message.result === "success") {
+      setIsEnteringApp(true)
+      window.location.assign("/app")
+      return
+    }
+
+    if (message.result === "two_factor") {
+      setTwoFactorToken("")
+      setTwoFactorMethod("google")
+      setOtpCode("")
+      handlePhaseChange("twoFactor")
+      return
+    }
+
+    toast.error("Google 登录失败", {
+      description:
+        GOOGLE_OAUTH_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 Google 登录。",
+    })
+  }, [phase])
+
+  useEffect(() => {
+    return subscribeGoogleOAuthResults(
+      "login",
+      () => googleOAuthPopupRef.current,
+      handleGoogleOAuthResult
+    )
+  }, [handleGoogleOAuthResult])
+
+  useEffect(() => {
+    if (!isGoogleLoginLoading) {
+      return
+    }
+
+    const closeWatcher = window.setInterval(() => {
+      const popup = googleOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        googleOAuthPopupRef.current = null
+        setIsGoogleLoginLoading(false)
+        return
+      }
+
+      const result = readGoogleOAuthPopupResult(popup, "login")
+      if (result) {
+        handleGoogleOAuthResult(result)
+      }
+    }, 250)
+
+    return () => window.clearInterval(closeWatcher)
+  }, [handleGoogleOAuthResult, isGoogleLoginLoading])
+
+  useEffect(() => {
+    return () => googleOAuthPopupRef.current?.close()
+  }, [])
+
   const handleEmailSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (email.trim() && !isLoading) {
@@ -349,7 +480,7 @@ export function LoginForm({
 
   const handleBack = () => {
     if (phase === "twoFactor") {
-      if (twoFactorMethod === "passkey" || twoFactorMethod === "github") {
+      if (twoFactorMethod === "passkey" || twoFactorMethod === "github" || twoFactorMethod === "google") {
         handlePhaseChange("initial", true)
       } else {
         handlePhaseChange("password", true)
@@ -383,7 +514,7 @@ export function LoginForm({
   }
 
   const handlePasskeyLogin = async () => {
-    if (isLoading || isGitHubLoginLoading || isEnteringApp) {
+    if (isLoading || isOAuthLoginLoading || isEnteringApp) {
       return
     }
 
@@ -427,7 +558,7 @@ export function LoginForm({
   }
 
   const handleGitHubLogin = () => {
-    if (!githubOAuthUrl || isLoading || isGitHubLoginLoading || isEnteringApp) {
+    if (!githubOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) {
       return
     }
 
@@ -441,6 +572,23 @@ export function LoginForm({
 
     githubOAuthPopupRef.current = popup
     setIsGitHubLoginLoading(true)
+  }
+
+  const handleGoogleLogin = () => {
+    if (!googleOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) {
+      return
+    }
+
+    const popup = openGoogleOAuthPopup(googleOAuthUrl, "login")
+    if (!popup) {
+      toast.error("无法打开 Google 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+
+    googleOAuthPopupRef.current = popup
+    setIsGoogleLoginLoading(true)
   }
 
   const getTitle = () => {
@@ -539,7 +687,7 @@ export function LoginForm({
                         variant="outline"
                         type="button"
                         className="w-full"
-                        disabled={isLoading || isGitHubLoginLoading || isEnteringApp || isLeavingToRegister}
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
                         onClick={() => handlePhaseChange("email")}
                       >
                         <Mail data-icon="inline-start" />
@@ -557,7 +705,7 @@ export function LoginForm({
                           variant="outline"
                           type="button"
                           className="w-full"
-                          disabled={isGitHubOAuthLoading || isGitHubLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          disabled={isGitHubOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
                           aria-busy={isGitHubOAuthLoading || isGitHubLoginLoading}
                           onClick={handleGitHubLogin}
                         >
@@ -573,11 +721,32 @@ export function LoginForm({
                               : "使用 GitHub 继续"}
                         </Button>
                       ) : null}
+                      {googleOAuthUrl || isGoogleOAuthLoading ? (
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full"
+                          disabled={isGoogleOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          aria-busy={isGoogleOAuthLoading || isGoogleLoginLoading}
+                          onClick={handleGoogleLogin}
+                        >
+                          {isGoogleOAuthLoading || isGoogleLoginLoading ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <GoogleIcon data-icon="inline-start" />
+                          )}
+                          {isGoogleOAuthLoading
+                            ? "正在加载 Google 登录..."
+                            : isGoogleLoginLoading
+                              ? "等待 Google 授权..."
+                              : "使用 Google 继续"}
+                        </Button>
+                      ) : null}
                       <Button
                         variant="outline"
                         type="button"
                         className="w-full"
-                        disabled={isLoading || isGitHubLoginLoading || isEnteringApp || isLeavingToRegister}
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
                         aria-busy={isPasskeyLoading}
                         onClick={() => void handlePasskeyLogin()}
                       >
@@ -621,7 +790,7 @@ export function LoginForm({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={isLoading || isGitHubLoginLoading || isEnteringApp || isLeavingToRegister}
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
                         className="w-full"
                         aria-busy={isPasskeyLoading}
                         onClick={() => void handlePasskeyLogin()}
@@ -641,7 +810,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isGitHubLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
+                      <Button type="submit" disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         {isLoading && !isPasskeyLoading ? (
                           <>
                             <Loader2 data-icon="inline-start" className="animate-spin" />
@@ -704,7 +873,7 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isGitHubLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
+                      <Button type="submit" disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
