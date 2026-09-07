@@ -52,8 +52,8 @@ export const settingsTabs: Array<{
   },
   {
     id: "security",
-    label: "密码和安全",
-    description: "密码、两步验证与登录记录",
+    label: "账号与安全",
+    description: "密码、登录方式与登录记录",
     icon: IconShieldLock,
   },
   {

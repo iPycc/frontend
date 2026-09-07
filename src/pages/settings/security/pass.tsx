@@ -1,5 +1,5 @@
 import * as React from "react"
-import { KeyRound, Loader2 } from "lucide-react"
+import { Check, Loader2, LockKeyhole, ScanFace, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { beginPasskeyLogin } from "@/api/auth"
@@ -165,6 +165,7 @@ export function ChangePasswordDialog({ open, onOpenChange, token, userEmail, has
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">正在等待通行密钥验证...</p>
                 <Button variant="outline" size="sm" onClick={() => setIsLoading(false)} disabled={!isLoading}>
+                  <X data-icon="inline-start" />
                   取消并使用密码验证
                 </Button>
               </div>
@@ -183,6 +184,7 @@ export function ChangePasswordDialog({ open, onOpenChange, token, userEmail, has
                   </Field>
                 </FieldGroup>
                 <Button onClick={handlePasswordAuth} disabled={isLoading || !password.trim()}>
+                  <LockKeyhole data-icon="inline-start" />
                   验证密码并继续
                 </Button>
                 {hasPasskeys ? (
@@ -194,7 +196,7 @@ export function ChangePasswordDialog({ open, onOpenChange, token, userEmail, has
                       <span className="relative bg-background px-2 text-xs text-muted-foreground">或者</span>
                     </div>
                     <Button variant="outline" onClick={() => void tryPasskeyAuth()} disabled={isLoading}>
-                      <KeyRound data-icon="inline-start" />
+                      <ScanFace data-icon="inline-start" />
                       使用通行密钥验证
                     </Button>
                   </div>
@@ -238,6 +240,11 @@ export function ChangePasswordDialog({ open, onOpenChange, token, userEmail, has
               </Field>
             </FieldGroup>
             <Button onClick={handleChangePassword} disabled={isLoading || !newPassword || !confirmPassword}>
+              {isLoading ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Check data-icon="inline-start" />
+              )}
               {isLoading ? "提交中..." : "确认修改"}
             </Button>
           </div>

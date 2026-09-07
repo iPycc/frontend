@@ -73,10 +73,6 @@ export function Guests() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold">访客管理</h2>
-          <p className="text-sm text-muted-foreground">创建临时账号，并控制其存储空间与使用期限。</p>
-        </div>
         <Button onClick={() => setCreateOpen(true)} disabled={!mounts.length}>
           <Plus data-icon="inline-start" />
           新增访客
