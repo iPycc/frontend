@@ -132,9 +132,15 @@ async function requestResponseInternal(
     !options.skipAuthRefresh &&
     !isAuthRoute(path)
   ) {
+    const currentToken = authRuntime.getAccessToken?.() ?? null
+    if (currentToken && currentToken !== token) {
+      return requestResponseInternal(path, { ...options, token: currentToken }, true, accept)
+    }
+
     const refreshedToken = await refreshAccessToken()
     if (refreshedToken) {
-      return requestResponseInternal(path, { ...options, token: refreshedToken }, false, accept)
+      const latestToken = authRuntime.getAccessToken?.() ?? refreshedToken
+      return requestResponseInternal(path, { ...options, token: latestToken }, false, accept)
     }
     authRuntime.onAuthFailure?.()
   }
