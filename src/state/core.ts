@@ -50,7 +50,7 @@ export type AuthResult = {
   success: boolean
   message?: string
   twoFactorToken?: string
-  method?: "password" | "passkey" | "github" | "google"
+  method?: "password" | "passkey" | "github" | "google" | "qq"
 }
 
 export function isPasskeyCanceled(error: unknown) {
@@ -127,7 +127,7 @@ export type AppStateValue = {
   updateProfile: (patch: Partial<UserProfile>) => void
   login: (email: string, password: string) => Promise<AuthResult>
   loginWithPasskey: (emailHint?: string) => Promise<AuthResult>
-  verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey" | "github" | "google") => Promise<AuthResult>
+  verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey" | "github" | "google" | "qq") => Promise<AuthResult>
   register: (input: AuthRegisterInput) => Promise<AuthResult>
   logout: (scope?: "current" | "all") => Promise<void>
   verifyPassword: (value: string) => boolean

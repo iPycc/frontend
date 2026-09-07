@@ -40,6 +40,26 @@ export type GoogleOAuthConnection = {
   link_url: string
 }
 
+export type QQOAuthPublicSettings = {
+  enabled: boolean
+  authorize_url: string
+}
+
+export type QQOAuthAdminSettings = {
+  enabled: boolean
+  app_id: string
+  app_key_configured: boolean
+  callback_url: string
+}
+
+export type QQOAuthConnection = {
+  enabled: boolean
+  linked: boolean
+  provider_username: string | null
+  provider_avatar_url: string | null
+  link_url: string
+}
+
 export async function getGitHubOAuthStatus(signal?: AbortSignal) {
   return requestJson<GitHubOAuthPublicSettings>("/oauth/github", {
     signal,
@@ -122,6 +142,49 @@ export async function updateGoogleOAuthSettings(
       enabled: payload.enabled,
       client_id: payload.clientId,
       ...(payload.clientSecret?.trim() ? { client_secret: payload.clientSecret } : {}),
+    },
+  })
+}
+
+export async function getQQOAuthStatus(signal?: AbortSignal) {
+  return requestJson<QQOAuthPublicSettings>("/oauth/qq", {
+    signal,
+    skipAuthRefresh: true,
+  })
+}
+
+export async function getQQOAuthSettings(token: string, signal?: AbortSignal) {
+  return requestJson<QQOAuthAdminSettings>("/oauth/qq/settings", {
+    token,
+    signal,
+  })
+}
+
+export async function getQQOAuthConnection(token: string, signal?: AbortSignal) {
+  return requestJson<QQOAuthConnection>("/oauth/qq/connection", {
+    token,
+    signal,
+  })
+}
+
+export async function unlinkQQOAuthConnection(token: string) {
+  return requestJson<QQOAuthConnection>("/oauth/qq/connection", {
+    method: "DELETE",
+    token,
+  })
+}
+
+export async function updateQQOAuthSettings(
+  token: string,
+  payload: { enabled: boolean; appId: string; appKey?: string }
+) {
+  return requestJson<QQOAuthAdminSettings>("/oauth/qq/settings", {
+    method: "PUT",
+    token,
+    body: {
+      enabled: payload.enabled,
+      app_id: payload.appId,
+      ...(payload.appKey?.trim() ? { app_key: payload.appKey } : {}),
     },
   })
 }

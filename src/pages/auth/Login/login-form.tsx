@@ -17,8 +17,9 @@ import { toast } from "sonner"
 import { FilingLink } from "@/components/shared/FilingBar"
 import { ModeToggle } from "@/components/shared/ModeToggle"
 import { useWebsiteSettings } from "@/components/shared/useWebsiteSettings"
-import { getGitHubOAuthStatus, getGoogleOAuthStatus } from "@/api/oauth"
+import { getGitHubOAuthStatus, getGoogleOAuthStatus, getQQOAuthStatus } from "@/api/oauth"
 import { GoogleIcon } from "@/components/icons/google-icon"
+import { QQIcon } from "@/components/icons/qq-icon"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -49,6 +50,12 @@ import {
   subscribeGoogleOAuthResults,
   type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
+import {
+  openQQOAuthPopup,
+  readQQOAuthPopupResult,
+  subscribeQQOAuthResults,
+  type QQOAuthMessage,
+} from "@/lib/qq-oauth-popup"
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
@@ -84,6 +91,18 @@ const GOOGLE_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
   provider_error: "Google 暂时无法完成授权，请稍后再试。",
 }
 
+const QQ_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "QQ 授权已取消。",
+  account_not_found: "关联的 Cloudrave 账号不存在。",
+  account_disabled: "账号已被禁用。",
+  guest_not_supported: "访客账号不能使用 QQ 登录。",
+  identity_conflict: "该 Cloudrave 账号已关联其他 QQ 身份。",
+  invalid_state: "登录请求已失效，请重新发起 QQ 登录。",
+  not_linked: "该 QQ 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
+  not_configured: "管理员尚未完成 QQ OAuth 配置。",
+  provider_error: "QQ 暂时无法完成授权，请稍后再试。",
+}
+
 export function LoginForm({
   className,
   ...props
@@ -98,13 +117,16 @@ export function LoginForm({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [twoFactorToken, setTwoFactorToken] = useState<string>("")
-  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey" | "github" | "google">("password")
+  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey" | "github" | "google" | "qq">("password")
   const [githubOAuthUrl, setGitHubOAuthUrl] = useState<string | null>(null)
   const [isGitHubOAuthLoading, setIsGitHubOAuthLoading] = useState(true)
   const [isGitHubLoginLoading, setIsGitHubLoginLoading] = useState(false)
   const [googleOAuthUrl, setGoogleOAuthUrl] = useState<string | null>(null)
   const [isGoogleOAuthLoading, setIsGoogleOAuthLoading] = useState(true)
   const [isGoogleLoginLoading, setIsGoogleLoginLoading] = useState(false)
+  const [qqOAuthUrl, setQQOAuthUrl] = useState<string | null>(null)
+  const [isQQOAuthLoading, setIsQQOAuthLoading] = useState(true)
+  const [isQQLoginLoading, setIsQQLoginLoading] = useState(false)
   const [otpCode, setOtpCode] = useState("")
   const [slideTransition, setSlideTransition] = useState<{
     isAnimating: boolean
@@ -123,9 +145,10 @@ export function LoginForm({
   const contentRef = useRef<HTMLDivElement>(null)
   const githubOAuthPopupRef = useRef<Window | null>(null)
   const googleOAuthPopupRef = useRef<Window | null>(null)
+  const qqOAuthPopupRef = useRef<Window | null>(null)
   const handledOAuthLoginResultRef = useRef<string | null>(null)
   const hasMeasuredInitialHeight = useRef(false)
-  const isOAuthLoginLoading = isGitHubLoginLoading || isGoogleLoginLoading
+  const isOAuthLoginLoading = isGitHubLoginLoading || isGoogleLoginLoading || isQQLoginLoading
 
   useEffect(() => {
     const controller = new AbortController()
@@ -144,6 +167,21 @@ export function LoginForm({
         if (!controller.signal.aborted) {
           setIsGitHubOAuthLoading(false)
         }
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getQQOAuthStatus(controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) setQQOAuthUrl(settings.enabled ? settings.authorize_url : null)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setQQOAuthUrl(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsQQOAuthLoading(false)
       })
     return () => controller.abort()
   }, [])
@@ -173,10 +211,13 @@ export function LoginForm({
     const params = new URLSearchParams(location.search)
     const oauthError = params.get("oauth_error")
     const googleOAuthError = params.get("google_oauth_error")
+    const qqOAuthError = params.get("qq_oauth_error")
     const oauthTwoFactor = params.get("oauth_2fa")
     const resultKey = oauthTwoFactor
       ? `2fa:${oauthTwoFactor}`
-      : googleOAuthError
+      : qqOAuthError
+        ? `qq-error:${qqOAuthError}`
+        : googleOAuthError
         ? `google-error:${googleOAuthError}`
         : oauthError
           ? `github-error:${oauthError}`
@@ -187,11 +228,19 @@ export function LoginForm({
     }
     handledOAuthLoginResultRef.current = resultKey
 
-    if (oauthTwoFactor === "github" || oauthTwoFactor === "google") {
+    if (oauthTwoFactor === "github" || oauthTwoFactor === "google" || oauthTwoFactor === "qq") {
       setTwoFactorToken("")
       setTwoFactorMethod(oauthTwoFactor)
       setOtpCode("")
       setPhase("twoFactor")
+      navigate("/login", { replace: true })
+      return
+    }
+
+    if (qqOAuthError) {
+      toast.error("QQ 登录失败", {
+        description: QQ_OAUTH_ERROR_DESCRIPTIONS[qqOAuthError] ?? "当前无法完成 QQ 登录。",
+      })
       navigate("/login", { replace: true })
       return
     }
@@ -256,8 +305,10 @@ export function LoginForm({
   }, [
     githubOAuthUrl,
     googleOAuthUrl,
+    qqOAuthUrl,
     isGitHubOAuthLoading,
     isGoogleOAuthLoading,
+    isQQOAuthLoading,
     phase,
     state?.fromRegister,
     isLeavingToRegister,
@@ -406,6 +457,51 @@ export function LoginForm({
     return () => googleOAuthPopupRef.current?.close()
   }, [])
 
+  const handleQQOAuthResult = React.useCallback((message: QQOAuthMessage) => {
+    if (!qqOAuthPopupRef.current) return
+    qqOAuthPopupRef.current.close()
+    qqOAuthPopupRef.current = null
+    setIsQQLoginLoading(false)
+    if (message.result === "success") {
+      setIsEnteringApp(true)
+      window.location.assign("/app")
+      return
+    }
+    if (message.result === "two_factor") {
+      setTwoFactorToken("")
+      setTwoFactorMethod("qq")
+      setOtpCode("")
+      handlePhaseChange("twoFactor")
+      return
+    }
+    toast.error("QQ 登录失败", {
+      description: QQ_OAUTH_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 QQ 登录。",
+    })
+  }, [phase])
+
+  useEffect(() => subscribeQQOAuthResults(
+    "login",
+    () => qqOAuthPopupRef.current,
+    handleQQOAuthResult
+  ), [handleQQOAuthResult])
+
+  useEffect(() => {
+    if (!isQQLoginLoading) return
+    const closeWatcher = window.setInterval(() => {
+      const popup = qqOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        qqOAuthPopupRef.current = null
+        setIsQQLoginLoading(false)
+        return
+      }
+      const result = readQQOAuthPopupResult(popup, "login")
+      if (result) handleQQOAuthResult(result)
+    }, 250)
+    return () => window.clearInterval(closeWatcher)
+  }, [handleQQOAuthResult, isQQLoginLoading])
+
+  useEffect(() => () => qqOAuthPopupRef.current?.close(), [])
+
   const handleEmailSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (email.trim() && !isLoading) {
@@ -480,7 +576,7 @@ export function LoginForm({
 
   const handleBack = () => {
     if (phase === "twoFactor") {
-      if (twoFactorMethod === "passkey" || twoFactorMethod === "github" || twoFactorMethod === "google") {
+      if (twoFactorMethod === "passkey" || twoFactorMethod === "github" || twoFactorMethod === "google" || twoFactorMethod === "qq") {
         handlePhaseChange("initial", true)
       } else {
         handlePhaseChange("password", true)
@@ -589,6 +685,19 @@ export function LoginForm({
 
     googleOAuthPopupRef.current = popup
     setIsGoogleLoginLoading(true)
+  }
+
+  const handleQQLogin = () => {
+    if (!qqOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) return
+    const popup = openQQOAuthPopup(qqOAuthUrl, "login")
+    if (!popup) {
+      toast.error("无法打开 QQ 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+    qqOAuthPopupRef.current = popup
+    setIsQQLoginLoading(true)
   }
 
   const getTitle = () => {
@@ -740,6 +849,27 @@ export function LoginForm({
                             : isGoogleLoginLoading
                               ? "等待 Google 授权..."
                               : "使用 Google 继续"}
+                        </Button>
+                      ) : null}
+                      {qqOAuthUrl || isQQOAuthLoading ? (
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full"
+                          disabled={isQQOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          aria-busy={isQQOAuthLoading || isQQLoginLoading}
+                          onClick={handleQQLogin}
+                        >
+                          {isQQOAuthLoading || isQQLoginLoading ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <QQIcon data-icon="inline-start" className="text-[#12B7F5]" />
+                          )}
+                          {isQQOAuthLoading
+                            ? "正在加载 QQ 登录..."
+                            : isQQLoginLoading
+                              ? "等待 QQ 授权..."
+                              : "使用 QQ 继续"}
                         </Button>
                       ) : null}
                       <Button
