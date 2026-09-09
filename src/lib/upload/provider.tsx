@@ -5,9 +5,12 @@ import {
   type UploadConflictChoice,
   type UploadConflictInfo,
 } from "@/components/file-area/UploadConflictDialog"
+import { abortUpload } from "@/api/uploads"
 import { createId, type AuthSession, type BucketMount, type FileNode, type OfflineTask, type UploadQueueItem } from "@/lib/models"
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
+import { fingerprintFile } from "@/lib/upload/hash"
+import { persistUploadTasks, restoreUploadTasks } from "@/lib/upload/persistence"
 import { FILE_LIMIT, NETWORK_LIMIT, takeUploads } from "@/lib/upload/pool"
 import { useUploadRun } from "@/lib/upload/run"
 import { toast } from "sonner"
@@ -28,6 +31,8 @@ export type UploadStateValue = {
   uploadQueueOpen: boolean
   setUploadQueueOpen: (open: boolean) => void
   retryUpload: (id: string) => void
+  pauseUpload: (id: string) => void
+  resumeUpload: (id: string) => void
   removeUpload: (id: string) => void
   clearCompletedUploads: () => void
   requestUpload: (parentId?: string | null, mountId?: string) => void
@@ -76,12 +81,18 @@ export function UploadProvider({
     onUploadCompleteRef.current = onUploadComplete
   })
 
-  const [uploadQueue, setUploadQueue] = React.useState<UploadQueueItem[]>([])
+  const initialUploadOwnerId = React.useRef(getSession()?.user.id ?? null)
+  const [persistenceOwnerId, setPersistenceOwnerId] = React.useState(initialUploadOwnerId.current)
+  const [uploadQueue, setUploadQueue] = React.useState<UploadQueueItem[]>(() =>
+    initialUploadOwnerId.current ? restoreUploadTasks(initialUploadOwnerId.current) : []
+  )
   const [uploadQueueOpen, setUploadQueueOpen] = React.useState(false)
   const [uploadConflict, setUploadConflict] = React.useState<UploadConflictInfo | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const folderInputRef = React.useRef<HTMLInputElement | null>(null)
+  const resumeInputRef = React.useRef<HTMLInputElement | null>(null)
   const pendingUploadTargetRef = React.useRef<UploadTarget | null>(null)
+  const pendingResumeIdRef = React.useRef<string | null>(null)
   const uploadControllersRef = React.useRef(new Map<string, AbortController>())
   const uploadCommitIdsRef = React.useRef(new Set<string>())
   const uploadFilesRef = React.useRef(new Map<string, { file: File; target: UploadTarget; relativePath?: string }>())
@@ -93,14 +104,56 @@ export function UploadProvider({
   const uploadRefreshTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const drainUploadQueueRef = React.useRef<() => void>(() => undefined)
   const uploadConflictResolverRef = React.useRef<((choice: UploadConflictChoice) => void) | null>(null)
+  const uploadQueueRef = React.useRef(uploadQueue)
+
+  const mutateUploadQueue = React.useCallback((updater: (current: UploadQueueItem[]) => UploadQueueItem[]) => {
+    const next = updater(uploadQueueRef.current)
+    uploadQueueRef.current = next
+    setUploadQueue(next)
+  }, [])
+
+  const getUploadQueueItem = React.useCallback(
+    (id: string) => uploadQueueRef.current.find((item) => item.id === id),
+    []
+  )
+
+  const currentUploadOwnerId = getSession()?.user.id ?? null
+
+  React.useEffect(() => {
+    if (currentUploadOwnerId === persistenceOwnerId) return
+    uploadControllersRef.current.forEach((controller) => controller.abort("account-change"))
+    uploadPendingIdsRef.current = []
+    uploadActiveIdsRef.current.clear()
+    uploadFilesRef.current.clear()
+    const restored = currentUploadOwnerId ? restoreUploadTasks(currentUploadOwnerId) : []
+    uploadQueueRef.current = restored
+    setUploadQueue(restored)
+    setPersistenceOwnerId(currentUploadOwnerId)
+  }, [currentUploadOwnerId, persistenceOwnerId])
+
+  React.useEffect(() => {
+    if (!currentUploadOwnerId || currentUploadOwnerId !== persistenceOwnerId) return
+    const timer = window.setTimeout(
+      () => persistUploadTasks(currentUploadOwnerId, uploadQueueRef.current),
+      300
+    )
+    return () => window.clearTimeout(timer)
+  }, [currentUploadOwnerId, persistenceOwnerId, uploadQueue])
+
+  React.useEffect(() => {
+    if (!currentUploadOwnerId || currentUploadOwnerId !== persistenceOwnerId) return
+    const persistNow = () => persistUploadTasks(currentUploadOwnerId, uploadQueueRef.current)
+    window.addEventListener("pagehide", persistNow)
+    return () => window.removeEventListener("pagehide", persistNow)
+  }, [currentUploadOwnerId, persistenceOwnerId])
 
   React.useEffect(() => () => {
     if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current)
   }, [])
 
   const updateUploadQueueItem = React.useCallback((id: string, patch: Partial<UploadQueueItem>) => {
-    setUploadQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
-  }, [])
+    mutateUploadQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }, [mutateUploadQueue])
 
   const scheduleUploadRefresh = React.useCallback((parentId: string | null, bucketId: string) => {
     uploadRefreshTargetsRef.current.set(`${bucketId}:${parentId ?? "root"}`, { parentId, bucketId })
@@ -127,6 +180,7 @@ export function UploadProvider({
     uploadCommitIdsRef,
     uploadGateRef,
     uploadApiSchedulerRef,
+    getUploadQueueItem,
     scheduleUploadRefresh,
     updateUploadQueueItem,
   })
@@ -348,14 +402,16 @@ export function UploadProvider({
         totalBytes: file.size,
         speedText: "准备中...",
         speedBytesPerSecond: 0,
+        fileLastModified: file.lastModified,
+        requiresFileSelection: false,
         createdAt: nowString(),
       }
     })
     if (!nextItems.length) return
-    setUploadQueue((current) => [...nextItems, ...current])
+    mutateUploadQueue((current) => [...nextItems, ...current])
     setUploadQueueOpen(true)
     enqueueUploads(nextItems.map((item) => item.id))
-  }, [askUploadConflict, enqueueUploads])
+  }, [askUploadConflict, enqueueUploads, mutateUploadQueue])
 
   const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
     const target = pendingUploadTargetRef.current
@@ -376,43 +432,166 @@ export function UploadProvider({
     )
   }, [queueUploadFiles])
 
-  const retryUpload = React.useCallback((id: string) => {
-    if (!uploadFilesRef.current.get(id)) {
+  const pauseUpload = React.useCallback((id: string) => {
+    const item = getUploadQueueItem(id)
+    if (!item || ["paused", "completed", "failed", "canceled", "processing"].includes(item.status)) return
+
+    uploadPendingIdsRef.current = uploadPendingIdsRef.current.filter((pendingId) => pendingId !== id)
+    updateUploadQueueItem(id, {
+      status: "paused",
+      speedBytesPerSecond: 0,
+      speedText: "已暂停，可继续上传",
+      errorMessage: undefined,
+    })
+    uploadControllersRef.current.get(id)?.abort("pause")
+  }, [getUploadQueueItem, updateUploadQueueItem])
+
+  const resumeUpload = React.useCallback((id: string) => {
+    const item = getUploadQueueItem(id)
+    if (!item || ["completed", "canceled", "processing"].includes(item.status)) return
+    if (!uploadFilesRef.current.has(id)) {
+      pendingResumeIdRef.current = id
+      resumeInputRef.current?.click()
       return
     }
 
     updateUploadQueueItem(id, {
       status: "pending",
-      progress: 0,
-      uploadedBytes: 0,
-      expiresAt: undefined,
       speedBytesPerSecond: 0,
-      partSizeBytes: undefined,
-      partCount: undefined,
-      speedText: "准备中...",
+      speedText: item.sessionId ? "准备查询已上传分片..." : "准备中...",
+      errorMessage: undefined,
+      requiresFileSelection: false,
+    })
+    if (uploadActiveIdsRef.current.has(id)) {
+      if (!uploadPendingIdsRef.current.includes(id)) uploadPendingIdsRef.current.push(id)
+      return
+    }
+    enqueueUploads([id])
+  }, [enqueueUploads, getUploadQueueItem, updateUploadQueueItem])
+
+  const retryUpload = resumeUpload
+
+  const handleResumeInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const id = pendingResumeIdRef.current
+    const file = event.target.files?.[0]
+    pendingResumeIdRef.current = null
+    event.target.value = ""
+    if (!id || !file) return
+
+    const item = getUploadQueueItem(id)
+    if (!item) return
+    if (
+      file.name !== item.fileName ||
+      file.size !== item.fileSize ||
+      (item.fileLastModified !== undefined && file.lastModified !== item.fileLastModified)
+    ) {
+      toast.error("请选择原上传文件", {
+        description: "文件名、大小或修改时间与保存的上传任务不一致。",
+      })
+      return
+    }
+
+    updateUploadQueueItem(id, {
+      status: "preparing",
+      speedText: "正在校验所选文件...",
       errorMessage: undefined,
     })
-    enqueueUploads([id])
-  }, [enqueueUploads, updateUploadQueueItem])
+    void fingerprintFile(file).then((fingerprint) => {
+      const latest = getUploadQueueItem(id)
+      if (!latest) return
+      if (latest.fileFingerprint && latest.fileFingerprint !== fingerprint) {
+        updateUploadQueueItem(id, {
+          status: "paused",
+          speedText: "所选文件与原任务不一致",
+          requiresFileSelection: true,
+        })
+        toast.error("所选文件内容不匹配", {
+          description: "请重新选择创建该上传任务时使用的原文件。",
+        })
+        return
+      }
+
+      uploadFilesRef.current.set(id, {
+        file,
+        target: { mountId: latest.mountId, parentId: latest.parentId },
+        relativePath: latest.relativePath,
+      })
+      if (latest.status === "paused") {
+        updateUploadQueueItem(id, {
+          fileFingerprint: fingerprint,
+          requiresFileSelection: false,
+          speedText: "已暂停，可继续上传",
+        })
+        return
+      }
+      updateUploadQueueItem(id, {
+        status: "pending",
+        fileFingerprint: fingerprint,
+        requiresFileSelection: false,
+        speedText: latest.sessionId ? "准备查询已上传分片..." : "准备中...",
+      })
+      enqueueUploads([id])
+    }).catch(() => {
+      updateUploadQueueItem(id, {
+        status: "paused",
+        speedText: "文件校验失败，请重新选择",
+        requiresFileSelection: true,
+      })
+    })
+  }, [enqueueUploads, getUploadQueueItem, updateUploadQueueItem])
+
+  const abortSavedUpload = React.useCallback((item: UploadQueueItem) => {
+    const session = getSessionRef.current()
+    if (!session || !item.sessionId) return
+    void uploadApiSchedulerRef.current.run(
+      () => abortUpload(session.tokens.accessToken, item.sessionId!, "client_cancel"),
+      new AbortController().signal
+    ).catch(() => {
+      // The stale-session cleanup worker will retry provider cleanup.
+    })
+  }, [])
 
   const removeUpload = React.useCallback((id: string) => {
     if (uploadCommitIdsRef.current.has(id)) return
+    const item = getUploadQueueItem(id)
+    if (!item) return
+    if (["completed", "failed", "canceled"].includes(item.status)) {
+      if (item.status === "failed") abortSavedUpload(item)
+      uploadFilesRef.current.delete(id)
+      mutateUploadQueue((current) => current.filter((candidate) => candidate.id !== id))
+      return
+    }
+
     const controller = uploadControllersRef.current.get(id)
     if (controller) {
-      controller.abort()
+      controller.abort("cancel")
       return
     }
 
     uploadPendingIdsRef.current = uploadPendingIdsRef.current.filter((pendingId) => pendingId !== id)
     uploadFilesRef.current.delete(id)
-    setUploadQueue((current) => current.filter((item) => item.id !== id))
-  }, [])
+    if (!item.sessionId) {
+      mutateUploadQueue((current) => current.filter((candidate) => candidate.id !== id))
+      return
+    }
+
+    updateUploadQueueItem(id, {
+      status: "canceled",
+      speedBytesPerSecond: 0,
+      speedText: "已取消",
+      errorMessage: undefined,
+    })
+    abortSavedUpload(item)
+  }, [abortSavedUpload, getUploadQueueItem, mutateUploadQueue, updateUploadQueueItem])
 
   const clearCompletedUploads = React.useCallback(() => {
-    setUploadQueue((current) =>
+    uploadQueueRef.current
+      .filter((item) => item.status === "failed")
+      .forEach(abortSavedUpload)
+    mutateUploadQueue((current) =>
       current.filter((item) => !["completed", "failed", "canceled"].includes(item.status))
     )
-  }, [])
+  }, [abortSavedUpload, mutateUploadQueue])
 
   const offlineTasks = React.useMemo<OfflineTask[]>(
     () =>
@@ -425,6 +604,8 @@ export function UploadProvider({
             ? "已完成"
             : item.status === "failed"
               ? "失败"
+              : item.status === "paused"
+                ? "已暂停"
               : item.status === "canceled"
                 ? "已取消"
                 : item.status === "processing"
@@ -443,6 +624,8 @@ export function UploadProvider({
       uploadQueueOpen,
       setUploadQueueOpen,
       retryUpload,
+      pauseUpload,
+      resumeUpload,
       removeUpload,
       clearCompletedUploads,
       requestUpload,
@@ -456,6 +639,8 @@ export function UploadProvider({
       requestFolderUpload,
       requestUpload,
       retryUpload,
+      pauseUpload,
+      resumeUpload,
       queueUploadFiles,
       uploadQueue,
       uploadQueueOpen,
@@ -478,6 +663,12 @@ export function UploadProvider({
         {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
         className="hidden"
         onChange={(event) => handleFileInputChange(event, true)}
+      />
+      <input
+        ref={resumeInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleResumeInputChange}
       />
       <UploadConflictDialog conflict={uploadConflict} onResolve={resolveUploadConflict} />
     </UploadStateContext.Provider>

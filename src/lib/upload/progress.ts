@@ -8,11 +8,18 @@ export type PartProgressSnapshot = {
 // second are smooth enough while keeping large queues off the React hot path.
 const UPDATE_INTERVAL = 250
 
-export function trackParts(totalBytes: number, onUpdate: (snapshot: PartProgressSnapshot) => void) {
+export function trackParts(
+  totalBytes: number,
+  onUpdate: (snapshot: PartProgressSnapshot) => void,
+  initialParts: Array<{ partNumber: number; size: number }> = []
+) {
   const startedAt = Date.now()
-  const committedByPart = new Map<number, number>()
+  const committedByPart = new Map<number, number>(
+    initialParts.map((part) => [part.partNumber, Math.max(0, part.size)])
+  )
   const inFlightByPart = new Map<number, number>()
-  let highWaterBytes = 0
+  const resumedBytes = Array.from(committedByPart.values()).reduce((sum, value) => sum + value, 0)
+  let highWaterBytes = resumedBytes
   let timer: number | null = null
 
   const emit = () => {
@@ -28,7 +35,7 @@ export function trackParts(totalBytes: number, onUpdate: (snapshot: PartProgress
     onUpdate({
       uploadedBytes: highWaterBytes,
       progress: totalBytes > 0 ? Math.min((highWaterBytes / totalBytes) * 100, 100) : 100,
-      bytesPerSecond: highWaterBytes / elapsedSeconds,
+      bytesPerSecond: Math.max(highWaterBytes - resumedBytes, 0) / elapsedSeconds,
     })
   }
 

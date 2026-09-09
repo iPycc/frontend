@@ -207,7 +207,7 @@ export interface UploadQueueItem {
   fileSize: number
   mountId: string
   parentId: string | null
-  status: "pending" | "preparing" | "uploading" | "processing" | "completed" | "failed" | "canceled"
+  status: "pending" | "preparing" | "uploading" | "paused" | "processing" | "completed" | "failed" | "canceled"
   progress: number
   uploadedBytes: number
   totalBytes: number
@@ -216,6 +216,10 @@ export interface UploadQueueItem {
   partCount?: number
   speedText: string
   sessionId?: string
+  checksum?: string
+  fileFingerprint?: string
+  fileLastModified?: number
+  requiresFileSelection?: boolean
   expiresAt?: string
   errorMessage?: string
   createdAt: string

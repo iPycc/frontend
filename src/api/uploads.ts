@@ -69,9 +69,11 @@ export async function createUploadSession(token: string, body: CreateUploadSessi
   })
 }
 
-export async function getUploadSession(token: string, sessionId: string) {
+export async function getUploadSession(token: string, sessionId: string, signal?: AbortSignal) {
   return requestJson<UploadSession>(`/explorer/upload/${sessionId}`, {
     token,
+    signal,
+    cache: "no-store",
   })
 }
 

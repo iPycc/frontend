@@ -9,12 +9,15 @@ import {
   Clock3,
   LoaderCircle,
   MoreHorizontal,
+  Pause,
+  Play,
   Plus,
   RefreshCcw,
   X,
 } from "lucide-react"
 
 import { FileGlyph } from "@/components/file-area/FileGlyph"
+import { Button } from "@/components/ui/button"
 import type { DownloadTask } from "@/hooks/use-file-download"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
@@ -34,7 +37,7 @@ type TransferItem = {
   id: string
   direction: "upload" | "download"
   name: string
-  status: "pending" | "active" | "processing" | "completed" | "failed" | "canceled"
+  status: "pending" | "active" | "paused" | "processing" | "completed" | "failed" | "canceled"
   statusLabel: string
   loaded: number
   total: number | null
@@ -76,6 +79,10 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
   if (item.status === "canceled") return { status: "canceled", statusLabel: "已取消" }
   if (item.status === "completed") return { status: "completed", statusLabel: "上传完成" }
   if (item.status === "processing") return { status: "processing", statusLabel: "正在写入文件" }
+  if (item.status === "paused") return {
+    status: "paused",
+    statusLabel: item.requiresFileSelection ? "请选择原文件以继续" : "已暂停，可继续上传",
+  }
   if (item.status === "preparing") return { status: "active", statusLabel: "正在准备" }
   if (item.status === "uploading") return { status: "active", statusLabel: "正在上传" }
   return { status: "pending", statusLabel: "等待上传" }
@@ -139,6 +146,7 @@ function getSummary(items: TransferItem[]) {
   const active = items.filter(isActive).length
   const failed = items.filter((item) => item.status === "failed").length
   const completed = items.filter((item) => item.status === "completed").length
+  const paused = items.filter((item) => item.status === "paused").length
   const uploads = items.filter((item) => item.direction === "upload").length
   const downloads = items.filter((item) => item.direction === "download").length
   const known = items.filter((item) => item.total !== null)
@@ -149,13 +157,14 @@ function getSummary(items: TransferItem[]) {
     : 0
   const progress = clampProgress(total > 0 ? (loaded / total) * 100 : fallback)
   const speed = items.filter(isActive).reduce((sum, item) => sum + item.speed, 0)
-  return { active, failed, completed, uploads, downloads, progress, speed }
+  return { active, paused, failed, completed, uploads, downloads, progress, speed }
 }
 
 function statusIcon(item: TransferItem) {
   if (item.status === "completed") return <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
   if (item.status === "failed") return <CircleAlert className="size-3.5 text-destructive" />
   if (item.status === "canceled") return <X className="size-3.5 text-muted-foreground" />
+  if (item.status === "paused") return <Pause className="size-3.5 text-muted-foreground" />
   if (item.status === "active" || item.status === "processing") return <LoaderCircle className="size-3.5 animate-spin text-primary" />
   return <Clock3 className="size-3.5 text-amber-600 dark:text-amber-400" />
 }
@@ -200,6 +209,8 @@ export function TransferManager({
     uploadQueueOpen,
     setUploadQueueOpen,
     retryUpload,
+    pauseUpload,
+    resumeUpload,
     removeUpload,
     clearCompletedUploads,
     requestUpload,
@@ -269,6 +280,8 @@ export function TransferManager({
     ? `${summary.active} 项进行中 · ${Math.round(summary.progress)}%${summary.speed > 0 ? ` · ${formatBytes(summary.speed)}/s` : ""}`
     : summary.failed
       ? `${summary.failed} 项失败 · ${items.length} 项任务`
+      : summary.paused
+        ? `${summary.paused} 项已暂停 · ${Math.round(summary.progress)}%`
       : `${summary.completed} 项已完成 · ${Math.round(summary.progress)}%`
 
   if (minimized) {
@@ -321,7 +334,11 @@ export function TransferManager({
           <p className="truncate text-xs text-muted-foreground" aria-live="polite">
             {summary.active
               ? `${summary.active} 项进行中 · ${Math.round(summary.progress)}%${summary.speed > 0 ? ` · ${formatBytes(summary.speed)}/s` : ""}`
-              : `上传 ${summary.uploads} · 下载 ${summary.downloads} · ${summary.completed} 项已完成`}
+              : summary.failed
+                ? `${summary.failed} 项失败 · 可保留已上传分片后重试`
+                : summary.paused
+                  ? `${summary.paused} 项已暂停 · 可从断点继续`
+                  : `上传 ${summary.uploads} · 下载 ${summary.downloads} · ${summary.completed} 项已完成`}
           </p>
         </div>
         <button className={iconButton} type="button" onClick={clearFinished} disabled={!hasTerminal} aria-label="清理已结束任务" title="清理已结束任务"><MoreHorizontal className="size-[18px]" /></button>
@@ -349,6 +366,10 @@ export function TransferManager({
             formatBytes={formatBytes}
             onSelect={() => setSelectedId((current) => current === item.id ? null : item.id)}
             onRetry={item.upload?.status === "failed" ? () => retryUpload(item.upload!.id) : undefined}
+            onPause={item.upload && ["pending", "preparing", "uploading"].includes(item.upload.status)
+              ? () => pauseUpload(item.upload!.id)
+              : undefined}
+            onResume={item.upload?.status === "paused" ? () => resumeUpload(item.upload!.id) : undefined}
             onRemove={item.direction === "upload"
               ? () => removeUpload(item.upload!.id)
               : item.status === "completed" || item.status === "failed"
@@ -372,6 +393,8 @@ function TransferRow({
   formatBytes,
   onSelect,
   onRetry,
+  onPause,
+  onResume,
   onRemove,
 }: {
   item: TransferItem
@@ -379,6 +402,8 @@ function TransferRow({
   formatBytes: (value?: number) => string
   onSelect: () => void
   onRetry?: () => void
+  onPause?: () => void
+  onResume?: () => void
   onRemove?: () => void
 }) {
   const progress = item.progress ?? 0
@@ -435,7 +460,29 @@ function TransferRow({
             {item.progress === null ? "—" : `${Math.round(item.progress)}%`}
           </span>
           <div className="flex w-8 shrink-0 justify-end">
-            {onRetry ? (
+            {onResume ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={(event) => { event.stopPropagation(); onResume() }}
+                aria-label={`继续上传 ${item.name}`}
+                title={item.upload?.requiresFileSelection ? "选择原文件并继续" : "继续上传"}
+              >
+                <Play />
+              </Button>
+            ) : onPause ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={(event) => { event.stopPropagation(); onPause() }}
+                aria-label={`暂停上传 ${item.name}`}
+                title="暂停上传"
+              >
+                <Pause />
+              </Button>
+            ) : onRetry ? (
               <button className={iconButton} type="button" onClick={(event) => { event.stopPropagation(); onRetry() }} aria-label={`重试 ${item.name}`} title="重试"><RefreshCcw className="size-4" /></button>
             ) : item.status === "processing" && item.direction === "upload" ? (
               <span className="size-8" aria-hidden="true" />
@@ -472,7 +519,8 @@ function TransferDetails({
         ["上传进度", progressText],
         ["当前速率", item.speed > 0 ? `${formatBytes(item.speed)}/s` : "—"],
         ["预计剩余", remaining > 0 ? formatDuration(remaining) : "—"],
-        ["上传会话", formatExpiry(item.expiresAt)],
+        ["断点续传", item.upload?.sessionId ? `会话 ${item.upload.sessionId.slice(0, 8)}… 已保存` : "等待创建会话"],
+        ["上传签名", formatExpiry(item.expiresAt)],
       ]
     : [
         ["文件名", item.name],
