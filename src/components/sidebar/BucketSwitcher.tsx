@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?: "trigger" | "menu" | "compact" }) {
+export function ProviderIcon({ provider, size = "trigger" }: { provider: string; size?: "trigger" | "menu" | "compact" }) {
   const p = provider.toLowerCase()
   const px = size === "compact" ? 18 : 28
 

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { IconCode, IconDeviceFloppy, IconEye, IconLoader2 } from "@tabler/icons-react"
+import { IconCode, IconColumns3, IconDeviceFloppy, IconEdit, IconLoader2 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import type { PreviewManifest } from "@/api/files"
@@ -7,34 +7,56 @@ import { saveTextPreview } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
-import { MarkdownPreview } from "./MarkdownPreview"
+import { MarkdownPreview, type MarkdownPreviewHandle } from "./MarkdownPreview"
+import { AdaptiveCodeEditor, type AdaptiveCodeEditorHandle, type SourceLineRange } from "./AdaptiveCodeEditor"
 import { PreviewSkeleton } from "./PreviewSkeleton"
 
-const languageByExtension: Record<string, string> = {
-  c: "C", cpp: "C++", cs: "C#", css: "CSS", go: "Go", h: "C++", html: "HTML",
-  ini: "INI", java: "Java", js: "JavaScript", json: "JSON", jsx: "JSX", md: "Markdown",
-  php: "PHP", py: "Python", rb: "Ruby", rs: "Rust", sh: "Shell", sql: "SQL",
-  ts: "TypeScript", tsx: "TSX", xml: "XML", yaml: "YAML", yml: "YAML",
+const MarkdownEditor = React.lazy(() => import("./MarkdownEditor").then((module) => ({ default: module.MarkdownEditor })))
+
+const languageByExtension: Record<string, { id: string; label: string }> = {
+  c: { id: "c", label: "C" }, cpp: { id: "cpp", label: "C++" }, cs: { id: "csharp", label: "C#" }, css: { id: "css", label: "CSS" },
+  go: { id: "go", label: "Go" }, h: { id: "cpp", label: "C++" }, html: { id: "html", label: "HTML" }, ini: { id: "ini", label: "INI" },
+  java: { id: "java", label: "Java" }, js: { id: "javascript", label: "JavaScript" }, json: { id: "json", label: "JSON" },
+  jsx: { id: "javascriptreact", label: "JSX" }, md: { id: "markdown", label: "Markdown" }, php: { id: "php", label: "PHP" },
+  py: { id: "python", label: "Python" }, rb: { id: "ruby", label: "Ruby" }, rs: { id: "rust", label: "Rust" },
+  sh: { id: "shell", label: "Shell" }, sql: { id: "sql", label: "SQL" }, ts: { id: "typescript", label: "TypeScript" },
+  tsx: { id: "typescriptreact", label: "TSX" }, xml: { id: "xml", label: "XML" }, yaml: { id: "yaml", label: "YAML" }, yml: { id: "yaml", label: "YAML" },
 }
 
 function inferLanguage(name: string) {
   const extension = name.split(".").pop()?.toLowerCase() ?? ""
-  return languageByExtension[extension] ?? "Text"
+  return languageByExtension[extension] ?? { id: "plaintext", label: "Text" }
+}
+
+function hasExtendedMarkdownSyntax(content: string) {
+  return /(^|\n)\s*(import|export)\s|<[A-Z][\w.-]*[\s/>]|(^|\n)\s*\{[^\n{}]+\}\s*($|\n)/m.test(content)
 }
 
 export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
   const isMarkdown = ["md", "markdown"].includes(manifest.name.split(".").pop()?.toLowerCase() ?? "")
   const [content, setContent] = React.useState("")
-  const [view, setView] = React.useState<"preview" | "source">(isMarkdown ? "preview" : "source")
+  const [view, setView] = React.useState<"visual" | "source" | "split">(isMarkdown ? "visual" : "source")
   const [version, setVersion] = React.useState(manifest.version)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [dirty, setDirty] = React.useState(false)
+  const [sourceOnly, setSourceOnly] = React.useState(false)
+  const [hoveredSourceRange, setHoveredSourceRange] = React.useState<SourceLineRange | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const splitEditorRef = React.useRef<AdaptiveCodeEditorHandle>(null)
+  const splitPreviewRef = React.useRef<MarkdownPreviewHandle>(null)
   const editable = manifest.capabilities.includes("edit")
   const maxBytes = typeof manifest.metadata.max_bytes === "number" ? manifest.metadata.max_bytes : 5 * 1024 * 1024
   const textEncoding = typeof manifest.metadata.text_encoding === "string" ? manifest.metadata.text_encoding : "utf-8"
   const truncated = manifest.size > maxBytes
+
+  const syncPreviewScroll = React.useCallback((ratio: number) => {
+    splitPreviewRef.current?.setScrollRatio(ratio)
+  }, [])
+
+  const syncEditorScroll = React.useCallback((ratio: number) => {
+    splitEditorRef.current?.setScrollRatio(ratio)
+  }, [])
 
   const save = React.useCallback(async () => {
     if (!editable || saving || !dirty) return
@@ -57,7 +79,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     setError(null)
     setDirty(false)
     setVersion(manifest.version)
-    setView(isMarkdown ? "preview" : "source")
+    setView(isMarkdown ? "visual" : "source")
     const load = async () => {
       let lastError: unknown
       for (const source of previewSourceUrls(manifest)) {
@@ -68,7 +90,9 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
             headers: truncated ? { Range: `bytes=0-${maxBytes - 1}` } : undefined,
           })
           const value = await response.arrayBuffer()
-          setContent(new TextDecoder(textEncoding).decode(value))
+          const decoded = new TextDecoder(textEncoding).decode(value)
+          setContent(decoded)
+          setSourceOnly(isMarkdown && hasExtendedMarkdownSyntax(decoded))
           return
         } catch (reason) {
           if (controller.signal.aborted) return
@@ -84,30 +108,66 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
   if (loading) return <PreviewSkeleton kind="text" />
   if (error) return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
 
+  const language = inferLanguage(manifest.name)
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="truncate text-xs text-muted-foreground">
-          {inferLanguage(manifest.name)} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}
+          {language.label} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}{sourceOnly ? " · 检测到扩展语法，使用源码模式" : ""}
         </span>
         <div className="flex items-center gap-2">
-          {isMarkdown ? <ToggleGroup type="single" value={view} onValueChange={(value) => { if (value === "preview" || value === "source") setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 查看模式"><ToggleGroupItem value="preview" aria-label="预览 Markdown"><IconEye data-icon="inline-start" />预览</ToggleGroupItem><ToggleGroupItem value="source" aria-label="查看 Markdown 源码"><IconCode data-icon="inline-start" />源码</ToggleGroupItem></ToggleGroup> : null}
+          {isMarkdown ? <ToggleGroup type="single" value={sourceOnly ? "source" : view} onValueChange={(value) => { if (!sourceOnly && (value === "visual" || value === "source" || value === "split")) setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 编辑模式"><ToggleGroupItem value="visual" disabled={sourceOnly} aria-label="所见即所得编辑"><IconEdit data-icon="inline-start" />编辑</ToggleGroupItem><ToggleGroupItem value="source" aria-label="编辑 Markdown 源码"><IconCode data-icon="inline-start" />源码</ToggleGroupItem><ToggleGroupItem value="split" disabled={sourceOnly} aria-label="左侧源码、右侧预览"><IconColumns3 data-icon="inline-start" />分屏</ToggleGroupItem></ToggleGroup> : null}
           {editable ? <Button size="sm" variant="outline" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}保存</Button> : null}
         </div>
       </div>
-      {isMarkdown && view === "preview" ? (
-        <div className="min-h-0 flex-1"><MarkdownPreview content={content} /></div>
-      ) : editable ? (
-        <textarea
-          value={content}
-          onChange={(event) => { setContent(event.target.value); setDirty(true) }}
-          onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void save() } }}
-          spellCheck={false}
-          aria-label={`${manifest.name} 文本编辑器`}
-          className="min-h-0 flex-1 resize-none bg-background p-4 font-mono text-[13px] leading-5 text-foreground outline-none"
-        />
+      {isMarkdown && view === "split" && !sourceOnly ? (
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="min-h-0 min-w-0 flex-1 border-b border-border md:border-b-0 md:border-r">
+            <AdaptiveCodeEditor
+              ref={splitEditorRef}
+              value={content}
+              language={language.id}
+              readOnly={!editable}
+              ariaLabel={`${manifest.name} Markdown 源码编辑器`}
+              onChange={(value) => { setContent(value); setDirty(true) }}
+              onSave={() => void save()}
+              onScrollRatioChange={syncPreviewScroll}
+              highlightRange={hoveredSourceRange}
+            />
+          </div>
+          <div className="min-h-0 min-w-0 flex-1">
+            <MarkdownPreview
+              ref={splitPreviewRef}
+              content={content}
+              onScrollRatioChange={syncEditorScroll}
+              onSourceRangeHover={setHoveredSourceRange}
+            />
+          </div>
+        </div>
+      ) : isMarkdown && view === "visual" && !sourceOnly ? (
+        <div className="min-h-0 flex-1">
+          {editable ? (
+            <React.Suspense fallback={<PreviewSkeleton kind="text" />}>
+              <MarkdownEditor
+                key={`${manifest.node_id}:${version}`}
+                initialValue={content}
+                readOnly={false}
+                onChange={(value) => { setContent(value); setDirty(true) }}
+              />
+            </React.Suspense>
+          ) : <MarkdownPreview content={content} />}
+        </div>
       ) : (
-        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre p-4 font-mono text-[13px] leading-5 text-foreground">{content}</pre>
+        <div className="min-h-0 flex-1">
+          <AdaptiveCodeEditor
+            value={content}
+            language={language.id}
+            readOnly={!editable}
+            ariaLabel={`${manifest.name} 文本编辑器`}
+            onChange={(value) => { setContent(value); setDirty(true) }}
+            onSave={() => void save()}
+          />
+        </div>
       )}
     </div>
   )

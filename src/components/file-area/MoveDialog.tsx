@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Check, ChevronRight, FolderInput, Home, LoaderCircle } from "lucide-react"
 
+import { ProviderIcon } from "@/components/sidebar/BucketSwitcher"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,11 +24,19 @@ interface MoveFolderOption {
   parentId?: string | null
 }
 
+interface MoveRootOption {
+  id: string
+  name: string
+  description?: string
+  provider?: string
+}
+
 interface MoveDialogProps {
   open: boolean
   folders: MoveFolderOption[]
   items?: FileNode[]
   root?: { id: string; name: string }
+  roots?: MoveRootOption[]
   disabledFolderIds?: string[]
   value: string
   onValueChange: (value: string) => void
@@ -37,6 +46,8 @@ interface MoveDialogProps {
   title?: string
   description?: string
   submitLabel?: string
+  destinationLabel?: string
+  emptyDescription?: string
 }
 
 const FLAT_ROOT_ID = "__move-dialog-root__"
@@ -46,6 +57,7 @@ export function MoveDialog({
   folders,
   items = [],
   root,
+  roots,
   disabledFolderIds = [],
   value,
   onValueChange,
@@ -55,20 +67,29 @@ export function MoveDialog({
   title = "移动到",
   description = "浏览文件夹并选择新的存放位置。",
   submitLabel = "移动到这里",
+  destinationLabel = "移动到",
+  emptyDescription = "可以将所选项目移动到这里",
 }: MoveDialogProps) {
-  const hasHierarchy = Boolean(root)
+  const hierarchyRoots = React.useMemo<MoveRootOption[]>(
+    () => roots?.length ? roots : root ? [root] : [],
+    [root, roots]
+  )
+  const hasHierarchy = hierarchyRoots.length > 0
+  const defaultRootId = hierarchyRoots[0]?.id ?? ""
   const [currentFolderId, setCurrentFolderId] = React.useState(
-    hasHierarchy ? value || root?.id || "" : FLAT_ROOT_ID
+    hasHierarchy ? value || defaultRootId : FLAT_ROOT_ID
   )
   const [loadingFolderId, setLoadingFolderId] = React.useState<string | null>(null)
   const disabledIds = React.useMemo(() => new Set(disabledFolderIds), [disabledFolderIds])
 
   const allFolders = React.useMemo(() => {
     const byId = new Map<string, MoveFolderOption>()
-    if (root) byId.set(root.id, { ...root, parentId: null })
+    for (const hierarchyRoot of hierarchyRoots) {
+      byId.set(hierarchyRoot.id, { ...hierarchyRoot, parentId: null })
+    }
     for (const folder of folders) byId.set(folder.id, folder)
     return Array.from(byId.values())
-  }, [folders, root])
+  }, [folders, hierarchyRoots])
 
   const folderById = React.useMemo(
     () => new Map(allFolders.map((folder) => [folder.id, folder])),
@@ -77,15 +98,30 @@ export function MoveDialog({
 
   React.useEffect(() => {
     if (!open) return
-    setCurrentFolderId(hasHierarchy ? value || root?.id || "" : FLAT_ROOT_ID)
-  }, [hasHierarchy, open, root?.id, value])
+    setCurrentFolderId(hasHierarchy ? value || defaultRootId : FLAT_ROOT_ID)
+  }, [defaultRootId, hasHierarchy, open, value])
+
+  const activeRoot = React.useMemo(() => {
+    if (!hasHierarchy) return undefined
+    const rootIds = new Set(hierarchyRoots.map((item) => item.id))
+    const seen = new Set<string>()
+    let cursor = folderById.get(currentFolderId)
+    while (cursor && !seen.has(cursor.id)) {
+      if (rootIds.has(cursor.id)) {
+        return hierarchyRoots.find((item) => item.id === cursor?.id)
+      }
+      seen.add(cursor.id)
+      cursor = cursor.parentId ? folderById.get(cursor.parentId) : undefined
+    }
+    return hierarchyRoots[0]
+  }, [currentFolderId, folderById, hasHierarchy, hierarchyRoots])
 
   const visibleFolders = React.useMemo(() => {
     const result = hasHierarchy
-      ? allFolders.filter((folder) => folder.id !== root?.id && folder.parentId === currentFolderId)
+      ? allFolders.filter((folder) => folder.parentId === currentFolderId)
       : allFolders
     return result.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-  }, [allFolders, currentFolderId, hasHierarchy, root?.id])
+  }, [allFolders, currentFolderId, hasHierarchy])
 
   const visibleFiles = React.useMemo(
     () => hasHierarchy
@@ -110,11 +146,11 @@ export function MoveDialog({
   }, [currentFolderId, folderById, hasHierarchy])
 
   const treeRows = React.useMemo(() => {
-    if (!hasHierarchy || !root) return []
+    if (!hasHierarchy || !activeRoot) return []
     const result: Array<{ folder: MoveFolderOption; depth: number }> = []
     const walk = (parentId: string, depth: number, seen: Set<string>) => {
       const children = allFolders
-        .filter((folder) => folder.id !== root.id && folder.parentId === parentId)
+        .filter((folder) => folder.parentId === parentId)
         .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
       for (const folder of children) {
         if (seen.has(folder.id)) continue
@@ -124,9 +160,9 @@ export function MoveDialog({
         walk(folder.id, depth + 1, nextSeen)
       }
     }
-    walk(root.id, 1, new Set([root.id]))
+    walk(activeRoot.id, 1, new Set([activeRoot.id]))
     return result
-  }, [allFolders, hasHierarchy, root])
+  }, [activeRoot, allFolders, hasHierarchy])
 
   const browseFolder = async (folderId: string) => {
     if (disabledIds.has(folderId)) return
@@ -148,6 +184,12 @@ export function MoveDialog({
 
   const selectedFolder = folderById.get(value)
   const currentFolder = folderById.get(currentFolderId)
+  const currentDestination = React.useMemo(() => {
+    if (!hasHierarchy) return selectedFolder?.name ?? "尚未选择"
+    if (hierarchyRoots.length === 1) return currentFolder?.name ?? activeRoot?.name ?? "尚未选择"
+    if (breadcrumb.length <= 1) return activeRoot ? `${activeRoot.name} / 根目录` : "尚未选择"
+    return breadcrumb.map((folder) => folder.name).join(" / ")
+  }, [activeRoot, breadcrumb, currentFolder?.name, hasHierarchy, hierarchyRoots.length, selectedFolder?.name])
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
@@ -161,21 +203,50 @@ export function MoveDialog({
         </DialogHeader>
         <Separator />
 
-        <div className="grid min-h-0 md:grid-cols-[15rem_minmax(0,1fr)]">
-          {hasHierarchy && root ? (
+        <div className="grid min-h-0 md:grid-cols-[17rem_minmax(0,1fr)]">
+          {hasHierarchy && activeRoot ? (
             <aside className="hidden min-h-0 bg-muted/25 md:flex md:flex-col">
+              {hierarchyRoots.length > 1 ? (
+                <>
+                  <div className="px-4 pb-2 pt-3 text-xs font-medium text-muted-foreground">存储桶</div>
+                  <div className="space-y-1 px-2 pb-3">
+                    {hierarchyRoots.map((hierarchyRoot) => (
+                      <Button
+                        key={hierarchyRoot.id}
+                        type="button"
+                        variant={activeRoot.id === hierarchyRoot.id ? "secondary" : "ghost"}
+                        className="h-auto w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
+                        disabled={disabledIds.has(hierarchyRoot.id)}
+                        onClick={() => void browseFolder(hierarchyRoot.id)}
+                      >
+                        <span className="shrink-0">
+                          <ProviderIcon provider={hierarchyRoot.provider ?? hierarchyRoot.description ?? hierarchyRoot.name} size="menu" />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-normal">{hierarchyRoot.name}</span>
+                          {hierarchyRoot.description ? (
+                            <span className="truncate text-xs font-normal text-muted-foreground">{hierarchyRoot.description}</span>
+                          ) : null}
+                        </span>
+                        {activeRoot.id === hierarchyRoot.id ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+                      </Button>
+                    ))}
+                  </div>
+                  <Separator />
+                </>
+              ) : null}
               <div className="px-4 py-3 text-xs font-medium text-muted-foreground">文件夹</div>
               <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
                 <Button
                   type="button"
-                  variant={currentFolderId === root.id ? "secondary" : "ghost"}
+                  variant={currentFolderId === activeRoot.id ? "secondary" : "ghost"}
                   size="sm"
                   className="mb-1 w-full justify-start"
-                  disabled={disabledIds.has(root.id)}
-                  onClick={() => void browseFolder(root.id)}
+                  disabled={disabledIds.has(activeRoot.id)}
+                  onClick={() => void browseFolder(activeRoot.id)}
                 >
                   <Home data-icon="inline-start" />
-                  <span className="truncate">{root.name}</span>
+                  <span className="truncate">{hierarchyRoots.length > 1 ? "根目录" : activeRoot.name}</span>
                 </Button>
                 {treeRows.map(({ folder, depth }) => (
                   <Button
@@ -198,24 +269,38 @@ export function MoveDialog({
 
           <main className="flex min-h-0 min-w-0 flex-col">
             {hasHierarchy ? (
-              <div className="flex min-h-12 items-center gap-1 overflow-x-auto px-4 py-2 sm:px-5">
-                {breadcrumb.map((folder, index) => (
-                  <React.Fragment key={folder.id}>
-                    {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-                    <Button
-                      type="button"
-                      variant={index === breadcrumb.length - 1 ? "secondary" : "ghost"}
-                      size="sm"
-                      className="shrink-0"
-                      disabled={disabledIds.has(folder.id)}
-                      onClick={() => void browseFolder(folder.id)}
-                    >
-                      {index === 0 ? <Home data-icon="inline-start" /> : null}
-                      {folder.name}
-                    </Button>
-                  </React.Fragment>
-                ))}
-                {loadingFolderId ? <LoaderCircle className="ml-auto size-4 shrink-0 animate-spin text-muted-foreground" aria-label="正在加载目录" /> : null}
+              <div className="flex min-h-12 items-center gap-2 px-4 py-2 sm:px-5">
+                {hierarchyRoots.length > 1 ? (
+                  <select
+                    aria-label="选择存储桶"
+                    className="h-9 max-w-44 rounded-md border border-input bg-background px-2 text-sm md:hidden"
+                    value={activeRoot?.id ?? defaultRootId}
+                    onChange={(event) => void browseFolder(event.target.value)}
+                  >
+                    {hierarchyRoots.map((hierarchyRoot) => (
+                      <option key={hierarchyRoot.id} value={hierarchyRoot.id}>{hierarchyRoot.name}</option>
+                    ))}
+                  </select>
+                ) : null}
+                <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                  {breadcrumb.map((folder, index) => (
+                    <React.Fragment key={folder.id}>
+                      {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+                      <Button
+                        type="button"
+                        variant={index === breadcrumb.length - 1 ? "secondary" : "ghost"}
+                        size="sm"
+                        className="shrink-0"
+                        disabled={disabledIds.has(folder.id)}
+                        onClick={() => void browseFolder(folder.id)}
+                      >
+                        {index === 0 ? <Home data-icon="inline-start" /> : null}
+                        {hierarchyRoots.length > 1 && index === 0 ? "根目录" : folder.name}
+                      </Button>
+                    </React.Fragment>
+                  ))}
+                </div>
+                {loadingFolderId ? <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-label="正在加载目录" /> : null}
               </div>
             ) : (
               <div className="flex min-h-12 items-center px-5 text-sm font-medium">选择保存位置</div>
@@ -272,7 +357,7 @@ export function MoveDialog({
 
                 {visibleFolders.length === 0 && visibleFiles.length === 0 ? (
                   <div className="flex min-h-56 flex-1 items-center justify-center">
-                    <EmptyState title="此文件夹为空" description="可以将所选项目移动到这里" />
+                    <EmptyState title="此文件夹为空" description={emptyDescription} />
                   </div>
                 ) : null}
               </div>
@@ -283,7 +368,7 @@ export function MoveDialog({
         <Separator />
         <DialogFooter className="items-center justify-between px-5 py-4 sm:px-6">
           <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-            移动到：<span className="font-medium text-foreground">{hasHierarchy ? currentFolder?.name ?? root?.name : selectedFolder?.name ?? "尚未选择"}</span>
+            {destinationLabel}：<span className="font-medium text-foreground">{currentDestination}</span>
           </p>
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>取消</Button>

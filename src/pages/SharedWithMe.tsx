@@ -22,7 +22,7 @@ import {
   SharedViewToggle,
   type SharedViewMode,
 } from "@/components/share/SharedList"
-import { SharedPreviewDialog } from "@/components/share/SharedPreviewDialog"
+import { SharedFilePreviewModal } from "@/components/share/SharedFilePreviewModal"
 import { PageShell } from "@/components/shared/PageShell"
 import { TransferManager } from "@/components/transfer"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,16 @@ function initialViewMode(): SharedViewMode {
 
 export function SharedWithMe() {
   usePageTitle("与我共享")
-  const { formatBytes, buckets, getFoldersForBucket, reloadWorkspace } = useAppState()
+  const {
+    formatBytes,
+    buckets,
+    activeBucket,
+    nodes,
+    getFoldersForBucket,
+    loadDirectory,
+    loadDirectoryFolders,
+    reloadWorkspace,
+  } = useAppState()
   const fileDownload = useFileDownload()
   const [searchParams, setSearchParams] = useSearchParams()
   const ownerFilter = Number(searchParams.get("owner")) || null
@@ -147,31 +156,82 @@ export function SharedWithMe() {
     }
   }
 
-  const saveOptions = useMemo(
-    () => buckets.flatMap((bucket) => {
-      if (!bucket.backendId || bucket.readOnly) return []
-      const provider = bucket.providerLabel ?? bucket.provider
-      return [
-        { id: `${bucket.backendId}:`, name: `${bucket.name}（${provider}）/ 根目录` },
-        ...getFoldersForBucket(bucket.id, false)
-          .filter((folder) => folder.backendId)
-          .map((folder) => ({
-            id: `${bucket.backendId}:${folder.backendId}`,
-            name: `${bucket.name}（${provider}）/ ${folder.name}`,
-          })),
-      ]
-    }),
-    [buckets, getFoldersForBucket]
+  const writableBuckets = useMemo(
+    () => buckets.filter((bucket) => bucket.backendId && !bucket.readOnly),
+    [buckets]
+  )
+
+  const saveRoots = useMemo(
+    () => writableBuckets.map((bucket) => ({
+      id: `${bucket.backendId}:`,
+      name: bucket.name,
+      description: `${bucket.provider} · ${bucket.region || "本机"}`,
+      provider: bucket.provider,
+    })),
+    [writableBuckets]
+  )
+
+  const saveFolders = useMemo(
+    () => writableBuckets.flatMap((bucket) =>
+      getFoldersForBucket(bucket.id, false)
+        .filter((folder) => folder.backendId)
+        .map((folder) => ({
+          id: `${bucket.backendId}:${folder.backendId}`,
+          name: folder.name,
+          parentId: folder.parentId && !folder.parentId.startsWith("root:")
+            ? `${bucket.backendId}:${folder.parentId}`
+            : `${bucket.backendId}:`,
+        }))
+    ),
+    [getFoldersForBucket, writableBuckets]
+  )
+
+  const saveBrowserItems = useMemo(
+    () => writableBuckets.flatMap((bucket) =>
+      nodes
+        .filter((node) => node.bucketId === bucket.id && !node.deletedAt && !node.isSystemRoot)
+        .map((node) => ({
+          ...node,
+          id: `${bucket.backendId}:${node.id}`,
+          parentId: node.parentId && !node.parentId.startsWith("root:")
+            ? `${bucket.backendId}:${node.parentId}`
+            : `${bucket.backendId}:`,
+        }))
+    ),
+    [nodes, writableBuckets]
   )
 
   const beginSave = (item: SharedItem) => {
-    if (!saveOptions.length) {
+    if (!writableBuckets.length) {
       toast.error("当前没有可写入的存储桶")
       return
     }
+    const initialBucket = writableBuckets.find((bucket) => bucket.id === activeBucket.id) ?? writableBuckets[0]
+    const initialTarget = `${initialBucket.backendId}:`
     setPreviewItem(null)
     setSaveItem(item)
-    setSaveTarget(saveOptions[0]?.id ?? "")
+    setSaveTarget(initialTarget)
+    void Promise.all([
+      loadDirectory(initialBucket.rootNodeId, initialBucket.id, { reset: true, limit: 200, sort: "name-asc" }),
+      loadDirectoryFolders(initialBucket.rootNodeId, initialBucket.id),
+    ]).catch((reason) => {
+      toast.error(reason instanceof Error ? reason.message : "保存位置加载失败")
+    })
+  }
+
+  const browseSaveFolder = async (targetId: string) => {
+    const [mountText, parentText] = targetId.split(":")
+    const targetBucket = writableBuckets.find((bucket) => bucket.backendId === Number(mountText))
+    if (!targetBucket) return
+    const parentId = parentText || targetBucket.rootNodeId
+    try {
+      await Promise.all([
+        loadDirectory(parentId, targetBucket.id, { reset: true, limit: 200, sort: "name-asc" }),
+        loadDirectoryFolders(parentId, targetBucket.id),
+      ])
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "保存位置加载失败")
+    }
   }
 
   const submitSave = async (value: string) => {
@@ -228,6 +288,15 @@ export function SharedWithMe() {
     : activeOwner
       ? `${activeOwner.name} 共向您提供 ${activeOwner.shareCount} 个分享。`
       : "这里只展示向您共享内容的用户；您自己的分享不会出现在这里。"
+  const previewableItems = items.filter((item) => item.type === "file")
+  const previewIndex = previewItem
+    ? previewableItems.findIndex((item) => item.id === previewItem.id)
+    : -1
+  const openAdjacentPreview = (offset: number) => {
+    if (previewIndex < 0 || previewableItems.length < 2) return
+    const nextIndex = (previewIndex + offset + previewableItems.length) % previewableItems.length
+    setPreviewItem(previewableItems[nextIndex])
+  }
 
   return (
     <PageShell
@@ -287,26 +356,35 @@ export function SharedWithMe() {
         />
       )}
 
-      <SharedPreviewDialog
-        key={previewItem?.id ?? "shared-preview-closed"}
-        mount={selectedMount}
+      <SharedFilePreviewModal
+        key={selectedMount && previewItem ? `${selectedMount.id}:${previewItem.id}` : "shared-preview-closed"}
+        source={selectedMount ? { type: "mounted", mount: selectedMount } : null}
         item={previewItem}
         formatBytes={formatBytes}
+        currentIndex={Math.max(0, previewIndex)}
+        totalCount={previewableItems.length || 1}
         onClose={() => setPreviewItem(null)}
         onDownload={(item) => void downloadItem(item)}
         onSave={beginSave}
+        onPrev={() => openAdjacentPreview(-1)}
+        onNext={() => openAdjacentPreview(1)}
       />
 
       <MoveDialog
         open={Boolean(saveItem)}
-        folders={saveOptions}
+        folders={saveFolders}
+        items={saveBrowserItems}
+        roots={saveRoots}
         value={saveTarget}
         onValueChange={setSaveTarget}
+        onBrowseFolder={browseSaveFolder}
         onCancel={() => setSaveItem(null)}
         onSubmit={(value) => void submitSave(value)}
         title="转存到我的文件"
         description="选择要保存到的存储桶或其中的文件夹。系统会复制内容，不会修改原分享。"
         submitLabel="转存"
+        destinationLabel="保存至"
+        emptyDescription="可以将共享内容转存到这里"
       />
 
       <TransferManager

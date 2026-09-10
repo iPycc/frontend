@@ -155,6 +155,42 @@ export type PreviewManifest = {
   error?: string | null
 }
 
+export type PdfAnnotationKind = "highlight" | "pen" | "text" | "rectangle"
+
+export type PdfAnnotation = {
+  id: string
+  page: number
+  kind: PdfAnnotationKind
+  color: string
+  x: number
+  y: number
+  width: number
+  height: number
+  points: [number, number][]
+  text?: string | null
+  rotation: number
+}
+
+export type PdfAnnotationDocument = {
+  source_version: string
+  revision: number
+  annotations: PdfAnnotation[]
+  stale: boolean
+}
+
+export type ArchiveEntryData = {
+  name: string
+  size: number
+  compressed_size: number
+  directory: boolean
+}
+
+export type ArchiveEntryPage = {
+  items: ArchiveEntryData[]
+  total: number
+  has_more: boolean
+}
+
 export type OfficeCardPreviewData = {
   kind: "document" | "spreadsheet" | "presentation" | "unsupported"
   lines: string[]
