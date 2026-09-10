@@ -8,7 +8,10 @@ import { GitHubOAuthComplete } from "./pages/auth/GitHubOAuthComplete"
 import { GoogleOAuthComplete } from "./pages/auth/GoogleOAuthComplete"
 import { QQOAuthComplete } from "./pages/auth/QQOAuthComplete"
 import { AppStateProvider } from "./state/app"
+import { attachGlobalRipple } from "./lib/ripple"
 import "./index.css"
+
+attachGlobalRipple()
 
 function isGitHubOAuthReturn() {
   const { pathname, search } = window.location

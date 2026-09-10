@@ -125,7 +125,7 @@ export function SidebarLayout() {
         <BucketSwitcher />
       </SidebarHeader>
 
-      <SidebarContent className="custom-scrollbar px-4">
+      <SidebarContent className="custom-scrollbar sidebar-hover-scrollbar px-4">
         <div className="flex flex-col gap-5 pt-3">
           <section aria-label="文件">
             <h2 className="px-8 pb-2 text-xs font-medium text-muted-foreground">文件</h2>
@@ -172,14 +172,14 @@ export function SidebarLayout() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                   className="mt-1 overflow-hidden"
                 >
-                  <div id="sidebar-folder-tree" role="region" aria-label="文件夹目录" tabIndex={0} className="custom-scrollbar max-h-[30dvh] overflow-y-auto overscroll-contain">
-                  <SidebarFolderTree
-                    items={rootFolders}
-                    level={1}
-                    followTree={settings.showSidebarTree}
-                    onExpand={handleExpandFolder}
-                    getLoadState={(folderId) => getFolderTreePageState(folderId, activeBucket.id)}
-                  />
+                  <div id="sidebar-folder-tree" role="region" aria-label="文件夹目录">
+                    <SidebarFolderTree
+                      items={rootFolders}
+                      level={1}
+                      followTree={settings.showSidebarTree}
+                      onExpand={handleExpandFolder}
+                      getLoadState={(folderId) => getFolderTreePageState(folderId, activeBucket.id)}
+                    />
                   </div>
                 </motion.div>
               ) : null}

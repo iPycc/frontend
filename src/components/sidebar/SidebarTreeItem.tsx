@@ -17,8 +17,9 @@ export function SidebarTreeItem({
 }) {
   return (
     <div
+      data-ripple
       className={cn(
-        "flex h-9 items-center rounded-full pr-3 text-sm transition-colors",
+        "relative flex h-9 items-center overflow-hidden rounded-full pr-3 text-sm transition-colors",
         active
           ? "font-medium bg-nav-active-bg text-nav-active-fg hover:bg-nav-active-bg hover:text-nav-active-fg"
           : "text-foreground hover:bg-nav-hover-bg hover:text-foreground",

@@ -128,8 +128,9 @@ export function FileCard({
           <div
             data-file-card
             data-file-card-id={item.id}
+            data-ripple
             className={cn(
-              "group flex h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition-colors",
+              "group relative flex h-12 w-full items-center gap-3 overflow-hidden rounded-xl border px-3.5 text-left transition-colors",
               selected
                 ? "border-primary bg-primary/[0.06] ring-1 ring-primary/20 dark:bg-primary/10"
                 : "border-border bg-card hover:bg-muted/50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
@@ -158,10 +159,6 @@ export function FileCard({
             </button>
             <button
               type="button"
-              onClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onSelectNode(item.id, event)
-              }}
               onDoubleClick={(event: MouseEvent) => {
                 event.stopPropagation()
                 onOpenNode(item)
@@ -204,6 +201,7 @@ export function FileCard({
           ref={previewHostRef}
           data-file-card
           data-file-card-id={item.id}
+          data-ripple
           className={cn(
             "group relative flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
             selected
@@ -213,10 +211,6 @@ export function FileCard({
         >
           <button
             type="button"
-            onClick={(event: MouseEvent) => {
-              event.stopPropagation()
-              onSelectNode(item.id, event)
-            }}
             onDoubleClick={(event: MouseEvent) => {
               event.stopPropagation()
               onOpenNode(item)
@@ -306,7 +300,7 @@ export function FileCard({
               <span className={cn("transition-opacity", selected ? "opacity-0" : "opacity-100 group-hover:opacity-0")}><FileGlyph item={item} /></span>
               <span className={cn(
                 "absolute inset-0 m-auto flex size-5 items-center justify-center rounded-full border-2 transition-opacity",
-                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 text-transparent opacity-0 group-hover:opacity-100"
+                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 bg-background text-transparent opacity-0 group-hover:opacity-100"
               )}>
                 <IconCheck size={12} stroke={2.5} />
               </span>
@@ -316,10 +310,6 @@ export function FileCard({
             ) : (
               <button
                 type="button"
-                onClick={(event: MouseEvent) => {
-                  event.stopPropagation()
-                  onSelectNode(item.id, event)
-                }}
                 onDoubleClick={(event: MouseEvent) => {
                   event.stopPropagation()
                   onOpenNode(item)

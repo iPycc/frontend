@@ -50,7 +50,7 @@ export function FileList({
     <Table className="table-fixed">
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="w-14 text-center">图标</TableHead>
+          <TableHead className="w-14 text-center" aria-label="图标" />
           <TableHead>名称</TableHead>
           <TableHead className="w-36">类型</TableHead>
         </TableRow>
@@ -95,7 +95,9 @@ export function FileList({
                     data-file-card-id={item.id}
                     className={cn(
                       "group",
-                      selected && "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/[0.08] dark:bg-primary/10"
+                      selected
+                        ? "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/[0.08] active:bg-primary/[0.14] dark:bg-primary/10 dark:active:bg-primary/20"
+                        : "active:bg-muted/70 dark:active:bg-white/10"
                     )}
                   >
                     <TableCell className="w-14 px-3 py-2.5 text-center">
@@ -124,10 +126,6 @@ export function FileList({
                     <TableCell className="min-w-0 py-2.5">
                       <button
                         type="button"
-                        onClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onSelectNode(item.id, event)
-                        }}
                         onDoubleClick={(event: MouseEvent) => {
                           event.stopPropagation()
                           onOpenNode(item)
@@ -140,10 +138,6 @@ export function FileList({
                     <TableCell className="w-36 py-2.5">
                       <button
                         type="button"
-                        onClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onSelectNode(item.id, event)
-                        }}
                         onDoubleClick={(event: MouseEvent) => {
                           event.stopPropagation()
                           onOpenNode(item)
