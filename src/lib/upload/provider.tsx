@@ -43,7 +43,7 @@ export type UploadStateValue = {
 const UploadStateContext = React.createContext<UploadStateValue | null>(null)
 
 function nowString() {
-  return new Date().toLocaleString("zh-CN", { hour12: false }).replace(/\//g, "-")
+  return new Date().toISOString()
 }
 
 export interface UploadProviderProps {

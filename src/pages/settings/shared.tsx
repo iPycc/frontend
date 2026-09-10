@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ThemeMode } from "@/lib/models"
+import { formatTimeZoneOffset, getSystemTimeZone } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
 export type SettingsTabId =
@@ -82,20 +83,44 @@ export const languageOptions = [
   { label: "日本語", value: "ja-JP" },
 ]
 
-export const timezoneOptions = [
-  { label: "北京时间 (UTC+8)", value: "Asia/Shanghai" },
-  { label: "东京时间 (UTC+9)", value: "Asia/Tokyo" },
-  { label: "首尔时间 (UTC+9)", value: "Asia/Seoul" },
-  { label: "新加坡时间 (UTC+8)", value: "Asia/Singapore" },
-  { label: "香港时间 (UTC+8)", value: "Asia/Hong_Kong" },
-  { label: "台北时间 (UTC+8)", value: "Asia/Taipei" },
-  { label: "柏林时间 (UTC+1)", value: "Europe/Berlin" },
-  { label: "伦敦时间 (UTC+0)", value: "Europe/London" },
-  { label: "纽约时间 (UTC-5)", value: "America/New_York" },
-  { label: "洛杉矶时间 (UTC-8)", value: "America/Los_Angeles" },
-  { label: "悉尼时间 (UTC+11)", value: "Australia/Sydney" },
-  { label: "UTC", value: "UTC" },
+const namedTimezones = [
+  { name: "北京时间", value: "Asia/Shanghai" },
+  { name: "东京时间", value: "Asia/Tokyo" },
+  { name: "首尔时间", value: "Asia/Seoul" },
+  { name: "新加坡时间", value: "Asia/Singapore" },
+  { name: "香港时间", value: "Asia/Hong_Kong" },
+  { name: "台北时间", value: "Asia/Taipei" },
+  { name: "柏林时间", value: "Europe/Berlin" },
+  { name: "伦敦时间", value: "Europe/London" },
+  { name: "纽约时间", value: "America/New_York" },
+  { name: "洛杉矶时间", value: "America/Los_Angeles" },
+  { name: "悉尼时间", value: "Australia/Sydney" },
+  { name: "协调世界时", value: "UTC" },
 ]
+
+const systemTimezone = getSystemTimeZone()
+const configuredTimezones = namedTimezones.map((item) => ({
+  label: `${item.name} (${formatTimeZoneOffset(item.value)})`,
+  value: item.value,
+}))
+
+export const timezoneOptions = configuredTimezones.some((item) => item.value === systemTimezone)
+  ? configuredTimezones
+  : [
+      {
+        label: `系统时区 · ${systemTimezone} (${formatTimeZoneOffset(systemTimezone)})`,
+        value: systemTimezone,
+      },
+      ...configuredTimezones,
+    ]
+
+export function timezoneOptionsFor(value: string) {
+  if (!value || timezoneOptions.some((item) => item.value === value)) return timezoneOptions
+  return [
+    { label: `${value} (${formatTimeZoneOffset(value)})`, value },
+    ...timezoneOptions,
+  ]
+}
 
 export const themeOptions: Array<{ label: string; value: ThemeMode }> = [
   { label: "浅色", value: "light" },

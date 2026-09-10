@@ -19,6 +19,8 @@ import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { formatDateTime } from "@/lib/datetime"
+import { useSettingsState } from "@/state/app"
 import { usePropertiesPanel } from "./PropertiesPanelContext"
 
 /* ------------------------------------------------------------------ */
@@ -215,6 +217,7 @@ function DetailsTab({
   previewMetadata?: Record<string, unknown>
   dark: boolean
 }) {
+  const { settings } = useSettingsState()
   const isImage = node.mediaType === "image"
   const isVideo = node.mediaType === "video"
   const isAudio = node.mediaType === "audio"
@@ -271,7 +274,7 @@ function DetailsTab({
       {hasMediaMetadata ? (
         <div className="space-y-3 md:space-y-4">
           <h3 className={cn("text-sm font-medium mb-1.5 md:text-base md:mb-2", fg)}>媒体信息</h3>
-          {!isAudio ? <InfoRow icon={<IconClock size={16} />} label="拍摄时间" value={node.updatedAt} dark={dark} /> : null}
+          {!isAudio ? <InfoRow icon={<IconClock size={16} />} label="拍摄时间" value={formatDateTime(node.updatedAt, settings.timezone)} dark={dark} /> : null}
           {audioTitle ? <InfoRow icon={<IconFile size={16} />} label="标题" value={audioTitle} dark={dark} /> : null}
           {audioArtist ? <InfoRow icon={<IconFile size={16} />} label="歌手" value={audioArtist} dark={dark} /> : null}
           {audioAlbum ? <InfoRow icon={<IconFile size={16} />} label="专辑" value={audioAlbum} dark={dark} /> : null}
@@ -318,8 +321,8 @@ function DetailsTab({
             我的文件
           </div>
         </div>
-        <Field label="创建于" value={node.updatedAt} dark={dark} />
-        <Field label="修改于" value={node.updatedAt} dark={dark} />
+        <Field label="创建于" value={formatDateTime(node.createdAt, settings.timezone)} dark={dark} />
+        <Field label="修改于" value={formatDateTime(node.updatedAt, settings.timezone)} dark={dark} />
         <Field label="大小" value={formatBytes(node.size)} dark={dark} />
         <Field label="占用空间" value={formatBytes(node.size)} dark={dark} />
         <div>
@@ -439,6 +442,7 @@ const activityLabels: Record<string, string> = {
 }
 
 function ActivityTab({ node, dark }: { node: FileNode | null; dark: boolean }) {
+  const { settings } = useSettingsState()
   const [items, setItems] = React.useState<NodeActivity[]>([])
   const [loading, setLoading] = React.useState(Boolean(node?.backendId))
 
@@ -483,7 +487,7 @@ function ActivityTab({ node, dark }: { node: FileNode | null; dark: boolean }) {
               <span className={dark ? "text-white/55" : "text-muted-foreground"}>{activityLabels[item.action] ?? item.action}</span>
             </p>
             <p className={cn("mt-0.5 text-xs", dark ? "text-white/35" : "text-muted-foreground")}>
-              {new Date(item.created_at).toLocaleString("zh-CN")}
+              {formatDateTime(item.created_at, settings.timezone)}
             </p>
           </div>
         </div>

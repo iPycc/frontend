@@ -21,7 +21,6 @@ import { useShareActions } from "@/state/act/share"
 import {
   directoryPageKey,
   extractExtension,
-  formatDateTime,
   mapNodeToFileNode,
   removeCachedSubtrees,
   type PageLoadState,
@@ -305,7 +304,7 @@ export function useActions({
         nodes: current.nodes.filter((node) => !idsToRemove.has(node.id)),
       }))
     } else {
-      const deletedAt = formatDateTime(new Date().toISOString(), snapshotRef.current.settings.timezone)
+      const deletedAt = new Date().toISOString()
       updateSnapshot((current) => ({
         ...current,
         nodes: current.nodes.map((node) =>

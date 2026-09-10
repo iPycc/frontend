@@ -22,12 +22,13 @@ import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
+import { formatDateTime, toDateTimeLocalValue, zonedDateTimeToIso } from "@/lib/datetime"
 
 const MIB = 1024 * 1024
 
 export function Guests() {
   usePageTitle("访客管理")
-  const { authSession, formatBytes } = useAppState()
+  const { authSession, formatBytes, settings } = useAppState()
   const token = authSession?.tokens.accessToken ?? ""
   const [guests, setGuests] = React.useState<GuestAccount[]>([])
   const [mounts, setMounts] = React.useState<BucketMount[]>([])
@@ -112,7 +113,7 @@ export function Guests() {
                   <div className="text-sm">{formatBytes(guest.used_bytes + guest.reserved_bytes)} / {formatBytes(guest.quota_bytes)}</div>
                   {guest.reserved_bytes ? <div className="text-xs text-muted-foreground">含进行中上传 {formatBytes(guest.reserved_bytes)}</div> : null}
                 </TableCell>
-                <TableCell>{guest.expires_at ? new Date(guest.expires_at).toLocaleString("zh-CN", { hour12: false }) : "长期有效"}</TableCell>
+                <TableCell>{guest.expires_at ? formatDateTime(guest.expires_at, settings.timezone) : "长期有效"}</TableCell>
                 <TableCell className="max-w-56 truncate font-mono text-xs" title={guest.workspace_prefix}>{guest.workspace_prefix}</TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
@@ -164,7 +165,7 @@ export function Guests() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <dt className="text-xs text-muted-foreground">有效期</dt>
-                  <dd>{guest.expires_at ? new Date(guest.expires_at).toLocaleString("zh-CN", { hour12: false }) : "长期有效"}</dd>
+                  <dd>{guest.expires_at ? formatDateTime(guest.expires_at, settings.timezone) : "长期有效"}</dd>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
                   <dt className="text-xs text-muted-foreground">隔离目录</dt>
@@ -193,6 +194,7 @@ export function Guests() {
       <GuestFormDialog
         open={createOpen}
         mounts={mounts}
+        timezone={settings.timezone}
         onOpenChange={setCreateOpen}
         onSubmit={async (value) => {
           const result = await createGuest(token, value)
@@ -202,6 +204,7 @@ export function Guests() {
       />
       <GuestSettingsDialog
         guest={editing}
+        timezone={settings.timezone}
         onOpenChange={(open) => !open && setEditing(null)}
         onSubmit={async (value) => {
           if (!editing) return
@@ -215,9 +218,10 @@ export function Guests() {
   )
 }
 
-function GuestFormDialog({ open, mounts, onOpenChange, onSubmit }: {
+function GuestFormDialog({ open, mounts, timezone, onOpenChange, onSubmit }: {
   open: boolean
   mounts: BucketMount[]
+  timezone: string
   onOpenChange: (open: boolean) => void
   onSubmit: (value: { source_mount_id: number; quota_bytes: number; expires_at?: string | null }) => Promise<void>
 }) {
@@ -231,10 +235,15 @@ function GuestFormDialog({ open, mounts, onOpenChange, onSubmit }: {
   const submit = async () => {
     setSaving(true)
     try {
+      const expiry = expiresAt ? zonedDateTimeToIso(expiresAt, timezone) : null
+      if (expiresAt && !expiry) {
+        toast.error("到期时间在当前时区中无效，请重新选择。")
+        return
+      }
       await onSubmit({
         source_mount_id: Number(mountId),
         quota_bytes: Math.max(1, Number(quotaMb)) * MIB,
-        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+        expires_at: expiry,
       })
       onOpenChange(false)
     } catch (error) {
@@ -251,7 +260,7 @@ function GuestFormDialog({ open, mounts, onOpenChange, onSubmit }: {
         <FieldGroup>
           <Field><FieldLabel>来源存储挂载</FieldLabel><Select value={mountId} onValueChange={setMountId}><SelectTrigger><SelectValue placeholder="选择挂载" /></SelectTrigger><SelectContent><SelectGroup>{mounts.map((mount) => <SelectItem key={mount.id} value={String(mount.id)}>{mount.name}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>访客数据会自动写入该挂载下的 guest/UID/ 隔离目录。</FieldDescription></Field>
           <Field><FieldLabel htmlFor="guest-quota">空间配额（MB）</FieldLabel><Input id="guest-quota" type="number" min={1} value={quotaMb} onChange={(event) => setQuotaMb(event.target.value)} /><FieldDescription>可输入任意数值，例如 50 MB 或 1024 MB。</FieldDescription></Field>
-          <Field><FieldLabel htmlFor="guest-expiry">到期时间（可选）</FieldLabel><Input id="guest-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></Field>
+          <Field><FieldLabel htmlFor="guest-expiry">到期时间（可选）</FieldLabel><Input id="guest-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /><FieldDescription>按当前偏好时区 {timezone} 解释。</FieldDescription></Field>
         </FieldGroup>
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button><Button disabled={saving || !mountId || Number(quotaMb) < 1} onClick={() => void submit()}>{saving ? "创建中…" : "创建账号"}</Button></DialogFooter>
       </DialogContent>
@@ -259,8 +268,9 @@ function GuestFormDialog({ open, mounts, onOpenChange, onSubmit }: {
   )
 }
 
-function GuestSettingsDialog({ guest, onOpenChange, onSubmit }: {
+function GuestSettingsDialog({ guest, timezone, onOpenChange, onSubmit }: {
   guest: GuestAccount | null
+  timezone: string
   onOpenChange: (open: boolean) => void
   onSubmit: (value: { quota_bytes: number; expires_at?: string | null; clear_expiry?: boolean }) => Promise<void>
 }) {
@@ -270,20 +280,25 @@ function GuestSettingsDialog({ guest, onOpenChange, onSubmit }: {
   React.useEffect(() => {
     if (!guest) return
     setQuotaMb(String(Math.ceil(guest.quota_bytes / MIB)))
-    setExpiresAt(guest.expires_at ? new Date(guest.expires_at).toISOString().slice(0, 16) : "")
-  }, [guest])
+    setExpiresAt(guest.expires_at ? toDateTimeLocalValue(guest.expires_at, timezone) : "")
+  }, [guest, timezone])
 
   const submit = async () => {
     setSaving(true)
     try {
-      await onSubmit({ quota_bytes: Math.max(1, Number(quotaMb)) * MIB, ...(expiresAt ? { expires_at: new Date(expiresAt).toISOString() } : { clear_expiry: true }) })
+      const expiry = expiresAt ? zonedDateTimeToIso(expiresAt, timezone) : null
+      if (expiresAt && !expiry) {
+        toast.error("到期时间在当前时区中无效，请重新选择。")
+        return
+      }
+      await onSubmit({ quota_bytes: Math.max(1, Number(quotaMb)) * MIB, ...(expiry ? { expires_at: expiry } : { clear_expiry: true }) })
       toast.success("访客设置已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "设置保存失败")
     } finally { setSaving(false) }
   }
 
-  return <Dialog open={Boolean(guest)} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-[28rem]"><DialogHeader><DialogTitle>访客设置</DialogTitle><DialogDescription>调整 {guest?.email} 的空间配额和有效期。</DialogDescription></DialogHeader><FieldGroup><Field><FieldLabel htmlFor="edit-guest-quota">空间配额（MB）</FieldLabel><Input id="edit-guest-quota" type="number" min={1} value={quotaMb} onChange={(event) => setQuotaMb(event.target.value)} /></Field><Field><FieldLabel htmlFor="edit-guest-expiry">到期时间</FieldLabel><Input id="edit-guest-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /><FieldDescription>留空表示长期有效。</FieldDescription></Field></FieldGroup><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button><Button disabled={saving || Number(quotaMb) < 1} onClick={() => void submit()}>{saving ? "保存中…" : "保存"}</Button></DialogFooter></DialogContent></Dialog>
+  return <Dialog open={Boolean(guest)} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-[28rem]"><DialogHeader><DialogTitle>访客设置</DialogTitle><DialogDescription>调整 {guest?.email} 的空间配额和有效期。</DialogDescription></DialogHeader><FieldGroup><Field><FieldLabel htmlFor="edit-guest-quota">空间配额（MB）</FieldLabel><Input id="edit-guest-quota" type="number" min={1} value={quotaMb} onChange={(event) => setQuotaMb(event.target.value)} /></Field><Field><FieldLabel htmlFor="edit-guest-expiry">到期时间</FieldLabel><Input id="edit-guest-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /><FieldDescription>留空表示长期有效；时间按 {timezone} 解释。</FieldDescription></Field></FieldGroup><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button><Button disabled={saving || Number(quotaMb) < 1} onClick={() => void submit()}>{saving ? "保存中…" : "保存"}</Button></DialogFooter></DialogContent></Dialog>
 }
 
 function CredentialsDialog({ credentials, onOpenChange }: { credentials: GuestCredentials | null; onOpenChange: (open: boolean) => void }) {

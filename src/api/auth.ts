@@ -1,5 +1,6 @@
 import { requestJson } from "./client"
 import type { AppUser, AuthSession, AuthTokens, Capability } from "@/lib/models"
+import { getSystemTimeZone, normalizeDateTime } from "@/lib/datetime"
 
 let refreshRequestInFlight: Promise<AuthTokens> | null = null
 
@@ -12,6 +13,7 @@ export type RegisterRequest = {
   email: string
   password: string
   username: string
+  timezone?: string
 }
 
 export type PasskeyOptionsResponse = {
@@ -137,40 +139,6 @@ export function buildAvatar(seed: string): string {
   return `data:image/svg+xml,${encodeURIComponent(encoded)}`
 }
 
-export function formatDateTimeToSeconds(value: unknown, timezone?: string) {
-  if (typeof value !== "string" || !value.trim()) {
-    return new Date().toLocaleString("zh-CN", { hour12: false, timeZone: timezone || undefined }).replace(/\//g, "-")
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  try {
-    const parts = new Intl.DateTimeFormat("sv-SE", {
-      timeZone: timezone || undefined,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).formatToParts(date)
-    const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ""
-    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`
-  } catch {
-    const year = date.getFullYear()
-    const month = `${date.getMonth() + 1}`.padStart(2, "0")
-    const day = `${date.getDate()}`.padStart(2, "0")
-    const hour = `${date.getHours()}`.padStart(2, "0")
-    const minute = `${date.getMinutes()}`.padStart(2, "0")
-    const second = `${date.getSeconds()}`.padStart(2, "0")
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-  }
-}
-
 export function normalizeUser(raw: Record<string, unknown>): AppUser {
   const email = String(raw.email ?? raw.user_name ?? raw.username ?? "")
   const uid = String(raw.uid ?? raw.user_uid ?? raw.id ?? crypto.randomUUID())
@@ -178,7 +146,7 @@ export function normalizeUser(raw: Record<string, unknown>): AppUser {
   const role = normalizeRole(raw.role ?? raw.user_role ?? raw.group)
   const group = buildGroupLabel(role, raw.group)
   const avatar = String(raw.avatar ?? buildAvatar(username))
-  const registeredAt = formatDateTimeToSeconds(raw.registeredAt ?? raw.registered_at ?? raw.created_at)
+  const registeredAt = normalizeDateTime(String(raw.registeredAt ?? raw.registered_at ?? raw.created_at ?? ""))
   const capabilities = Array.isArray(raw.capabilities)
     ? raw.capabilities.map(String) as Capability[]
     : []
@@ -201,8 +169,8 @@ function normalizeTokens(token: RawTokenPayload): AuthTokens {
 
   return {
     accessToken: token.access_token ?? token.accessToken ?? "",
-    accessExpiresAt,
-    refreshExpiresAt,
+    accessExpiresAt: normalizeDateTime(accessExpiresAt),
+    refreshExpiresAt: normalizeDateTime(refreshExpiresAt),
   }
 }
 
@@ -257,7 +225,7 @@ export async function login(request: LoginRequest): Promise<LoginResult> {
 export async function register(request: RegisterRequest) {
   const response = await requestJson<RawAuthResponse>("/user", {
     method: "POST",
-    body: request,
+    body: { ...request, timezone: request.timezone ?? getSystemTimeZone() },
   })
 
   return normalizeAuthSession(response)

@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { type FileNode } from "@/lib/models"
+import { formatDateTime } from "@/lib/datetime"
+import { useSettingsState } from "@/state/app"
 
 interface PropertiesDialogProps {
   node: FileNode | undefined
@@ -17,6 +19,7 @@ interface PropertiesDialogProps {
 }
 
 export function PropertiesDialog({ node, bucketName, formatBytes, onClose }: PropertiesDialogProps) {
+  const { settings } = useSettingsState()
   return (
     <Dialog open={Boolean(node)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -29,7 +32,7 @@ export function PropertiesDialog({ node, bucketName, formatBytes, onClose }: Pro
             <div>名称：{node.name}</div>
             <div>类型：{node.kind === "folder" ? "文件夹" : node.ext?.toUpperCase() || "文件"}</div>
             <div>大小：{formatBytes(node.size)}</div>
-            <div>更新时间：{node.updatedAt}</div>
+            <div>更新时间：{formatDateTime(node.updatedAt, settings.timezone)}</div>
             <div>Bucket：{bucketName}</div>
           </div>
         ) : null}

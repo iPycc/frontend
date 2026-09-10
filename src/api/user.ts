@@ -1,5 +1,6 @@
-import { buildAvatar, buildGroupLabel, formatDateTimeToSeconds, normalizeRole } from "@/api/auth"
+import { buildAvatar, buildGroupLabel, normalizeRole } from "@/api/auth"
 import { requestJson } from "@/api/client"
+import { getSystemTimeZone, normalizeDateTime } from "@/lib/datetime"
 import type { AppUser, Capability, PasskeyCredential, SecurityState, UserProfile } from "@/lib/models"
 
 type RawUserResponse = {
@@ -92,7 +93,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
   const uid = String(raw.uid ?? raw.id ?? "")
   const username = String(raw.username ?? "Cloudrave User")
   const role = normalizeRole(raw.role)
-  const timezone = typeof raw.timezone === "string" && raw.timezone.trim() ? raw.timezone : "Asia/Shanghai"
+  const timezone = typeof raw.timezone === "string" && raw.timezone.trim() ? raw.timezone : getSystemTimeZone()
   const avatar = typeof raw.avatar === "string" && raw.avatar.trim()
     ? raw.avatar
     : buildAvatar(username)
@@ -105,7 +106,7 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
       avatar,
       role,
       group: buildGroupLabel(role, raw.group),
-      registeredAt: formatDateTimeToSeconds(raw.created_at, timezone),
+      registeredAt: normalizeDateTime(raw.created_at),
       twoFactorEnabled: Boolean(raw.two_factor_enabled),
       capabilities: (raw.capabilities ?? []).map(String) as Capability[],
     },
@@ -114,23 +115,23 @@ function normalizeProfile(raw: RawUserResponse): ProfilePayload {
       avatar,
       email: String(raw.email ?? ""),
       uid,
-      registeredAt: formatDateTimeToSeconds(raw.created_at, timezone),
+      registeredAt: normalizeDateTime(raw.created_at),
       group: buildGroupLabel(role, raw.group),
       homepage: buildHomepage(username),
     },
-    passwordUpdatedAt: formatDateTimeToSeconds(raw.password_updated_at ?? raw.created_at, timezone),
+    passwordUpdatedAt: normalizeDateTime(raw.password_updated_at ?? raw.created_at),
     timezone,
     thumbnailsEnabled: raw.thumbnails_enabled !== false,
     twoFactorEnabled: Boolean(raw.two_factor_enabled),
   }
 }
 
-function normalizePasskey(item: RawPasskeyCredential, timezone?: string): PasskeyCredential {
+function normalizePasskey(item: RawPasskeyCredential): PasskeyCredential {
   return {
     id: String(item.id),
     name: item.name,
-    createdAt: formatDateTimeToSeconds(item.created_at, timezone),
-    lastUsedAt: item.last_used_at ? formatDateTimeToSeconds(item.last_used_at, timezone) : "从未使用",
+    createdAt: normalizeDateTime(item.created_at),
+    lastUsedAt: item.last_used_at ? normalizeDateTime(item.last_used_at) : "从未使用",
   }
 }
 
@@ -196,7 +197,7 @@ export async function updateUserPreferences(token: string, payload: UserPreferen
   }
 }
 
-export async function getLoginActivity(token: string, timezone?: string): Promise<UserLoginActivityEntry[]> {
+export async function getLoginActivity(token: string): Promise<UserLoginActivityEntry[]> {
   const response = await requestJson<RawLoginActivityEntry[]>("/user/me/login-activity", {
     token,
   })
@@ -207,19 +208,19 @@ export async function getLoginActivity(token: string, timezone?: string): Promis
     result: item.result === "failure" ? "失败" : "成功",
     device: item.device,
     ip: item.ip || "-",
-    time: formatDateTimeToSeconds(item.time, timezone),
+    time: normalizeDateTime(item.time),
     identifier: item.identifier,
   }))
 }
 
-export async function listPasskeys(token: string, timezone?: string) {
+export async function listPasskeys(token: string) {
   const response = await requestJson<RawPasskeyListResponse>("/user/me/passkeys", {
     token,
   })
 
   return {
     passkeysEnabled: response.passkeys_enabled,
-    passkeys: response.passkeys.map((item) => normalizePasskey(item, timezone)),
+    passkeys: response.passkeys.map(normalizePasskey),
   }
 }
 
@@ -258,7 +259,7 @@ export async function deletePasskey(token: string, passkeyId: string) {
   })
 }
 
-export async function renamePasskey(token: string, passkeyId: string, name: string, timezone?: string) {
+export async function renamePasskey(token: string, passkeyId: string, name: string) {
   const response = await requestJson<RawPasskeyCredential>(`/user/me/passkeys/${passkeyId}`, {
     method: "PATCH",
     token,
@@ -267,7 +268,7 @@ export async function renamePasskey(token: string, passkeyId: string, name: stri
     },
   })
 
-  return normalizePasskey(response, timezone)
+  return normalizePasskey(response)
 }
 
 export async function getTwoFactorStatus(token: string) {

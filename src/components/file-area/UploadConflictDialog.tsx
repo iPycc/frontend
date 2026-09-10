@@ -3,6 +3,8 @@ import { File, Folder, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { formatDateTime } from "@/lib/datetime"
+import { useSettingsState } from "@/state/app"
 
 export type UploadConflictChoice = "rename" | "replace" | "skip"
 
@@ -23,12 +25,6 @@ function formatBytes(size = 0) {
   return `${(size / 1024 ** 3).toFixed(1)} GB`
 }
 
-function date(value?: string | number) {
-  if (!value) return "未知"
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? "未知" : parsed.toLocaleString("zh-CN")
-}
-
 export function UploadConflictDialog({
   conflict,
   onResolve,
@@ -36,6 +32,7 @@ export function UploadConflictDialog({
   conflict: UploadConflictInfo | null
   onResolve: (choice: UploadConflictChoice) => void
 }) {
+  const { settings } = useSettingsState()
   return (
     <Dialog open={Boolean(conflict)} onOpenChange={(open) => !open && onResolve("skip")}>
       <DialogContent className="sm:max-w-[32rem]">
@@ -76,8 +73,8 @@ export function UploadConflictDialog({
               <Separator />
               <div className="grid grid-cols-[5rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 px-3 py-2.5">
                 <dt className="text-muted-foreground">修改时间</dt>
-                <dd className="min-w-0 break-words text-muted-foreground">{date(conflict.existingModified)}</dd>
-                <dd className="min-w-0 break-words text-muted-foreground">{date(conflict.incomingModified)}</dd>
+                <dd className="min-w-0 break-words text-muted-foreground">{formatDateTime(conflict.existingModified, settings.timezone)}</dd>
+                <dd className="min-w-0 break-words text-muted-foreground">{formatDateTime(conflict.incomingModified, settings.timezone)}</dd>
               </div>
             </dl>
           </div>

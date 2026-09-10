@@ -23,6 +23,7 @@ import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { parseDateTime } from "@/lib/datetime"
 
 type TransferManagerProps = {
   parentId?: string | null
@@ -180,7 +181,7 @@ function formatDuration(seconds: number) {
 
 function formatExpiry(value?: string) {
   if (!value) return "—"
-  const remaining = new Date(value).getTime() - Date.now()
+  const remaining = (parseDateTime(value)?.getTime() ?? Number.NaN) - Date.now()
   if (!Number.isFinite(remaining)) return "—"
   if (remaining <= 0) return "已过期"
   const minutes = Math.ceil(remaining / 60_000)

@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react"
 import { toast } from "sonner"
+import { formatDateTime } from "@/lib/datetime"
 
 import {
   beginPasskeyRegistration,
@@ -411,7 +412,7 @@ export function SecuritySettingsPage() {
 
     setIsLoadingActivity(true)
     try {
-      const activity = await getLoginActivity(token, settings.timezone)
+      const activity = await getLoginActivity(token)
       setLoginActivity(activity)
     } catch (error) {
       console.error("加载登录活动失败:", error)
@@ -443,7 +444,7 @@ export function SecuritySettingsPage() {
 
     setIsLoadingPasskeys(true)
     try {
-      const response = await listPasskeys(token, settings.timezone)
+      const response = await listPasskeys(token)
       updateSecurity({
         passkeysEnabled: response.passkeysEnabled,
         passkeys: response.passkeys,
@@ -588,7 +589,7 @@ export function SecuritySettingsPage() {
 
     setSavingPasskeyId(passkeyId)
     try {
-      const updated = await renamePasskey(token, passkeyId, nextName, settings.timezone)
+      const updated = await renamePasskey(token, passkeyId, nextName)
       updateSecurity({
         passkeys: security.passkeys.map((item) => (item.id === passkeyId ? updated : item)),
       })
@@ -1071,10 +1072,10 @@ export function SecuritySettingsPage() {
                       </button>
                     )}
                     <div className="mt-1 text-sm text-muted-foreground">
-                      创建于 {item.createdAt}
+                      创建于 {formatDateTime(item.createdAt, settings.timezone)}
                     </div>
                     <div className="text-sm text-green-600 dark:text-green-400">
-                      上次使用于 {item.lastUsedAt}
+                      上次使用于 {item.lastUsedAt === "从未使用" ? item.lastUsedAt : formatDateTime(item.lastUsedAt, settings.timezone)}
                     </div>
                   </div>
                 </div>
@@ -1623,7 +1624,7 @@ export function SecuritySettingsPage() {
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <span className="text-muted-foreground">时间</span>
-                  <span className="max-w-[60%] text-right">{item.time}</span>
+                  <span className="max-w-[60%] text-right">{formatDateTime(item.time, settings.timezone)}</span>
                 </div>
                 {"identifier" in item && item.identifier ? (
                   <div className="flex items-start justify-between gap-3">
@@ -1657,7 +1658,7 @@ export function SecuritySettingsPage() {
                   </TableCell>
                   <TableCell className="max-w-[320px] break-all">{item.device}</TableCell>
                   <TableCell>{item.ip}</TableCell>
-                  <TableCell>{item.time}</TableCell>
+                  <TableCell>{formatDateTime(item.time, settings.timezone)}</TableCell>
                   <TableCell className="break-all">{item.identifier}</TableCell>
                 </TableRow>
               ))}

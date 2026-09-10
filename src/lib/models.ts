@@ -1,3 +1,5 @@
+import { getSystemTimeZone } from "@/lib/datetime"
+
 export type ThemeMode = "light" | "dark" | "system"
 export type SortValue = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "size-desc"
 export type ViewMode = "grid" | "list" | "gallery"
@@ -247,7 +249,7 @@ export interface AppSnapshot {
 
 export const defaultSettings: UserSettings = {
   language: "zh-CN",
-  timezone: "Asia/Shanghai",
+  timezone: getSystemTimeZone(),
   themeMode: "system",
   accentTheme: "Blue",
   showSidebarTree: true,

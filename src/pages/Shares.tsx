@@ -21,13 +21,14 @@ import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
+import { formatDate, parseDateTime } from "@/lib/datetime"
 
 type SortOption = "newest" | "oldest" | "views"
 
-function formatRelativeTime(value?: string) {
+function formatRelativeTime(value: string | undefined, timezone: string) {
   if (!value) return "-"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  const date = parseDateTime(value)
+  if (!date) return value
   const now = Date.now()
   const diff = now - date.getTime()
   const minutes = Math.floor(diff / (1000 * 60))
@@ -37,13 +38,13 @@ function formatRelativeTime(value?: string) {
   if (hours < 24) return `${hours} 小时前`
   const days = Math.floor(hours / 24)
   if (days < 30) return `${days} 天前`
-  return date.toLocaleDateString("zh-CN")
+  return formatDate(date, timezone)
 }
 
 export function Shares() {
   usePageTitle("我的分享")
   const navigate = useNavigate()
-  const { getShareRecords, deleteShares, loadShares, sharesLoading, isAuthenticated } = useAppState()
+  const { getShareRecords, deleteShares, loadShares, sharesLoading, isAuthenticated, settings } = useAppState()
   const shares = getShareRecords()
   const [sortBy, setSortBy] = useState<SortOption>("newest")
   const [sortOpen, setSortOpen] = useState(false)
@@ -75,10 +76,10 @@ export function Shares() {
 
   const sortedShares = [...shares].sort((a, b) => {
     if (sortBy === "newest") {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      return (parseDateTime(b.createdAt)?.getTime() ?? 0) - (parseDateTime(a.createdAt)?.getTime() ?? 0)
     }
     if (sortBy === "oldest") {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      return (parseDateTime(a.createdAt)?.getTime() ?? 0) - (parseDateTime(b.createdAt)?.getTime() ?? 0)
     }
     return (b.views || 0) - (a.views || 0)
   })
@@ -221,7 +222,8 @@ export function Shares() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sortedShares.map((item, index) => {
             const node = item.node
-            const expired = item.expiresAt ? new Date(item.expiresAt) <= new Date() : false
+            const expiry = parseDateTime(item.expiresAt)
+            const expired = expiry ? expiry.getTime() <= Date.now() : false
             return (
               <motion.div
                 key={item.id}
@@ -243,7 +245,7 @@ export function Shares() {
                     {node?.name || "已删除文件"}
                   </h3>
                   <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                    {formatRelativeTime(item.createdAt)}
+                    {formatRelativeTime(item.createdAt, settings.timezone)}
                     {item.maxDownloads ? ` · ${item.downloads || 0}/${item.maxDownloads} 次` : ""}
                   </p>
                 </div>

@@ -11,6 +11,7 @@ import {
 } from "@/api/files"
 import { ShareAccess, type ShareRead } from "@/api/share"
 import { getCurrentProfile } from "@/api/user"
+import { normalizeDateTime } from "@/lib/datetime"
 import {
   defaultAppSnapshot,
   defaultSecurity,
@@ -386,43 +387,7 @@ function resolveMountStorageRoot(mount: ExplorerMount, storageType: ReturnType<t
   return ""
 }
 
-export function formatDateTime(value?: string | null, timezone?: string) {
-  if (!value) {
-    return ""
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  try {
-    const parts = new Intl.DateTimeFormat("sv-SE", {
-      timeZone: timezone || undefined,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).formatToParts(date)
-
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
-    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`
-  } catch {
-    // Fallback to local time if timezone is invalid
-    const year = date.getFullYear()
-    const month = `${date.getMonth() + 1}`.padStart(2, "0")
-    const day = `${date.getDate()}`.padStart(2, "0")
-    const hour = `${date.getHours()}`.padStart(2, "0")
-    const minute = `${date.getMinutes()}`.padStart(2, "0")
-    const second = `${date.getSeconds()}`.padStart(2, "0")
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-  }
-}
-
-export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?: string): BucketMount {
+export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, _timezone?: string): BucketMount {
   const storageType = normalizeStorageType(mount)
   const extra = mount.extra ?? {}
   const provider = String(mount.provider_label ?? extra.provider_label ?? (storageType === "local" ? "Local Storage" : "Tencent COS"))
@@ -459,12 +424,12 @@ export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, tim
     legacyPrefixedKeys: mount.legacy_prefixed_keys ?? Boolean(extra.legacy_prefixed_keys),
     objectKeyStyle: extra.object_key_style === "opaque" ? "opaque" : "readable",
     syncStatus: mount.sync_status ?? "idle",
-    lastSyncAt: formatDateTime(mount.last_sync_at, timezone) || undefined,
+    lastSyncAt: normalizeDateTime(mount.last_sync_at) || undefined,
     syncError: mount.sync_error ?? undefined,
     syncedObjects: mount.synced_objects ?? Number(extra.synced_objects ?? 0),
     mountSlug: mount.mount_slug,
-    createdAt: formatDateTime(mount.created_at, timezone),
-    updatedAt: formatDateTime(mount.updated_at, timezone),
+    createdAt: normalizeDateTime(mount.created_at),
+    updatedAt: normalizeDateTime(mount.updated_at),
     corsStatus: extra.cors_status === "warning" ? "warning" : "healthy",
     corsMessage: storageRoot ? `已绑定目录：${storageRoot}` : "已连接真实存储",
     advancedMode: Boolean(extra.advanced_mode),
@@ -484,7 +449,7 @@ export function extractExtension(name: string) {
   return name.slice(index + 1).toLowerCase()
 }
 
-export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, timezone?: string): FileNode {
+export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, _timezone?: string): FileNode {
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
   let preview: string | undefined
   if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
@@ -505,11 +470,11 @@ export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId
     name: node.name,
     ext: node.type === "file" ? extractExtension(node.name) : undefined,
     size: node.size,
-    updatedAt: formatDateTime(node.updated_at, timezone),
-    createdAt: formatDateTime(node.created_at, timezone),
+    updatedAt: normalizeDateTime(node.updated_at),
+    createdAt: normalizeDateTime(node.created_at),
     mediaType,
     preview,
-    deletedAt: formatDateTime(node.deleted_at, timezone),
+    deletedAt: normalizeDateTime(node.deleted_at),
     blobPath: node.blob_path,
   }
 }
@@ -523,8 +488,8 @@ export function mapShareRead(share: ShareRead): ShareRecord {
     id: share.id,
     nodeId: String(share.node_id),
     access: share.access === ShareAccess.PASSWORD ? "密码访问" : "公开访问",
-    expiresAt: share.expires_at ?? "",
-    createdAt: share.created_at,
+    expiresAt: normalizeDateTime(share.expires_at),
+    createdAt: normalizeDateTime(share.created_at),
     views: share.view_count,
     downloads: share.download_count,
     maxDownloads: share.max_downloads,

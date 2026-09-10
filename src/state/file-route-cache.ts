@@ -14,7 +14,7 @@ import {
 } from "@/state/core"
 
 const FILE_ROUTE_CACHE_KEY = "cloudrave.file-route-cache.v1"
-const FILE_ROUTE_CACHE_VERSION = 1
+const FILE_ROUTE_CACHE_VERSION = 2
 const FILE_ROUTE_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000
 const FILE_ROUTE_CATEGORIES = new Set<NodeCategory>(["image", "video", "audio", "document"])
 

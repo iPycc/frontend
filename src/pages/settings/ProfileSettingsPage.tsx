@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { useAppState } from "@/state/app"
+import { formatDateTime } from "@/lib/datetime"
 
 type CropImageSize = {
   width: number
@@ -92,7 +93,7 @@ async function canvasToFile(canvas: HTMLCanvasElement, filename: string) {
 }
 
 export function ProfileSettingsPage() {
-  const { authSession, profile, updateProfile, updateSecurity } = useAppState()
+  const { authSession, profile, settings, updateProfile, updateSecurity } = useAppState()
   const token = authSession?.tokens.accessToken ?? null
 
   const [email, setEmail] = React.useState(profile.email)
@@ -483,7 +484,7 @@ export function ProfileSettingsPage() {
 
           <div className="grid gap-x-10 gap-y-7 sm:grid-cols-2">
             <MetaItem label="UID" value={profile.uid} />
-            <MetaItem label="注册时间" value={profile.registeredAt} />
+            <MetaItem label="注册时间" value={formatDateTime(profile.registeredAt, settings.timezone)} />
             <MetaItem label="用户组" value={profile.group} />
             <MetaItem label="个人主页" value={profile.homepage} />
           </div>
