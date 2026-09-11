@@ -21,6 +21,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Logo } from "@/components/ui/logo"
 import {
   Sidebar,
@@ -35,7 +36,7 @@ import { SidebarFolderTree, buildTree } from "./SidebarFolderTree"
 import { SidebarNavItem } from "./SidebarNavItem"
 import { SidebarQuota } from "./SidebarQuota"
 import { SidebarFooterContent } from "@/components/shared/SidebarFooterContent"
-import { groupSharedOwners, listShared, type SharedMount } from "@/api/shared"
+import { useSharedOwners } from "@/hooks/use-shared-owners"
 
 const utilityPaths = [
   "/app/shared-with-me",
@@ -56,27 +57,15 @@ export function SidebarLayout() {
     settings,
     loadDirectoryFolders,
     getFolderTreePageState,
+    currentUser,
   } = useAppState()
+  const isGuest = currentUser?.role === "guest"
   const { open, toggleSidebar } = useSidebar()
   const location = useLocation()
   const [isTreeOpen, setIsTreeOpen] = useState(false)
-  const [sharedMounts, setSharedMounts] = useState<SharedMount[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    void listShared()
-      .then((items) => {
-        if (!cancelled) setSharedMounts(items)
-      })
-      .catch(() => {
-        if (!cancelled) setSharedMounts([])
-      })
-    return () => { cancelled = true }
-  }, [location.pathname])
-
-  const sharedOwners = useMemo(() => {
-    return groupSharedOwners(sharedMounts)
-  }, [sharedMounts])
+  const [sharedOwnersOpen, setSharedOwnersOpen] = useState(true)
+  const { owners: sharedOwners, loading: sharedOwnersLoading, error: sharedOwnersError, retry: retrySharedOwners } =
+    useSharedOwners(!isGuest && currentUser ? currentUser.id : null)
 
   const rootFolders = useMemo(
     () => buildTree(getFoldersForBucket, activeBucket.rootNodeId),
@@ -136,9 +125,10 @@ export function SidebarLayout() {
         <BucketSwitcher />
       </SidebarHeader>
 
-      <SidebarContent className="custom-scrollbar px-4">
-        <div className="space-y-6 pt-3">
-          <div>
+      <SidebarContent className="custom-scrollbar sidebar-hover-scrollbar px-4">
+        <div className="flex flex-col gap-5 pt-3">
+          <section aria-label="文件">
+            <h2 className="px-8 pb-2 text-xs font-medium text-muted-foreground">文件</h2>
             <div
               className={cn(
                 "flex h-9 items-center rounded-full pr-3 text-sm transition-colors",
@@ -152,6 +142,8 @@ export function SidebarLayout() {
                 onClick={() => setIsTreeOpen((current) => !current)}
                 className="flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors"
                 aria-label={isTreeOpen ? "收起目录树" : "展开目录树"}
+                aria-expanded={isTreeOpen}
+                aria-controls="sidebar-folder-tree"
               >
                 {isTreeOpen ? (
                   <IconChevronDown size={12} />
@@ -160,7 +152,13 @@ export function SidebarLayout() {
                 )}
               </button>
               <NavLink to="/app" className="flex min-w-0 flex-1 items-center gap-3">
-                <IconHome size={17} className="shrink-0 text-muted-foreground" />
+                <IconHome
+                  size={17}
+                  className={cn(
+                    "shrink-0",
+                    isMyFilesActive ? "text-nav-active-fg" : "text-muted-foreground"
+                  )}
+                />
                 <span>我的文件</span>
               </NavLink>
             </div>
@@ -174,13 +172,15 @@ export function SidebarLayout() {
                   transition={{ duration: 0.2, ease: "easeInOut" }}
                   className="mt-1 overflow-hidden"
                 >
-                  <SidebarFolderTree
-                    items={rootFolders}
-                    level={1}
-                    followTree={settings.showSidebarTree}
-                    onExpand={handleExpandFolder}
-                    getLoadState={(folderId) => getFolderTreePageState(folderId, activeBucket.id)}
-                  />
+                  <div id="sidebar-folder-tree" role="region" aria-label="文件夹目录">
+                    <SidebarFolderTree
+                      items={rootFolders}
+                      level={1}
+                      followTree={settings.showSidebarTree}
+                      onExpand={handleExpandFolder}
+                      getLoadState={(folderId) => getFolderTreePageState(folderId, activeBucket.id)}
+                    />
+                  </div>
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -213,9 +213,12 @@ export function SidebarLayout() {
                 <span>回收站</span>
               </SidebarNavItem>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-1.5">
+          {!isGuest ? <>
+          <section aria-label="共享" className="flex flex-col gap-1">
+            <h2 className="px-8 pb-1 text-xs font-medium text-muted-foreground">共享</h2>
+            <div className="relative">
             <SidebarNavItem
               to="/app/shared-with-me"
               active={location.pathname === "/app/shared-with-me" && !sharedOwnerId}
@@ -223,6 +226,14 @@ export function SidebarLayout() {
               <IconUsers size={17} />
               <span>与我共享</span>
             </SidebarNavItem>
+            <button type="button" onClick={() => setSharedOwnersOpen((value) => !value)}
+              aria-label={sharedOwnersOpen ? "收起共享用户" : "展开共享用户"}
+              aria-expanded={sharedOwnersOpen} aria-controls="sidebar-shared-owners"
+              className="absolute inset-y-0 left-0 flex w-8 items-center justify-center rounded-full text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              {sharedOwnersOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
+            </button>
+            </div>
+            <div id="sidebar-shared-owners" hidden={!sharedOwnersOpen}>
             {sharedOwners.length ? (
               <div className="space-y-0.5 pb-1 pl-7">
                 {sharedOwners.map((owner) => (
@@ -235,7 +246,7 @@ export function SidebarLayout() {
                         : undefined
                     }
                     className={cn(
-                      "flex h-8 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
+                      "flex h-9 items-center gap-2 rounded-full px-3 text-[13px] text-muted-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
                       location.pathname === "/app/shared-with-me" &&
                         sharedOwnerId === String(owner.id) &&
                         "bg-nav-active-bg text-nav-active-fg"
@@ -248,11 +259,28 @@ export function SidebarLayout() {
                       </AvatarFallback>
                     </Avatar>
                     <span className="min-w-0 flex-1 truncate">{owner.name}</span>
-                    <span className="tabular-nums">{owner.shareCount}</span>
+                    <span className="tabular-nums" title={`${owner.share_count} 个共享`} aria-label={`${owner.share_count} 个共享`}>{owner.share_count}</span>
                   </Link>
                 ))}
               </div>
+            ) : sharedOwnersLoading ? (
+              <div className="space-y-0.5 pb-1 pl-7" aria-label="正在加载共享用户">
+                {Array.from({ length: 2 }, (_, index) => (
+                  <div key={index} className="flex h-8 items-center gap-2 rounded-full px-3" aria-hidden="true">
+                    <Skeleton className="size-5 shrink-0 rounded-full" />
+                    <Skeleton className="h-3 min-w-0 flex-1" />
+                    <Skeleton className="h-3 w-4" />
+                  </div>
+                ))}
+              </div>
             ) : null}
+            {sharedOwnersError ? (
+              <button type="button" onClick={retrySharedOwners} disabled={sharedOwnersLoading}
+                className="px-8 py-1 text-left text-xs text-muted-foreground underline underline-offset-4 disabled:opacity-50">
+                共享列表刷新失败，点击重试
+              </button>
+            ) : null}
+            </div>
             <SidebarNavItem
               to="/share"
               active={location.pathname === "/share"}
@@ -260,6 +288,9 @@ export function SidebarLayout() {
               <IconShare size={17} />
               <span>我的分享</span>
             </SidebarNavItem>
+          </section>
+          <section aria-label="工具" className="flex flex-col gap-1">
+            <h2 className="px-8 pb-1 text-xs font-medium text-muted-foreground">工具</h2>
             <SidebarNavItem
               to="/app/tasks"
               active={location.pathname === "/app/tasks"}
@@ -281,7 +312,8 @@ export function SidebarLayout() {
               <IconCloudDownload size={17} />
               <span>离线下载</span>
             </SidebarNavItem>
-          </div>
+          </section>
+          </> : null}
         </div>
       </SidebarContent>
 
@@ -292,6 +324,7 @@ export function SidebarLayout() {
             total={activeBucket.quota.total}
             quotaRatio={quotaRatio}
             formatBytes={formatBytes}
+            showDetails={!isGuest}
           />
         ) : null}
         <SidebarFooterContent className="mt-3" />

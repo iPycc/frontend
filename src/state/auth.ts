@@ -147,7 +147,7 @@ export function useAuth({
     async (
       twoFactorToken: string,
       code: string,
-      method: "password" | "passkey" = "password"
+      method: "password" | "passkey" | "github" | "google" | "qq" = "password"
     ): Promise<AuthResult> => {
       try {
         const session = await apiVerifyTwoFactorLogin({

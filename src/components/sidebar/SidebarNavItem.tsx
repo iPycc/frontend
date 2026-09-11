@@ -17,11 +17,12 @@ export function SidebarNavItem({
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
+      data-ripple
       className={cn(
-        "flex h-9 items-center gap-3 rounded-full px-8 text-sm text-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
+        "relative flex h-9 items-center gap-3 overflow-hidden rounded-full px-8 text-sm text-foreground transition-colors hover:bg-nav-hover-bg hover:text-foreground",
         active
-          ? "bg-nav-active-bg text-nav-active-fg hover:bg-nav-active-bg hover:text-nav-active-fg"
-          : "",
+          ? "font-medium bg-nav-active-bg text-nav-active-fg hover:bg-nav-active-bg hover:text-nav-active-fg"
+          : "[&>svg]:text-muted-foreground",
         className
       )}
     >

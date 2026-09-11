@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -20,9 +21,11 @@ export function SettingsLayout() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const { currentUser } = useAppState()
-  const availableTabs = settingsTabs.filter(
-    (item) => item.id !== "website" || currentUser?.role === "admin"
-  )
+  const availableTabs = settingsTabs.filter((item) => {
+    if (currentUser?.role === "guest") return item.id === "security"
+    if (item.id === "website" || item.id === "guests") return currentUser?.role === "admin"
+    return true
+  })
   const currentTab =
     availableTabs.find((item) => location.pathname.endsWith(`/${item.id}`)) ??
     availableTabs[0]
@@ -32,7 +35,7 @@ export function SettingsLayout() {
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+        "@container/settings-panel flex h-full min-h-0 flex-1 flex-col overflow-hidden",
         isMobile
           ? "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-2 pb-3"
           : "app-panel rounded-xl border border-border px-5 py-6 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:shadow-none sm:px-6"
@@ -41,23 +44,23 @@ export function SettingsLayout() {
       <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
 
       <div className="mt-2 border-b border-border/60">
-        {isMobile ? (
-          <div className="flex items-center gap-5">
-            <NavLink
-              to={`/settings/${currentTab.id}`}
-              className="inline-flex items-center gap-2 border-b-2 border-primary pb-3 text-sm text-primary"
-            >
-              <CurrentTabIcon size={16} />
-              <span>{currentTab.label}</span>
-            </NavLink>
+        <div className="flex items-center gap-5 @4xl/settings-panel:hidden">
+          <NavLink
+            to={`/settings/${currentTab.id}`}
+            className="inline-flex items-center gap-2 border-b-2 border-primary pb-3 text-sm text-primary"
+          >
+            <CurrentTabIcon size={16} />
+            <span>{currentTab.label}</span>
+          </NavLink>
 
-            {moreTabs.length > 0 ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex items-center gap-1 pb-3 text-sm text-muted-foreground transition-colors hover:text-foreground">
-                  更多
-                  <IconChevronDown size={14} />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48">
+          {moreTabs.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-1 pb-3 text-sm text-muted-foreground transition-colors hover:text-foreground">
+                更多
+                <IconChevronDown size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuGroup>
                   {moreTabs.map((item) => {
                     const Icon = item.icon
 
@@ -71,44 +74,44 @@ export function SettingsLayout() {
                       </DropdownMenuItem>
                     )
                   })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-6">
-            {availableTabs.map((item) => {
-              const Icon = item.icon
-              const isActive = location.pathname.endsWith(`/${item.id}`)
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </div>
 
-              return (
-                <NavLink
-                  key={item.id}
-                  to={`/settings/${item.id}`}
-                  className={cn(
-                    "relative inline-flex items-center gap-2 pb-3 text-sm transition-colors",
-                    isActive
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon size={16} />
-                  <span>{item.label}</span>
-                  {isActive ? (
-                    <motion.div
-                      layoutId="settings-tab-indicator"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
-                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                    />
-                  ) : null}
-                </NavLink>
-              )
-            })}
-          </div>
-        )}
+        <div className="hidden flex-wrap gap-6 @4xl/settings-panel:flex">
+          {availableTabs.map((item) => {
+            const Icon = item.icon
+            const isActive = location.pathname.endsWith(`/${item.id}`)
+
+            return (
+              <NavLink
+                key={item.id}
+                to={`/settings/${item.id}`}
+                className={cn(
+                  "relative inline-flex items-center gap-2 pb-3 text-sm transition-colors",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon size={16} />
+                <span>{item.label}</span>
+                {isActive ? (
+                  <motion.div
+                    layoutId="settings-tab-indicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
+                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  />
+                ) : null}
+              </NavLink>
+            )
+          })}
+        </div>
       </div>
 
-      <div className={cn("custom-scrollbar mt-6 flex-1 overflow-y-auto", isMobile ? "pr-4" : "pr-6")}>
+      <div className={cn("custom-scrollbar @container/settings-content mt-6 flex-1 overflow-y-auto", isMobile ? "pr-2" : "pr-6")}>
         <Outlet />
       </div>
     </div>

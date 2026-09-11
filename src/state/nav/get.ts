@@ -134,12 +134,15 @@ export function useNavGet({
           (record.nodeName
             ? {
                 id: record.nodeId,
+                backendId: Number(record.nodeId) || null,
                 bucketId: "",
+                mountBackendId: 0,
                 parentId: null,
+                parentBackendId: null,
                 kind: record.nodeKind ?? "file",
                 name: record.nodeName,
                 ext: record.nodeExt,
-                size: record.nodeSize,
+                size: record.nodeSize ?? 0,
                 updatedAt: record.createdAt,
                 mediaType: record.nodeMediaType,
                 preview: record.nodePreview,

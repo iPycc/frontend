@@ -12,24 +12,31 @@ import { toast } from "sonner"
 import { useActions } from "@/state/act"
 import { useAuth } from "@/state/auth"
 import { useBoot } from "@/state/boot"
+import { loadInitialFileRouteState } from "@/state/file-route-cache"
 import { useNav } from "@/state/nav"
 
 import {
   AppStateContext,
+  AuthStateContext,
+  SettingsStateContext,
   EMPTY_BUCKET,
   EMPTY_PAGE_STATE,
   STORAGE_KEY,
+  createPersistedBucketPreview,
   loadSnapshot,
   type AppStateValue,
+  type AuthStateValue,
+  type SettingsStateValue,
   type PageLoadState,
 } from "@/state/core"
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const [snapshot, setSnapshot] = React.useState<AppSnapshot>(loadSnapshot)
+  const [initialState] = React.useState(() => loadInitialFileRouteState(loadSnapshot()))
+  const [snapshot, setSnapshot] = React.useState<AppSnapshot>(initialState.snapshot)
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light")
   const [authReady, setAuthReady] = React.useState(false)
-  const [pageStates, setPageStates] = React.useState<Record<string, PageLoadState>>({})
-  const [categoryNodesByKey, setCategoryNodesByKey] = React.useState<Record<string, FileNode[]>>({})
+  const [pageStates, setPageStates] = React.useState<Record<string, PageLoadState>>(initialState.pageStates)
+  const [categoryNodesByKey, setCategoryNodesByKey] = React.useState<Record<string, FileNode[]>>(initialState.categoryNodesByKey)
   const [treeFolderNodes, setTreeFolderNodes] = React.useState<FileNode[]>([])
   const [recycleNodes, setRecycleNodes] = React.useState<FileNode[]>([])
   const [recycleLoading, setRecycleLoading] = React.useState(false)
@@ -52,6 +59,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    const activeBucket = snapshot.buckets.find((bucket) => bucket.id === snapshot.activeBucketId)
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -74,9 +82,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         },
         shares: snapshot.shares,
         activeBucketId: snapshot.activeBucketId,
+        buckets: activeBucket ? [createPersistedBucketPreview(activeBucket)] : [],
       })
     )
-  }, [snapshot.activeBucketId, snapshot.auth, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
+  }, [snapshot.activeBucketId, snapshot.auth, snapshot.buckets, snapshot.security.passwordUpdatedAt, snapshot.security.twoFactorEnabled, snapshot.settings, snapshot.shares])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -403,19 +412,79 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [refreshCachedDirectory, refreshLoadedCategories]
   )
 
+  const authValue = React.useMemo<AuthStateValue>(() => ({
+    auth: value.auth,
+    authSession: value.authSession,
+    authReady: value.authReady,
+    currentUser: value.currentUser,
+    isAuthenticated: value.isAuthenticated,
+    login: value.login,
+    loginWithPasskey: value.loginWithPasskey,
+    verifyTwoFactor: value.verifyTwoFactor,
+    register: value.register,
+    logout: value.logout,
+  }), [
+    value.auth,
+    value.authReady,
+    value.authSession,
+    value.currentUser,
+    value.isAuthenticated,
+    value.login,
+    value.loginWithPasskey,
+    value.logout,
+    value.register,
+    value.verifyTwoFactor,
+  ])
+
+  const settingsValue = React.useMemo<SettingsStateValue>(() => ({
+    authSession: value.authSession,
+    currentUser: value.currentUser,
+    profile: value.profile,
+    settings: value.settings,
+    security: value.security,
+    loginActivity: value.loginActivity,
+    effectiveTheme: value.effectiveTheme,
+    setThemeMode: value.setThemeMode,
+    updateSettings: value.updateSettings,
+    updateProfile: value.updateProfile,
+    verifyPassword: value.verifyPassword,
+    resetPasswordVerification: value.resetPasswordVerification,
+    updateSecurity: value.updateSecurity,
+    logout: value.logout,
+  }), [
+    value.authSession,
+    value.currentUser,
+    value.effectiveTheme,
+    value.loginActivity,
+    value.logout,
+    value.profile,
+    value.resetPasswordVerification,
+    value.security,
+    value.setThemeMode,
+    value.settings,
+    value.updateProfile,
+    value.updateSecurity,
+    value.updateSettings,
+    value.verifyPassword,
+  ])
+
   return (
-    <AppStateContext.Provider value={value}>
-      <UploadProvider
-        getSession={() => snapshotRef.current.auth.session}
-        getBuckets={() => snapshotRef.current.buckets}
-        getActiveBucketId={() => snapshotRef.current.activeBucketId}
-        getNodes={() => snapshotRef.current.nodes}
-        deleteNodes={deleteNodes}
-        onUploadComplete={handleUploadComplete}
-      >
-        {children}
-      </UploadProvider>
-    </AppStateContext.Provider>
+    <AuthStateContext.Provider value={authValue}>
+      <SettingsStateContext.Provider value={settingsValue}>
+        <AppStateContext.Provider value={value}>
+          <UploadProvider
+            getSession={() => snapshotRef.current.auth.session}
+            getBuckets={() => snapshotRef.current.buckets}
+            getActiveBucketId={() => snapshotRef.current.activeBucketId}
+            getNodes={() => snapshotRef.current.nodes}
+            deleteNodes={deleteNodes}
+            onUploadComplete={handleUploadComplete}
+          >
+            {children}
+          </UploadProvider>
+        </AppStateContext.Provider>
+      </SettingsStateContext.Provider>
+    </AuthStateContext.Provider>
   )
 }
 
@@ -425,5 +494,17 @@ export function useAppState() {
     throw new Error("useAppState must be used within AppStateProvider.")
   }
 
+  return context
+}
+
+export function useAuthState() {
+  const context = React.useContext(AuthStateContext)
+  if (!context) throw new Error("useAuthState must be used within AppStateProvider.")
+  return context
+}
+
+export function useSettingsState() {
+  const context = React.useContext(SettingsStateContext)
+  if (!context) throw new Error("useSettingsState must be used within AppStateProvider.")
   return context
 }

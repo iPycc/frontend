@@ -5,11 +5,13 @@ import {
   buildPreviewImageUrl,
   buildPreviewVideoPosterUrl,
   listUserMounts,
+  listMountUsage,
   type ExplorerMount,
   type ExplorerNode,
 } from "@/api/files"
 import { ShareAccess, type ShareRead } from "@/api/share"
 import { getCurrentProfile } from "@/api/user"
+import { normalizeDateTime } from "@/lib/datetime"
 import {
   defaultAppSnapshot,
   defaultSecurity,
@@ -49,7 +51,7 @@ export type AuthResult = {
   success: boolean
   message?: string
   twoFactorToken?: string
-  method?: "password" | "passkey"
+  method?: "password" | "passkey" | "github" | "google" | "qq"
 }
 
 export function isPasskeyCanceled(error: unknown) {
@@ -70,8 +72,13 @@ export type NodeCategory = "image" | "video" | "audio" | "document"
 export type PageLoadState = {
   loading: boolean
   loaded: boolean
+  metadataLoading: boolean
+  metadataLoaded: boolean
   nextCursor: string | null
   queryKey: string
+  totalCount: number
+  folderCount: number
+  fileCount: number
 }
 
 export type PageLoadOptions = {
@@ -83,8 +90,13 @@ export type PageLoadOptions = {
 export const EMPTY_PAGE_STATE: PageLoadState = {
   loading: false,
   loaded: false,
+  metadataLoading: false,
+  metadataLoaded: false,
   nextCursor: null,
   queryKey: "",
+  totalCount: 0,
+  folderCount: 0,
+  fileCount: 0,
 }
 
 export function directoryPageKey(mode: "content" | "folders", bucketId: string, parentId: string) {
@@ -116,7 +128,7 @@ export type AppStateValue = {
   updateProfile: (patch: Partial<UserProfile>) => void
   login: (email: string, password: string) => Promise<AuthResult>
   loginWithPasskey: (emailHint?: string) => Promise<AuthResult>
-  verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey") => Promise<AuthResult>
+  verifyTwoFactor: (twoFactorToken: string, code: string, method?: "password" | "passkey" | "github" | "google" | "qq") => Promise<AuthResult>
   register: (input: AuthRegisterInput) => Promise<AuthResult>
   logout: (scope?: "current" | "all") => Promise<void>
   verifyPassword: (value: string) => boolean
@@ -149,7 +161,7 @@ export type AppStateValue = {
   renameNode: (nodeId: string, name: string) => Promise<void>
   moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string) => Promise<void>
   duplicateNodes: (nodeIds: string[]) => Promise<void>
-  deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<void>
+  deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<boolean>
   restoreNodes: (nodeIds: string[]) => Promise<void>
   permanentlyDeleteNodes: (nodeIds: string[]) => Promise<void>
   shareNodes: (nodeIds: string[], options?: ShareCreateOptions) => Promise<ShareRecord[]>
@@ -166,11 +178,49 @@ export type AppStateValue = {
 
 export const AppStateContext = React.createContext<AppStateValue | null>(null)
 
+export type AuthStateValue = Pick<
+  AppStateValue,
+  | "auth"
+  | "authSession"
+  | "authReady"
+  | "currentUser"
+  | "isAuthenticated"
+  | "login"
+  | "loginWithPasskey"
+  | "verifyTwoFactor"
+  | "register"
+  | "logout"
+>
+
+export type SettingsStateValue = Pick<
+  AppStateValue,
+  | "authSession"
+  | "currentUser"
+  | "profile"
+  | "settings"
+  | "security"
+  | "loginActivity"
+  | "effectiveTheme"
+  | "setThemeMode"
+  | "updateSettings"
+  | "updateProfile"
+  | "verifyPassword"
+  | "resetPasswordVerification"
+  | "updateSecurity"
+  | "logout"
+>
+
+export const AuthStateContext = React.createContext<AuthStateValue | null>(null)
+export const SettingsStateContext = React.createContext<SettingsStateValue | null>(null)
+
 export const EMPTY_BUCKET: BucketMount = {
   id: "",
+  backendId: 0,
+  policyId: 0,
   name: "我的文件",
   provider: "Local Storage",
   storageType: "local",
+  ownerBackendId: 0,
   strategy: {
     multipartThreshold: "25 MB",
     partSize: "25 MB",
@@ -209,6 +259,46 @@ export function createEmptyProfile(): UserProfile {
   }
 }
 
+export function createPersistedBucketPreview(bucket: BucketMount): BucketMount {
+  return {
+    ...EMPTY_BUCKET,
+    id: bucket.id,
+    backendId: bucket.backendId,
+    policyId: bucket.policyId,
+    name: bucket.name,
+    provider: bucket.provider,
+    providerLabel: bucket.providerLabel,
+    storageType: bucket.storageType,
+    ownerId: bucket.ownerId,
+    ownerBackendId: bucket.ownerBackendId,
+    region: bucket.region,
+    bucket: bucket.bucket,
+    basePrefix: bucket.basePrefix,
+    strategy: { ...bucket.strategy },
+    rootNodeId: bucket.rootNodeId,
+    rootPath: bucket.rootPath,
+    mountMode: bucket.mountMode,
+    readOnly: bucket.readOnly,
+    legacyPrefixedKeys: bucket.legacyPrefixedKeys,
+    objectKeyStyle: bucket.objectKeyStyle,
+    syncStatus: bucket.syncStatus,
+    lastSyncAt: bucket.lastSyncAt,
+    syncError: bucket.syncError,
+    syncedObjects: bucket.syncedObjects,
+    mountSlug: bucket.mountSlug,
+    createdAt: bucket.createdAt,
+    updatedAt: bucket.updatedAt,
+    corsStatus: bucket.corsStatus,
+    corsMessage: bucket.corsMessage,
+    advancedMode: bucket.advancedMode,
+    isLocal: bucket.isLocal,
+    canEditConnection: bucket.canEditConnection,
+    canDelete: bucket.canDelete,
+    canRename: bucket.canRename,
+    quota: bucket.quota ? { ...bucket.quota } : undefined,
+  }
+}
+
 export function loadSnapshot(): AppSnapshot {
   if (typeof window === "undefined") {
     return defaultAppSnapshot
@@ -222,6 +312,9 @@ export function loadSnapshot(): AppSnapshot {
   try {
     const parsed = JSON.parse(raw) as Partial<AppSnapshot>
     const persistedSession = parsed.auth?.session
+    const persistedBuckets = (parsed.buckets ?? [])
+      .filter((bucket) => Boolean(bucket?.id && bucket?.name))
+      .map(createPersistedBucketPreview)
     return {
       ...defaultAppSnapshot,
       auth: {
@@ -245,6 +338,8 @@ export function loadSnapshot(): AppSnapshot {
         passwordUpdatedAt: parsed.security?.passwordUpdatedAt ?? "",
         twoFactorEnabled: parsed.security?.twoFactorEnabled ?? false,
       },
+      buckets: persistedBuckets,
+      activeBucketId: parsed.activeBucketId ?? persistedBuckets[0]?.id ?? "",
       shares: parsed.shares ?? defaultAppSnapshot.shares,
     }
   } catch {
@@ -292,43 +387,7 @@ function resolveMountStorageRoot(mount: ExplorerMount, storageType: ReturnType<t
   return ""
 }
 
-export function formatDateTime(value?: string | null, timezone?: string) {
-  if (!value) {
-    return ""
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  try {
-    const parts = new Intl.DateTimeFormat("sv-SE", {
-      timeZone: timezone || undefined,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).formatToParts(date)
-
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ""
-    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`
-  } catch {
-    // Fallback to local time if timezone is invalid
-    const year = date.getFullYear()
-    const month = `${date.getMonth() + 1}`.padStart(2, "0")
-    const day = `${date.getDate()}`.padStart(2, "0")
-    const hour = `${date.getHours()}`.padStart(2, "0")
-    const minute = `${date.getMinutes()}`.padStart(2, "0")
-    const second = `${date.getSeconds()}`.padStart(2, "0")
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-  }
-}
-
-export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, timezone?: string): BucketMount {
+export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, _timezone?: string): BucketMount {
   const storageType = normalizeStorageType(mount)
   const extra = mount.extra ?? {}
   const provider = String(mount.provider_label ?? extra.provider_label ?? (storageType === "local" ? "Local Storage" : "Tencent COS"))
@@ -365,12 +424,12 @@ export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, tim
     legacyPrefixedKeys: mount.legacy_prefixed_keys ?? Boolean(extra.legacy_prefixed_keys),
     objectKeyStyle: extra.object_key_style === "opaque" ? "opaque" : "readable",
     syncStatus: mount.sync_status ?? "idle",
-    lastSyncAt: formatDateTime(mount.last_sync_at, timezone) || undefined,
+    lastSyncAt: normalizeDateTime(mount.last_sync_at) || undefined,
     syncError: mount.sync_error ?? undefined,
     syncedObjects: mount.synced_objects ?? Number(extra.synced_objects ?? 0),
     mountSlug: mount.mount_slug,
-    createdAt: formatDateTime(mount.created_at, timezone),
-    updatedAt: formatDateTime(mount.updated_at, timezone),
+    createdAt: normalizeDateTime(mount.created_at),
+    updatedAt: normalizeDateTime(mount.updated_at),
     corsStatus: extra.cors_status === "warning" ? "warning" : "healthy",
     corsMessage: storageRoot ? `已绑定目录：${storageRoot}` : "已连接真实存储",
     advancedMode: Boolean(extra.advanced_mode),
@@ -390,7 +449,7 @@ export function extractExtension(name: string) {
   return name.slice(index + 1).toLowerCase()
 }
 
-export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, timezone?: string): FileNode {
+export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId: string | null, _timezone?: string): FileNode {
   const mediaType = node.type === "file" ? inferMediaType(node.name, "file") : undefined
   let preview: string | undefined
   if (node.type === "file" && node.blob_path && (mediaType === "image" || mediaType === "video" || mediaType === "audio")) {
@@ -411,11 +470,11 @@ export function mapNodeToFileNode(node: ExplorerNode, bucketId: string, parentId
     name: node.name,
     ext: node.type === "file" ? extractExtension(node.name) : undefined,
     size: node.size,
-    updatedAt: formatDateTime(node.updated_at, timezone),
-    createdAt: formatDateTime(node.created_at, timezone),
+    updatedAt: normalizeDateTime(node.updated_at),
+    createdAt: normalizeDateTime(node.created_at),
     mediaType,
     preview,
-    deletedAt: formatDateTime(node.deleted_at, timezone),
+    deletedAt: normalizeDateTime(node.deleted_at),
     blobPath: node.blob_path,
   }
 }
@@ -429,8 +488,8 @@ export function mapShareRead(share: ShareRead): ShareRecord {
     id: share.id,
     nodeId: String(share.node_id),
     access: share.access === ShareAccess.PASSWORD ? "密码访问" : "公开访问",
-    expiresAt: share.expires_at ?? "",
-    createdAt: share.created_at,
+    expiresAt: normalizeDateTime(share.expires_at),
+    createdAt: normalizeDateTime(share.created_at),
     views: share.view_count,
     downloads: share.download_count,
     maxDownloads: share.max_downloads,
@@ -465,6 +524,7 @@ export function removeCachedSubtrees(nodes: FileNode[], directIds: Set<string>) 
 export type WorkspaceBasics = {
   profilePayload: Awaited<ReturnType<typeof getCurrentProfile>>
   rawMounts: ExplorerMount[]
+  mountUsage: Awaited<ReturnType<typeof listMountUsage>>
 }
 
 let workspaceBasicsRequest: { token: string; promise: Promise<WorkspaceBasics> } | null = null
@@ -474,8 +534,8 @@ export async function fetchWorkspaceBasics(token: string): Promise<WorkspaceBasi
     return workspaceBasicsRequest.promise
   }
 
-  const promise = Promise.all([getCurrentProfile(token), listUserMounts(token)]).then(
-    ([profilePayload, rawMounts]) => ({ profilePayload, rawMounts })
+  const promise = Promise.all([getCurrentProfile(token), listUserMounts(token), listMountUsage(token)]).then(
+    ([profilePayload, rawMounts, mountUsage]) => ({ profilePayload, rawMounts, mountUsage })
   )
   workspaceBasicsRequest = { token, promise }
 
@@ -491,10 +551,14 @@ export async function fetchWorkspaceBasics(token: string): Promise<WorkspaceBasi
 export function createMountRootNode(bucket: BucketMount): FileNode {
   return {
     id: bucket.rootNodeId,
+    backendId: null,
     bucketId: bucket.id,
+    mountBackendId: bucket.backendId,
     parentId: null,
+    parentBackendId: null,
     kind: "folder",
     name: bucket.name,
+    size: 0,
     updatedAt: bucket.updatedAt || bucket.createdAt,
     createdAt: bucket.createdAt,
     isSystemRoot: true,

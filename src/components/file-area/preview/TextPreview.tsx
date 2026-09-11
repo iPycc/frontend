@@ -1,100 +1,69 @@
 import * as React from "react"
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker"
-import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker"
-import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker"
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker"
-import TypeScriptWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker"
-import { IconCode, IconDeviceFloppy, IconEye, IconLoader2 } from "@tabler/icons-react"
+import { IconCode, IconColumns3, IconDeviceFloppy, IconEdit, IconLoader2 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import type { PreviewManifest } from "@/api/files"
 import { saveTextPreview } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
-import { MarkdownPreview } from "./MarkdownPreview"
+import { MarkdownPreview, type MarkdownPreviewHandle } from "./MarkdownPreview"
+import { AdaptiveCodeEditor, type AdaptiveCodeEditorHandle, type SourceLineRange } from "./AdaptiveCodeEditor"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
-type MonacoApi = typeof import("monaco-editor")
+const MarkdownEditor = React.lazy(() => import("./MarkdownEditor").then((module) => ({ default: module.MarkdownEditor })))
 
-type MonacoWorkerEnvironment = {
-  getWorker(_: string, label: string): Worker
-}
-
-function configureWorkers() {
-  const scope = self as typeof self & { MonacoEnvironment?: MonacoWorkerEnvironment }
-  scope.MonacoEnvironment = {
-    getWorker: (_moduleId, label) => {
-      if (label === "json") return new JsonWorker()
-      if (label === "css" || label === "scss" || label === "less") return new CssWorker()
-      if (label === "html" || label === "handlebars" || label === "razor") return new HtmlWorker()
-      if (label === "typescript" || label === "javascript") return new TypeScriptWorker()
-      return new EditorWorker()
-    },
-  }
-}
-
-const languageByExtension: Record<string, string> = {
-  c: "c",
-  cpp: "cpp",
-  cs: "csharp",
-  css: "css",
-  go: "go",
-  h: "cpp",
-  html: "html",
-  ini: "ini",
-  java: "java",
-  js: "javascript",
-  json: "json",
-  jsx: "javascript",
-  md: "markdown",
-  php: "php",
-  py: "python",
-  rb: "ruby",
-  rs: "rust",
-  sh: "shell",
-  sql: "sql",
-  ts: "typescript",
-  tsx: "typescript",
-  xml: "xml",
-  yaml: "yaml",
-  yml: "yaml",
+const languageByExtension: Record<string, { id: string; label: string }> = {
+  c: { id: "c", label: "C" }, cpp: { id: "cpp", label: "C++" }, cs: { id: "csharp", label: "C#" }, css: { id: "css", label: "CSS" },
+  go: { id: "go", label: "Go" }, h: { id: "cpp", label: "C++" }, html: { id: "html", label: "HTML" }, ini: { id: "ini", label: "INI" },
+  java: { id: "java", label: "Java" }, js: { id: "javascript", label: "JavaScript" }, json: { id: "json", label: "JSON" },
+  jsx: { id: "javascriptreact", label: "JSX" }, md: { id: "markdown", label: "Markdown" }, php: { id: "php", label: "PHP" },
+  py: { id: "python", label: "Python" }, rb: { id: "ruby", label: "Ruby" }, rs: { id: "rust", label: "Rust" },
+  sh: { id: "shell", label: "Shell" }, sql: { id: "sql", label: "SQL" }, ts: { id: "typescript", label: "TypeScript" },
+  tsx: { id: "typescriptreact", label: "TSX" }, xml: { id: "xml", label: "XML" }, yaml: { id: "yaml", label: "YAML" }, yml: { id: "yaml", label: "YAML" },
 }
 
 function inferLanguage(name: string) {
   const extension = name.split(".").pop()?.toLowerCase() ?? ""
-  return languageByExtension[extension] ?? "plaintext"
+  return languageByExtension[extension] ?? { id: "plaintext", label: "Text" }
+}
+
+function hasExtendedMarkdownSyntax(content: string) {
+  return /(^|\n)\s*(import|export)\s|<[A-Z][\w.-]*[\s/>]|(^|\n)\s*\{[^\n{}]+\}\s*($|\n)/m.test(content)
 }
 
 export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
-  const isMobile = useIsMobile()
   const isMarkdown = ["md", "markdown"].includes(manifest.name.split(".").pop()?.toLowerCase() ?? "")
-  const hostRef = React.useRef<HTMLDivElement>(null)
-  const editorRef = React.useRef<import("monaco-editor").editor.IStandaloneCodeEditor | null>(null)
-  const monacoRef = React.useRef<MonacoApi | null>(null)
-  const saveHandlerRef = React.useRef<() => void>(() => undefined)
-  const draftRef = React.useRef("")
   const [content, setContent] = React.useState("")
-  const [view, setView] = React.useState<"preview" | "source">(isMarkdown ? "preview" : "source")
+  const [view, setView] = React.useState<"visual" | "source" | "split">(isMarkdown ? "visual" : "source")
   const [version, setVersion] = React.useState(manifest.version)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [dirty, setDirty] = React.useState(false)
+  const [sourceOnly, setSourceOnly] = React.useState(false)
+  const [hoveredSourceRange, setHoveredSourceRange] = React.useState<SourceLineRange | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const splitEditorRef = React.useRef<AdaptiveCodeEditorHandle>(null)
+  const splitPreviewRef = React.useRef<MarkdownPreviewHandle>(null)
   const editable = manifest.capabilities.includes("edit")
   const maxBytes = typeof manifest.metadata.max_bytes === "number" ? manifest.metadata.max_bytes : 5 * 1024 * 1024
   const textEncoding = typeof manifest.metadata.text_encoding === "string" ? manifest.metadata.text_encoding : "utf-8"
   const truncated = manifest.size > maxBytes
 
+  const syncPreviewScroll = React.useCallback((ratio: number) => {
+    splitPreviewRef.current?.setScrollRatio(ratio)
+  }, [])
+
+  const syncEditorScroll = React.useCallback((ratio: number) => {
+    splitEditorRef.current?.setScrollRatio(ratio)
+  }, [])
+
   const save = React.useCallback(async () => {
     if (!editable || saving || !dirty) return
-    const value = editorRef.current?.getValue() ?? draftRef.current
     setSaving(true)
     try {
-      const result = await saveTextPreview(manifest.node_id, value, version)
+      const result = await saveTextPreview(manifest.node_id, content, version)
       setVersion(result.version)
-      setContent(value)
-      draftRef.current = value
       setDirty(false)
       toast.success("文件已保存")
     } catch (reason) {
@@ -102,8 +71,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     } finally {
       setSaving(false)
     }
-  }, [dirty, editable, manifest.node_id, saving, version])
-  saveHandlerRef.current = () => void save()
+  }, [content, dirty, editable, manifest.node_id, saving, version])
 
   React.useEffect(() => {
     const controller = new AbortController()
@@ -111,7 +79,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     setError(null)
     setDirty(false)
     setVersion(manifest.version)
-    setView(isMarkdown ? "preview" : "source")
+    setView(isMarkdown ? "visual" : "source")
     const load = async () => {
       let lastError: unknown
       for (const source of previewSourceUrls(manifest)) {
@@ -124,7 +92,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
           const value = await response.arrayBuffer()
           const decoded = new TextDecoder(textEncoding).decode(value)
           setContent(decoded)
-          draftRef.current = decoded
+          setSourceOnly(isMarkdown && hasExtendedMarkdownSyntax(decoded))
           return
         } catch (reason) {
           if (controller.signal.aborted) return
@@ -133,105 +101,73 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
       }
       setError(lastError instanceof Error ? lastError.message : "文本加载失败")
     }
-    void load().finally(() => {
-      if (!controller.signal.aborted) setLoading(false)
-    })
+    void load().finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [isMarkdown, manifest, maxBytes, textEncoding, truncated])
 
-  React.useEffect(() => {
-    if (loading || error || isMobile || view !== "source" || !hostRef.current) return
-    let disposed = false
-    configureWorkers()
-    void import("monaco-editor").then((monaco) => {
-      if (disposed || !hostRef.current) return
-      monacoRef.current = monaco
-      const dark = document.documentElement.classList.contains("dark")
-      const editor = monaco.editor.create(hostRef.current, {
-        value: content,
-        language: inferLanguage(manifest.name),
-        theme: dark ? "vs-dark" : "vs",
-        readOnly: !editable,
-        automaticLayout: true,
-        minimap: { enabled: window.innerWidth >= 1200 },
-        fontSize: 14,
-        lineHeight: 22,
-        scrollBeyondLastLine: false,
-        smoothScrolling: true,
-        wordWrap: "off",
-        padding: { top: 12, bottom: 12 },
-      })
-      editorRef.current = editor
-      editor.onDidChangeModelContent(() => {
-        draftRef.current = editor.getValue()
-        setDirty(true)
-      })
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveHandlerRef.current())
-    })
+  if (loading) return <PreviewSkeleton kind="text" />
+  if (error) return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
 
-    const themeObserver = new MutationObserver(() => {
-      const monaco = monacoRef.current
-      if (!monaco) return
-      monaco.editor.setTheme(document.documentElement.classList.contains("dark") ? "vs-dark" : "vs")
-    })
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-
-    return () => {
-      disposed = true
-      themeObserver.disconnect()
-      editorRef.current?.dispose()
-      editorRef.current = null
-      monacoRef.current = null
-    }
-  }, [content, editable, error, isMobile, loading, manifest.name, view])
-
-  if (loading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在加载文本</div>
-  }
-
-  if (error) {
-    return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
-  }
-
+  const language = inferLanguage(manifest.name)
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="truncate text-xs text-muted-foreground">
-          {inferLanguage(manifest.name)} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}
+          {language.label} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}{sourceOnly ? " · 检测到扩展语法，使用源码模式" : ""}
         </span>
         <div className="flex items-center gap-2">
-          {isMarkdown ? (
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(value) => {
-                if (value !== "preview" && value !== "source") return
-                if (value === "preview") setContent(editorRef.current?.getValue() ?? draftRef.current)
-                setView(value)
-              }}
-              variant="outline"
-              size="sm"
-              spacing={0}
-              aria-label="Markdown 查看模式"
-            >
-              <ToggleGroupItem value="preview" aria-label="预览 Markdown"><IconEye data-icon="inline-start" />预览</ToggleGroupItem>
-              <ToggleGroupItem value="source" aria-label="查看 Markdown 源码"><IconCode data-icon="inline-start" />源码</ToggleGroupItem>
-            </ToggleGroup>
-          ) : null}
-          {editable && !isMobile ? (
-            <Button size="sm" variant="outline" disabled={!dirty || saving} onClick={() => void save()}>
-              {saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}
-              保存
-            </Button>
-          ) : null}
+          {isMarkdown ? <ToggleGroup type="single" value={sourceOnly ? "source" : view} onValueChange={(value) => { if (!sourceOnly && (value === "visual" || value === "source" || value === "split")) setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 编辑模式"><ToggleGroupItem value="visual" disabled={sourceOnly} aria-label="所见即所得编辑"><IconEdit data-icon="inline-start" />编辑</ToggleGroupItem><ToggleGroupItem value="source" aria-label="编辑 Markdown 源码"><IconCode data-icon="inline-start" />源码</ToggleGroupItem><ToggleGroupItem value="split" disabled={sourceOnly} aria-label="左侧源码、右侧预览"><IconColumns3 data-icon="inline-start" />分屏</ToggleGroupItem></ToggleGroup> : null}
+          {editable ? <Button size="sm" variant="outline" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}保存</Button> : null}
         </div>
       </div>
-      {isMarkdown && view === "preview" ? (
-        <div className="min-h-0 flex-1"><MarkdownPreview content={content} /></div>
-      ) : isMobile ? (
-        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre p-4 font-mono text-[13px] leading-5 text-foreground">{content}</pre>
+      {isMarkdown && view === "split" && !sourceOnly ? (
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="min-h-0 min-w-0 flex-1 border-b border-border md:border-b-0 md:border-r">
+            <AdaptiveCodeEditor
+              ref={splitEditorRef}
+              value={content}
+              language={language.id}
+              readOnly={!editable}
+              ariaLabel={`${manifest.name} Markdown 源码编辑器`}
+              onChange={(value) => { setContent(value); setDirty(true) }}
+              onSave={() => void save()}
+              onScrollRatioChange={syncPreviewScroll}
+              highlightRange={hoveredSourceRange}
+            />
+          </div>
+          <div className="min-h-0 min-w-0 flex-1">
+            <MarkdownPreview
+              ref={splitPreviewRef}
+              content={content}
+              onScrollRatioChange={syncEditorScroll}
+              onSourceRangeHover={setHoveredSourceRange}
+            />
+          </div>
+        </div>
+      ) : isMarkdown && view === "visual" && !sourceOnly ? (
+        <div className="min-h-0 flex-1">
+          {editable ? (
+            <React.Suspense fallback={<PreviewSkeleton kind="text" />}>
+              <MarkdownEditor
+                key={`${manifest.node_id}:${version}`}
+                initialValue={content}
+                readOnly={false}
+                onChange={(value) => { setContent(value); setDirty(true) }}
+              />
+            </React.Suspense>
+          ) : <MarkdownPreview content={content} />}
+        </div>
       ) : (
-        <div ref={hostRef} className="min-h-0 flex-1" />
+        <div className="min-h-0 flex-1">
+          <AdaptiveCodeEditor
+            value={content}
+            language={language.id}
+            readOnly={!editable}
+            ariaLabel={`${manifest.name} 文本编辑器`}
+            onChange={(value) => { setContent(value); setDirty(true) }}
+            onSave={() => void save()}
+          />
+        </div>
       )}
     </div>
   )

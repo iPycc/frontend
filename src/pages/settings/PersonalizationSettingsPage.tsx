@@ -8,7 +8,7 @@ import {
   OptionGroup,
   SelectField,
   themeOptions,
-  timezoneOptions,
+  timezoneOptionsFor,
 } from "./shared"
 
 export function PersonalizationSettingsPage() {
@@ -24,7 +24,8 @@ export function PersonalizationSettingsPage() {
     }
 
     try {
-      await updateUserPreferences(token, { timezone: value })
+      const saved = await updateUserPreferences(token, { timezone: value })
+      updateSettings({ timezone: saved.timezone })
       toast.success("偏好设置", {
         description: "时区已保存",
       })
@@ -50,7 +51,7 @@ export function PersonalizationSettingsPage() {
         <SelectField
           value={settings.timezone}
           onChange={(value) => void handleTimezoneChange(value)}
-          options={timezoneOptions}
+          options={timezoneOptionsFor(settings.timezone)}
         />
       </FieldBlock>
 

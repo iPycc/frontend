@@ -4,12 +4,15 @@ import {
   abortUpload,
   completeUpload,
   createUploadSession,
+  getUploadSession,
   getUploadPartUrl,
   heartbeatUpload,
   recordRemotePart,
   uploadLocalPart,
   type UploadPartPlan,
+  type UploadSessionPlan,
 } from "@/api/uploads"
+import { ApiError } from "@/api/client"
 import {
   formatBytes,
   type AuthSession,
@@ -18,7 +21,7 @@ import {
 } from "@/lib/models"
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
-import { hashFile } from "@/lib/upload/hash"
+import { fingerprintFile, hashFile } from "@/lib/upload/hash"
 import { partLimit } from "@/lib/upload/pool"
 import { trackParts } from "@/lib/upload/progress"
 import { putPart } from "@/lib/upload/put"
@@ -39,6 +42,7 @@ type RunDeps = {
   uploadCommitIdsRef: React.MutableRefObject<Set<string>>
   uploadGateRef: React.MutableRefObject<ReturnType<typeof createGate>>
   uploadApiSchedulerRef: React.MutableRefObject<ReturnType<typeof createUploadApiScheduler>>
+  getUploadQueueItem: (id: string) => UploadQueueItem | undefined
   scheduleUploadRefresh: (parentId: string | null, bucketId: string) => void
   updateUploadQueueItem: (id: string, patch: Partial<UploadQueueItem>) => void
 }
@@ -51,6 +55,7 @@ export function useUploadRun({
   uploadCommitIdsRef,
   uploadGateRef,
   uploadApiSchedulerRef,
+  getUploadQueueItem,
   scheduleUploadRefresh,
   updateUploadQueueItem,
 }: RunDeps) {
@@ -85,40 +90,118 @@ export function useUploadRun({
         if (controller.signal.aborted) throw new DOMException("aborted", "AbortError")
       }
 
-      let sessionId: string | undefined
+      let sessionId = getUploadQueueItem(id)?.sessionId
       let stopHeartbeat: (() => void) | undefined
       try {
+        const queueItem = getUploadQueueItem(id)
         updateUploadQueueItem(id, {
           status: "preparing",
-          progress: 0,
-          uploadedBytes: 0,
           totalBytes: saved.file.size,
-          speedText: "计算校验值...",
+          speedText: sessionId ? "正在验证文件并查询已上传分片..." : "计算校验值...",
           errorMessage: undefined,
+          requiresFileSelection: false,
         })
         const apiParentId =
           saved.target.parentId && !saved.target.parentId.startsWith("root:")
             ? Number(saved.target.parentId)
             : undefined
 
-        const checksum = await hashFile(saved.file)
-        const plan = await retryRateLimited(
-          () => uploadApiSchedulerRef.current.run(
-            () => createUploadSession(session.tokens.accessToken, {
-              mount_id: bucket.backendId,
-              parent_id: apiParentId,
-              file_name: saved.file.name,
-              relative_path: saved.relativePath,
-              checksum: checksum ?? undefined,
-              size: saved.file.size,
-              content_type: saved.file.type || "application/octet-stream",
-              mode: "auto",
-            }),
+        const [checksum, fileFingerprint] = await Promise.all([
+          hashFile(saved.file),
+          fingerprintFile(saved.file),
+        ])
+        throwIfAborted()
+        if (queueItem?.fileFingerprint && queueItem.fileFingerprint !== fileFingerprint) {
+          throw new Error("重新选择的文件内容与原上传任务不一致")
+        }
+        if (queueItem?.checksum && checksum && queueItem.checksum !== checksum) {
+          throw new Error("重新选择的文件校验值与原上传任务不一致")
+        }
+        updateUploadQueueItem(id, {
+          checksum: checksum ?? queueItem?.checksum,
+          fileFingerprint,
+          fileLastModified: saved.file.lastModified,
+        })
+
+        let plan: UploadSessionPlan | undefined
+        let serverParts: Array<{ part_number: number; etag?: string | null; size: number }> = []
+        if (sessionId) {
+          try {
+            const existing = await retryRateLimited(
+              () => uploadApiSchedulerRef.current.run(
+                () => getUploadSession(session.tokens.accessToken, sessionId!, controller.signal),
+                controller.signal
+              ),
+              controller.signal
+            )
+            if (
+              existing.mount_id !== bucket.backendId ||
+              existing.file_name !== saved.file.name ||
+              existing.size !== saved.file.size ||
+              (existing.checksum && checksum && existing.checksum !== checksum)
+            ) {
+              throw new Error("原上传会话与所选文件不匹配")
+            }
+            if (existing.state === "completed") {
+              updateUploadQueueItem(id, {
+                status: "completed",
+                progress: 100,
+                uploadedBytes: saved.file.size,
+                speedBytesPerSecond: 0,
+                speedText: "已上传",
+              })
+              scheduleUploadRefresh(saved.target.parentId, bucket.id)
+              return
+            }
+            if (existing.state === "aborting" || existing.state === "completing") {
+              throw new Error(existing.state === "aborting" ? "上传任务正在取消" : "上传任务正在服务端完成，请稍后再试")
+            }
+            if (existing.state !== "aborted" && existing.state !== "expired") {
+              plan = {
+                session_id: existing.id,
+                upload_mode: existing.mode,
+                upload_id: existing.upload_id,
+                object_key: existing.path,
+                part_size: existing.part_size,
+                part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
+                upload_urls: [],
+              }
+              serverParts = existing.parts
+            }
+          } catch (error) {
+            if (!(error instanceof ApiError) || error.status !== 404) throw error
+          }
+        }
+
+        if (!plan) {
+          sessionId = undefined
+          updateUploadQueueItem(id, {
+            sessionId: undefined,
+            progress: 0,
+            uploadedBytes: 0,
+            speedText: queueItem?.sessionId ? "原会话已失效，正在创建新上传任务..." : "正在创建上传任务...",
+          })
+          plan = await retryRateLimited(
+            () => uploadApiSchedulerRef.current.run(
+              () => createUploadSession(session.tokens.accessToken, {
+                mount_id: bucket.backendId,
+                parent_id: apiParentId,
+                file_name: saved.file.name,
+                relative_path: saved.relativePath,
+                checksum: checksum ?? undefined,
+                size: saved.file.size,
+                content_type: saved.file.type || "application/octet-stream",
+                mode: "auto",
+              }),
+              controller.signal
+            ),
             controller.signal
-          ),
-          controller.signal
-        )
-        sessionId = plan.session_id
+          )
+        }
+
+        const activeSessionId = plan.session_id
+        if (!activeSessionId) throw new Error("Upload session id is missing")
+        sessionId = activeSessionId
         if (plan.is_duplicate) {
           updateUploadQueueItem(id, {
             sessionId,
@@ -134,9 +217,9 @@ export function useUploadRun({
           sessionId,
           expiresAt: plan.expires_at ?? undefined,
           status: "uploading",
+          requiresFileSelection: false,
         })
         const heartbeatController = new AbortController()
-        const activeSessionId = plan.session_id
         const sendHeartbeat = () => {
           if (heartbeatController.signal.aborted) return
           void uploadApiSchedulerRef.current
@@ -174,20 +257,59 @@ export function useUploadRun({
           partSizeBytes: partSize,
           partCount,
         })
-        const completedParts: Array<{ part_number: number; etag: string; size: number }> = []
+        const expectedPartSize = (partNumber: number) => {
+          if (saved.file.size === 0) return 0
+          if (partNumber < partCount) return partSize
+          return saved.file.size - partSize * (partCount - 1)
+        }
+        const completedParts = new Map<number, { part_number: number; etag: string; size: number }>()
+        for (const part of serverParts) {
+          if (
+            part.part_number >= 1 &&
+            part.part_number <= partCount &&
+            part.etag &&
+            part.size === expectedPartSize(part.part_number)
+          ) {
+            completedParts.set(part.part_number, {
+              part_number: part.part_number,
+              etag: part.etag,
+              size: part.size,
+            })
+          }
+        }
+        const resumedBytes = Array.from(completedParts.values()).reduce((sum, part) => sum + part.size, 0)
+        updateUploadQueueItem(id, {
+          uploadedBytes: resumedBytes,
+          progress: saved.file.size > 0 ? (resumedBytes / saved.file.size) * 100 : 0,
+          speedBytesPerSecond: 0,
+          speedText: resumedBytes > 0
+            ? `已恢复 ${formatBytes(resumedBytes)}，继续上传剩余分片`
+            : "正在上传",
+        })
         const partConcurrency = partLimit(bucket.strategy.concurrency)
         const uploadPlans = new Map<number, Promise<UploadPartPlan | undefined>>()
         plan.upload_urls.forEach((item) => uploadPlans.set(item.part_number, Promise.resolve(item)))
-        const progressTracker = trackParts(saved.file.size, ({ uploadedBytes, progress, bytesPerSecond }) => {
-          updateUploadQueueItem(id, {
-            status: "uploading",
-            uploadedBytes,
-            progress,
-            speedBytesPerSecond: bytesPerSecond,
-            speedText: `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
-          })
-        })
-        let nextPartIndex = 0
+        const progressTracker = trackParts(
+          saved.file.size,
+          ({ uploadedBytes, progress, bytesPerSecond }) => {
+            updateUploadQueueItem(id, {
+              status: "uploading",
+              uploadedBytes,
+              progress,
+              speedBytesPerSecond: bytesPerSecond,
+              speedText: `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
+            })
+          },
+          Array.from(completedParts.values()).map((part) => ({
+            partNumber: part.part_number,
+            size: part.size,
+          }))
+        )
+        const missingPartIndexes = Array.from(
+          { length: partCount },
+          (_, index) => index
+        ).filter((index) => !completedParts.has(index + 1))
+        let nextMissingPart = 0
         let partFailure: unknown = null
 
         const getPartPlan = (partNumber: number, refresh = false) => {
@@ -198,7 +320,7 @@ export function useUploadRun({
           const requested = uploadApiSchedulerRef.current.run(
             () => getUploadPartUrl(
               session.tokens.accessToken,
-              sessionId,
+              activeSessionId,
               partNumber,
               controller.signal
             ),
@@ -239,7 +361,7 @@ export function useUploadRun({
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
                     session.tokens.accessToken,
-                    sessionId,
+                    activeSessionId,
                     chunk,
                     partNumber,
                     chunk.size,
@@ -277,7 +399,7 @@ export function useUploadRun({
               () => uploadApiSchedulerRef.current.run(
                 () => recordRemotePart(
                   session.tokens.accessToken,
-                  sessionId,
+                  activeSessionId,
                   partNumber,
                   uploaded.etag,
                   chunk.size,
@@ -290,7 +412,7 @@ export function useUploadRun({
             throwIfAborted()
           }
           progressTracker.commit(partNumber, chunk.size)
-          completedParts.push({
+          completedParts.set(partNumber, {
             part_number: partNumber,
             etag: uploaded.etag,
             size: chunk.size,
@@ -299,28 +421,30 @@ export function useUploadRun({
 
         const uploadWorker = async () => {
           while (!controller.signal.aborted) {
-            const index = nextPartIndex
-            nextPartIndex += 1
-            if (index >= partCount) return
+            const index = missingPartIndexes[nextMissingPart]
+            nextMissingPart += 1
+            if (index === undefined) return
             try {
               await uploadPartAt(index)
             } catch (error) {
               if (!partFailure) partFailure = error
-              controller.abort()
+              if (!controller.signal.aborted) controller.abort("peer-failure")
               throw error
             }
           }
         }
 
         const partResults = await Promise.allSettled(
-          Array.from({ length: Math.min(partConcurrency, partCount) }, () => uploadWorker())
+          Array.from({ length: Math.min(partConcurrency, missingPartIndexes.length) }, () => uploadWorker())
         )
         progressTracker.dispose()
         if (partFailure) throw partFailure
         const rejectedPart = partResults.find((result) => result.status === "rejected")
         if (rejectedPart?.status === "rejected") throw rejectedPart.reason
         throwIfAborted()
-        completedParts.sort((left, right) => left.part_number - right.part_number)
+        const completionParts = Array.from(completedParts.values()).sort(
+          (left, right) => left.part_number - right.part_number
+        )
 
         uploadCommitIdsRef.current.add(id)
         updateUploadQueueItem(id, {
@@ -330,7 +454,7 @@ export function useUploadRun({
         })
         await retryRateLimited(
           () => uploadApiSchedulerRef.current.run(
-            () => completeUpload(session.tokens.accessToken, sessionId, completedParts),
+            () => completeUpload(session.tokens.accessToken, activeSessionId, completionParts),
             controller.signal
           ),
           controller.signal
@@ -344,12 +468,15 @@ export function useUploadRun({
         })
         scheduleUploadRefresh(saved.target.parentId, bucket.id)
       } catch (error) {
-        const aborted = error instanceof DOMException && error.name === "AbortError" && controller.signal.aborted
-        if (sessionId) {
+        const abortReason = controller.signal.reason
+        const paused = abortReason === "pause"
+        const canceled = abortReason === "cancel"
+        if (sessionId && canceled) {
+          const cleanupSessionId = sessionId
           try {
             const cleanupSignal = new AbortController().signal
             await uploadApiSchedulerRef.current.run(
-              () => abortUpload(session.tokens.accessToken, sessionId, aborted ? "client_abort" : "client_failed"),
+              () => abortUpload(session.tokens.accessToken, cleanupSessionId, "client_cancel"),
               cleanupSignal
             )
           } catch {
@@ -357,9 +484,10 @@ export function useUploadRun({
           }
         }
         updateUploadQueueItem(id, {
-          status: aborted ? "canceled" : "failed",
-          errorMessage: aborted ? "已取消" : error instanceof Error ? error.message : "上传失败",
-          speedText: aborted ? "已取消" : "上传失败",
+          status: paused ? "paused" : canceled ? "canceled" : "failed",
+          errorMessage: paused || canceled ? undefined : error instanceof Error ? error.message : "上传失败",
+          speedBytesPerSecond: 0,
+          speedText: paused ? "已暂停，可继续上传" : canceled ? "已取消" : "上传中断，可从已完成分片继续",
         })
       } finally {
         stopHeartbeat?.()
@@ -367,6 +495,6 @@ export function useUploadRun({
         uploadControllersRef.current.delete(id)
       }
     },
-    [scheduleUploadRefresh, updateUploadQueueItem]
+    [getUploadQueueItem, scheduleUploadRefresh, updateUploadQueueItem]
   )
 }

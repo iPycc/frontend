@@ -1,21 +1,10 @@
 import { Navigate } from "react-router-dom"
 
-import { ShareLayout } from "@/components/share"
-import { useAppState } from "@/state/app"
-
-export function isProtected(pathname: string) {
-  return (
-    pathname === "/" ||
-    pathname === "/share" ||
-    pathname.startsWith("/app") ||
-    pathname.startsWith("/settings") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/images")
-  )
-}
+import { ShareLayout } from "@/components/share/ShareLayout"
+import { useAuthState } from "@/state/app"
 
 export function ShareGuard() {
-  const { authReady, isAuthenticated } = useAppState()
+  const { authReady, isAuthenticated } = useAuthState()
   if (!authReady) {
     return null
   }

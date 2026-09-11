@@ -2,6 +2,8 @@ import { IconAlertCircle, IconCheck, IconLoader2 } from "@tabler/icons-react"
 
 import type { BucketMount } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/datetime"
+import { useSettingsState } from "@/state/app"
 
 const labels = {
   never: "尚未同步",
@@ -13,6 +15,7 @@ const labels = {
 } as const
 
 export function MountStatus({ bucket }: { bucket: BucketMount }) {
+  const { settings } = useSettingsState()
   const running = bucket.syncStatus === "running" || bucket.syncStatus === "pending"
   const failed = bucket.syncStatus === "failed"
   const Icon = running ? IconLoader2 : failed ? IconAlertCircle : IconCheck
@@ -29,7 +32,7 @@ export function MountStatus({ bucket }: { bucket: BucketMount }) {
           {bucket.syncedObjects > 0 ? ` · ${bucket.syncedObjects} 个对象` : ""}
         </span>
       ) : null}
-      {bucket.lastSyncAt ? <span title="上次同步时间">{bucket.lastSyncAt}</span> : null}
+      {bucket.lastSyncAt ? <span title="上次同步时间">{formatDateTime(bucket.lastSyncAt, settings.timezone)}</span> : null}
     </div>
   )
 }

@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/datetime"
+import { useSettingsState } from "@/state/app"
 
 export type SharedViewMode = "grid" | "list"
 
@@ -62,6 +64,7 @@ export function SharedList({
   viewMode: SharedViewMode
   onOpen: (owner: SharedOwner) => void
 }) {
+  const { settings } = useSettingsState()
   if (loading) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="正在加载与我共享">
@@ -94,7 +97,7 @@ export function SharedList({
                 {owner.shareCount} 个分享 · {owner.itemCount} 项内容
               </span>
             </span>
-            <span className="hidden text-xs text-muted-foreground sm:block">{dateOf(owner.latestSharedAt)}</span>
+            <span className="hidden text-xs text-muted-foreground sm:block">{formatDateTime(owner.latestSharedAt, settings.timezone)}</span>
             <IconChevronRight size={18} className="shrink-0 text-muted-foreground" />
           </button>
         ))}
@@ -137,6 +140,7 @@ export function SharedMountList({
   onOpen: (mount: SharedMount) => void
   onRemove: (mount: SharedMount) => void
 }) {
+  const { settings } = useSettingsState()
   if (!items.length) {
     return <EmptyState title="这个用户没有可用分享" description="原分享可能已被取消或过期。" />
   }
@@ -154,7 +158,7 @@ export function SharedMountList({
             >
               <span className="block truncate text-sm font-medium">{titleOf(mount)}</span>
               <span className={cn("mt-0.5 block text-xs", mount.available ? "text-muted-foreground" : "text-destructive")}>
-                {mount.available ? `${mount.roots.length} 项内容 · ${dateOf(mount.created_at)}` : "原分享不可用"}
+                {mount.available ? `${mount.roots.length} 项内容 · ${formatDateTime(mount.created_at, settings.timezone)}` : "原分享不可用"}
               </span>
             </button>
             <Button variant="ghost" size="icon-sm" disabled={!mount.available} onClick={() => onOpen(mount)} aria-label={`浏览 ${titleOf(mount)}`}>
@@ -183,7 +187,7 @@ export function SharedMountList({
             <span className={cn("mt-1 block text-sm", mount.available ? "text-muted-foreground" : "text-destructive")}>
               {mount.available ? `${mount.roots.length} 项内容` : "原分享不可用"}
             </span>
-            <span className="mt-1 block text-xs text-muted-foreground">{dateOf(mount.created_at)}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">{formatDateTime(mount.created_at, settings.timezone)}</span>
           </button>
           <div className="mt-3 flex justify-end gap-1 border-t border-border pt-2">
             <Button variant="ghost" size="sm" disabled={!mount.available} onClick={() => onOpen(mount)}>
@@ -212,9 +216,4 @@ function OwnerAvatar({ owner, large = false }: { owner: SharedOwner; large?: boo
 function titleOf(mount: SharedMount) {
   if (mount.roots.length === 1) return mount.roots[0].name
   return mount.roots.length ? `${mount.roots.length} 项共享内容` : `分享 ${mount.share_id.slice(0, 8)}`
-}
-
-function dateOf(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN")
 }

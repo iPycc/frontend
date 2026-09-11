@@ -7,11 +7,13 @@ import { type FileNode } from "@/lib/models"
 import { requestResponse } from "@/api/client"
 import { buildPreviewAudioCoverUrl, buildPreviewImageUrl, buildPreviewUrl, buildPreviewVideoPosterUrl } from "@/api/files"
 import { useAppState } from "@/state/app"
+import { useNearViewport } from "@/hooks/use-near-viewport"
 import { cn, truncateFilename } from "@/lib/utils"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type ItemHandlers } from "./types"
+import { type InlineNameEdit, type ItemHandlers } from "./types"
 import { FileGlyph } from "./FileGlyph"
+import { InlineNameEditor } from "./InlineNameEditor"
 import { ItemContextMenu } from "./ItemContextMenu"
 import { isOfficeFile, OfficeCardPreview } from "./OfficeCardPreview"
 import { PdfCardPreview } from "./PdfCardPreview"
@@ -20,6 +22,7 @@ interface FileCardProps extends ItemHandlers {
   item: FileNode
   selected: boolean
   showThumbnail?: boolean
+  inlineEdit?: InlineNameEdit
 }
 
 function canShowThumbnail(item: FileNode) {
@@ -39,6 +42,7 @@ export function FileCard({
   item,
   selected,
   showThumbnail = false,
+  inlineEdit,
   onSelectNode,
   onPrepareContext,
   onOpenNode,
@@ -69,9 +73,12 @@ export function FileCard({
   const [videoFrameReady, setVideoFrameReady] = useState(false)
   const [textPreview, setTextPreview] = useState("")
   const [textPreviewLoading, setTextPreviewLoading] = useState(false)
+  const { ref: previewHostRef, isNear: previewIsNear } = useNearViewport<HTMLDivElement>(hasThumbnail)
+  const previewActive = hasThumbnail && previewIsNear
+  const isEditing = inlineEdit?.itemId === item.id
 
   useEffect(() => {
-    if (!hasThumbnail || !isText || !item.backendId) {
+    if (!previewActive || !isText || !item.backendId) {
       setTextPreview("")
       setTextPreviewLoading(false)
       return
@@ -92,15 +99,38 @@ export function FileCard({
         if (!controller.signal.aborted) setTextPreviewLoading(false)
       })
     return () => controller.abort()
-  }, [hasThumbnail, isText, item.backendId, item.updatedAt])
+  }, [previewActive, isText, item.backendId, item.updatedAt])
+
+  if (isEditing && (!showThumbnail || item.kind === "folder")) {
+    return (
+      <div
+        data-file-card
+        data-file-card-id={item.id}
+        className="flex min-h-12 w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-2 dark:border-white/10 dark:bg-white/5"
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/70">
+          <FileGlyph item={item} />
+        </div>
+        <InlineNameEditor edit={inlineEdit} originalName={inlineEdit.mode === "rename" ? item.name : undefined} />
+      </div>
+    )
+  }
 
   if (!showThumbnail || item.kind === "folder") {
     return (
       <ContextMenu>
-        <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
+        <ContextMenuTrigger
+          onContextMenu={(event) => {
+            event.stopPropagation()
+            onPrepareContext(item.id)
+          }}
+        >
           <div
+            data-file-card
+            data-file-card-id={item.id}
+            data-ripple
             className={cn(
-              "group flex h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition-colors",
+              "group relative flex h-12 w-full items-center gap-3 overflow-hidden rounded-xl border px-3.5 text-left transition-colors",
               selected
                 ? "border-primary bg-primary/[0.06] ring-1 ring-primary/20 dark:bg-primary/10"
                 : "border-border bg-card hover:bg-muted/50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
@@ -129,10 +159,6 @@ export function FileCard({
             </button>
             <button
               type="button"
-              onClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onSelectNode(item.id, event)
-              }}
               onDoubleClick={(event: MouseEvent) => {
                 event.stopPropagation()
                 onOpenNode(item)
@@ -147,7 +173,7 @@ export function FileCard({
         </ContextMenuTrigger>
         <ItemContextMenu
           item={item}
-          ids={getContextIds(item.id)}
+          getIds={() => getContextIds(item.id)}
           onOpenNode={onOpenNode}
           onRenameRequest={onRenameRequest}
           onMoveRequest={onMoveRequest}
@@ -165,8 +191,17 @@ export function FileCard({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={() => onPrepareContext(item.id)}>
+      <ContextMenuTrigger
+        onContextMenu={(event) => {
+          event.stopPropagation()
+          onPrepareContext(item.id)
+        }}
+      >
         <div
+          ref={previewHostRef}
+          data-file-card
+          data-file-card-id={item.id}
+          data-ripple
           className={cn(
             "group relative flex aspect-square w-full flex-col overflow-hidden rounded-xl border transition-colors",
             selected
@@ -176,17 +211,13 @@ export function FileCard({
         >
           <button
             type="button"
-            onClick={(event: MouseEvent) => {
-              event.stopPropagation()
-              onSelectNode(item.id, event)
-            }}
             onDoubleClick={(event: MouseEvent) => {
               event.stopPropagation()
               onOpenNode(item)
             }}
             className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-muted-foreground/5"
           >
-            {hasPreviewImage && !imageFailed ? (
+            {previewActive && hasPreviewImage && !imageFailed ? (
               <>
                 {!imageLoaded && <Skeleton className="absolute inset-0 h-full w-full" />}
                 <img
@@ -194,7 +225,7 @@ export function FileCard({
                   srcSet={item.backendId && item.mediaType === "image" ? `${buildPreviewImageUrl(item.backendId, "thumbnail", item.updatedAt)} 320w, ${buildPreviewImageUrl(item.backendId, "thumbnail_2x", item.updatedAt)} 640w` : undefined}
                   sizes="(max-width: 768px) 50vw, 240px"
                   alt={item.name}
-                  className={cn("h-full w-full object-cover transition-opacity duration-300", imageLoaded ? "opacity-100" : "opacity-0")}
+                  className={cn("h-full w-full object-cover transition-opacity duration-150", imageLoaded ? "opacity-100" : "opacity-0")}
                   loading="lazy"
                   decoding="async"
                   fetchPriority="low"
@@ -203,19 +234,19 @@ export function FileCard({
                   onError={() => setImageFailed(true)}
                 />
               </>
-            ) : hasThumbnail && isPdf && item.backendId ? (
+            ) : previewActive && isPdf && item.backendId ? (
               <PdfCardPreview
                 nodeId={item.backendId}
                 version={item.updatedAt}
                 fallback={<FileGlyph item={item} size={64} />}
               />
-            ) : hasThumbnail && isOffice && item.backendId ? (
+            ) : previewActive && isOffice && item.backendId ? (
               <OfficeCardPreview
                 nodeId={item.backendId}
                 version={item.updatedAt}
                 fallback={<FileGlyph item={item} size={64} />}
               />
-            ) : hasThumbnail && item.mediaType === "video" && item.backendId ? (
+            ) : previewActive && item.mediaType === "video" && item.backendId ? (
               <>
                 {!videoFrameReady ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
                 <video
@@ -223,7 +254,7 @@ export function FileCard({
                   muted
                   playsInline
                   preload="metadata"
-                  className={cn("h-full w-full object-cover transition-opacity duration-300", videoFrameReady ? "opacity-100" : "opacity-0")}
+                  className={cn("h-full w-full object-cover transition-opacity duration-150", videoFrameReady ? "opacity-100" : "opacity-0")}
                   onLoadedMetadata={(event) => {
                     const video = event.currentTarget
                     video.currentTime = Math.min(Math.max(video.duration * 0.1, 0.5), 5)
@@ -232,7 +263,7 @@ export function FileCard({
                   aria-label={`${item.name} 视频封面`}
                 />
               </>
-            ) : hasThumbnail && isText ? (
+            ) : previewActive && isText ? (
               <div className="absolute inset-0 overflow-hidden bg-background p-3">
                 {textPreviewLoading ? <Skeleton className="absolute inset-0 h-full w-full" /> : null}
                 <pre className="pointer-events-none h-full select-none overflow-hidden whitespace-pre-wrap break-words text-left font-mono text-[10px] leading-[1.55] text-foreground">
@@ -269,33 +300,33 @@ export function FileCard({
               <span className={cn("transition-opacity", selected ? "opacity-0" : "opacity-100 group-hover:opacity-0")}><FileGlyph item={item} /></span>
               <span className={cn(
                 "absolute inset-0 m-auto flex size-5 items-center justify-center rounded-full border-2 transition-opacity",
-                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 text-transparent opacity-0 group-hover:opacity-100"
+                selected ? "border-primary bg-primary text-primary-foreground opacity-100" : "border-muted-foreground/55 bg-background text-transparent opacity-0 group-hover:opacity-100"
               )}>
                 <IconCheck size={12} stroke={2.5} />
               </span>
             </button>
-            <button
-              type="button"
-              onClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onSelectNode(item.id, event)
-              }}
-              onDoubleClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onOpenNode(item)
-              }}
-              className="min-w-0 flex-1 text-left"
-            >
-              <div className="truncate text-sm font-medium text-foreground" title={item.name}>
-                {truncateFilename(item.name, 20)}
-              </div>
-            </button>
+            {isEditing ? (
+              <InlineNameEditor edit={inlineEdit} originalName={inlineEdit.mode === "rename" ? item.name : undefined} />
+            ) : (
+              <button
+                type="button"
+                onDoubleClick={(event: MouseEvent) => {
+                  event.stopPropagation()
+                  onOpenNode(item)
+                }}
+                className="min-w-0 flex-1 text-left"
+              >
+                <div className="truncate text-sm font-medium text-foreground" title={item.name}>
+                  {truncateFilename(item.name, 20)}
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </ContextMenuTrigger>
       <ItemContextMenu
         item={item}
-        ids={getContextIds(item.id)}
+        getIds={() => getContextIds(item.id)}
         onOpenNode={onOpenNode}
         onRenameRequest={onRenameRequest}
         onMoveRequest={onMoveRequest}

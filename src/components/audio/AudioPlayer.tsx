@@ -15,6 +15,7 @@ import {
 } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
+import { PreviewSkeleton } from "@/components/file-area/preview/PreviewSkeleton"
 import { previewSourceUrls } from "@/lib/preview-assets"
 import { cn } from "@/lib/utils"
 
@@ -472,20 +473,17 @@ export function AudioPlayer({
         </div>
       ) : null}
       {loading && manifest?.status !== "processing" && !failed ? (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
-          <IconLoader2 size={28} className="animate-spin text-primary" />
-        </div>
+        <PreviewSkeleton kind="audio" compact={compact} className="pointer-events-none absolute inset-0 z-10" />
       ) : null}
     </div>
   )
 
   if (!manifest) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-        <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        正在读取音频信息
+      <>
+        <PreviewSkeleton kind="audio" compact={compact} />
         {audioElement}
-      </div>
+      </>
     )
   }
 

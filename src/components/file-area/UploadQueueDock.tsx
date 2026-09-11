@@ -5,12 +5,15 @@ import {
   CircleAlert,
   ListX,
   LoaderCircle,
+  Pause,
+  Play,
   Plus,
   RefreshCcw,
   Upload,
   X,
 } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import type { FileNode, UploadQueueItem } from "@/lib/models"
@@ -21,10 +24,14 @@ import { FILE_LIMIT } from "@/lib/upload/pool"
 function buildQueueFile(fileName: string): FileNode {
   return {
     id: `queue-${fileName}`,
+    backendId: null,
     bucketId: "queue",
+    mountBackendId: 0,
     parentId: null,
+    parentBackendId: null,
     kind: "file",
     name: fileName,
+    size: 0,
     ext: fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() : undefined,
     updatedAt: "",
   }
@@ -43,6 +50,7 @@ function statusOf(item: UploadQueueItem) {
   if (item.status === "canceled") return "已取消"
   if (item.status === "completed") return "上传完成"
   if (item.status === "processing") return "正在完成文件处理"
+  if (item.status === "paused") return item.requiresFileSelection ? "请选择原文件继续" : "已暂停"
   if (item.status === "preparing") return item.speedText || "正在准备"
   if (item.status === "uploading") return item.speedText || "正在上传"
   return "等待上传"
@@ -52,12 +60,14 @@ function statusIcon(item: UploadQueueItem) {
   if (item.status === "completed") return <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
   if (item.status === "failed") return <CircleAlert className="size-4 text-destructive" />
   if (item.status === "canceled") return <X className="size-4 text-muted-foreground" />
+  if (item.status === "paused") return <Pause className="size-4 text-muted-foreground" />
   if (["preparing", "uploading", "processing"].includes(item.status)) return <LoaderCircle className="size-4 animate-spin text-primary" />
   return <Upload className="size-4 text-muted-foreground" />
 }
 
 function getSummary(items: UploadQueueItem[]) {
-  const active = items.filter((item) => !isTerminal(item.status)).length
+  const active = items.filter((item) => ["pending", "preparing", "uploading", "processing"].includes(item.status)).length
+  const paused = items.filter((item) => item.status === "paused").length
   const failed = items.filter((item) => item.status === "failed").length
   const completed = items.filter((item) => item.status === "completed").length
   const total = items.reduce((sum, item) => sum + Math.max(item.totalBytes || item.fileSize || 0, 0), 0)
@@ -67,7 +77,7 @@ function getSummary(items: UploadQueueItem[]) {
   }, 0)
   const fallback = items.length ? items.reduce((sum, item) => sum + progressOf(item), 0) / items.length : 0
   const progress = Math.max(0, Math.min(100, total > 0 ? (loaded / total) * 100 : fallback))
-  return { active, failed, completed, total, loaded, progress }
+  return { active, paused, failed, completed, total, loaded, progress }
 }
 
 const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-35"
@@ -81,6 +91,8 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
     uploadQueueOpen,
     setUploadQueueOpen,
     retryUpload,
+    pauseUpload,
+    resumeUpload,
     removeUpload,
     clearCompletedUploads,
     requestUpload,
@@ -103,7 +115,7 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{summary.active ? "正在上传" : "上传任务"}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              {summary.active ? `${summary.active} 项进行中` : summary.failed ? `${summary.failed} 项失败` : `${summary.completed} 项已完成`}
+              {summary.active ? `${summary.active} 项进行中` : summary.failed ? `${summary.failed} 项失败` : summary.paused ? `${summary.paused} 项已暂停` : `${summary.completed} 项已完成`}
             </span>
           </span>
           <span className="text-sm font-medium tabular-nums">{Math.round(summary.progress)}%</span>
@@ -126,7 +138,7 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">上传任务</h2>
           <p className="truncate text-xs text-muted-foreground" aria-live="polite">
-            {summary.active ? `${summary.active} 项进行中（最多 ${FILE_LIMIT} 项）` : summary.failed ? `${summary.failed} 项失败` : uploadQueue.length ? "全部任务已结束" : "暂无任务"}
+            {summary.active ? `${summary.active} 项进行中（最多 ${FILE_LIMIT} 项）` : summary.failed ? `${summary.failed} 项失败` : summary.paused ? `${summary.paused} 项已暂停` : uploadQueue.length ? "全部任务已结束" : "暂无任务"}
             {summary.total > 0 ? ` · ${formatBytes(summary.loaded)} / ${formatBytes(summary.total)}` : ""}
           </p>
         </div>
@@ -172,8 +184,30 @@ export function UploadQueueDock({ parentId }: { parentId: string | null }) {
                 </div>
                 <span className="w-11 shrink-0 text-right text-xs font-medium tabular-nums text-muted-foreground">{Math.round(progress)}%</span>
                 <div className="flex w-8 shrink-0 justify-end">
-                  {item.status === "failed" ? (
+                  {item.status === "paused" ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => resumeUpload(item.id)}
+                      aria-label={`${item.requiresFileSelection ? "选择原文件并继续" : "继续上传"} ${item.fileName}`}
+                      title={item.requiresFileSelection ? "选择原文件并继续" : "继续上传"}
+                    >
+                      <Play />
+                    </Button>
+                  ) : item.status === "failed" ? (
                     <button className={iconButton} type="button" onClick={() => retryUpload(item.id)} aria-label={`重试上传 ${item.fileName}`} title="重试"><RefreshCcw className="size-4" /></button>
+                  ) : ["pending", "preparing", "uploading"].includes(item.status) ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => pauseUpload(item.id)}
+                      aria-label={`暂停上传 ${item.fileName}`}
+                      title="暂停"
+                    >
+                      <Pause />
+                    </Button>
                   ) : item.status === "processing" ? (
                     <span className="size-8" aria-hidden="true" />
                   ) : (

@@ -1,6 +1,5 @@
 import * as React from "react"
-import { IconCopy } from "@tabler/icons-react"
-import { KeyRound, Loader2 } from "lucide-react"
+import { Check, Copy, Loader2, LockKeyhole, ScanFace, ShieldOff, X } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner"
 
@@ -243,6 +242,7 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">正在等待通行密钥验证...</p>
                 <Button variant="outline" size="sm" onClick={() => setIsLoading(false)} disabled={!isLoading}>
+                  <X data-icon="inline-start" />
                   取消并使用密码验证
                 </Button>
               </div>
@@ -278,6 +278,11 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
                   </Field>
                 </FieldGroup>
                 <Button onClick={handlePasswordVerify} disabled={isLoading || !password.trim()}>
+                  {isLoading ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <LockKeyhole data-icon="inline-start" />
+                  )}
                   {isLoading ? "验证中..." : "验证密码"}
                 </Button>
                 {hasPasskeys ? (
@@ -289,7 +294,7 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
                       <span className="relative bg-background px-2 text-xs text-muted-foreground">或者</span>
                     </div>
                     <Button variant="outline" onClick={() => void tryPasskeyAuth()} disabled={isLoading}>
-                      <KeyRound data-icon="inline-start" />
+                      <ScanFace data-icon="inline-start" />
                       使用通行密钥验证
                     </Button>
                   </div>
@@ -322,6 +327,11 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
               </Field>
             </FieldGroup>
             <Button onClick={handleConfirmDisable} disabled={isLoading || otpCode.length !== 6}>
+              {isLoading ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <ShieldOff data-icon="inline-start" />
+              )}
               {isLoading ? "关闭中..." : "关闭两步验证"}
             </Button>
           </div>
@@ -348,7 +358,7 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
                       }
                     }}
                   >
-                    <IconCopy size={16} />
+                    <Copy size={16} />
                   </Button>
                 </div>
               </div>
@@ -375,6 +385,11 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
                   </Field>
                 </FieldGroup>
                 <Button onClick={handleConfirmSetup} disabled={isLoading || otpCode.length !== 6}>
+                  {isLoading ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <Check data-icon="inline-start" />
+                  )}
                   {isLoading ? "确认中..." : "确认绑定"}
                 </Button>
               </div>
@@ -396,10 +411,13 @@ export function TwoFactorDialog({ open, onOpenChange, mode, token, userEmail, ha
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={handleCopyBackupCodes}>
-                <IconCopy data-icon="inline-start" />
+                <Copy data-icon="inline-start" />
                 复制备份码
               </Button>
-              <Button onClick={handleFinish}>完成</Button>
+              <Button onClick={handleFinish}>
+                <Check data-icon="inline-start" />
+                完成
+              </Button>
             </DialogFooter>
           </div>
         ) : null}

@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react"
+import { lazy, Suspense, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { IconFileText, IconFolderPlus, IconFolderUp, IconMarkdown, IconPlus, IconSettings, IconUpload } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { CreateFileDialog, CreateFolderDialog, type NewTextFileType } from "@/components/file-area"
+import type { NewTextFileType } from "@/components/file-area/CreateFileDialog"
+import { requestInlineFolderCreate } from "@/lib/file-area-events"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -16,13 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+const CreateFileDialog = lazy(() => import("@/components/file-area/CreateFileDialog").then((module) => ({ default: module.CreateFileDialog })))
+
 export function CreateMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { createFile, createFolder, getFolderPathId } = useAppState()
+  const { createFile, getFolderPathId } = useAppState()
   const { requestUpload, requestFolderUpload } = useUploadState()
-  const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [createFileType, setCreateFileType] = useState<NewTextFileType | null>(null)
 
   const currentFolderId = useMemo(() => {
@@ -34,15 +36,13 @@ export function CreateMenu() {
     return getFolderPathId(folder)
   }, [getFolderPathId, location.pathname, location.search])
 
-  const openCreateFolderDialog = () => {
-    setCreateFolderOpen(true)
-  }
-
-  const submitCreateFolder = async (name: string) => {
-    const created = await createFolder(currentFolderId, name)
-    if (created) {
-      toast.success("文件夹创建成功")
+  const openInlineFolderEditor = () => {
+    if (location.pathname.startsWith("/app")) {
+      requestInlineFolderCreate(currentFolderId)
+      return
     }
+    navigate("/app")
+    window.setTimeout(() => requestInlineFolderCreate(currentFolderId), 0)
   }
 
   const submitCreateFile = async (name: string) => {
@@ -59,7 +59,7 @@ export function CreateMenu() {
           {!isMobile ? "新建" : null}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-52 rounded-xl">
-          <DropdownMenuItem onClick={openCreateFolderDialog}>
+          <DropdownMenuItem onClick={openInlineFolderEditor}>
             <IconFolderPlus />
             新建文件夹
           </DropdownMenuItem>
@@ -88,25 +88,18 @@ export function CreateMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateFolderDialog
-        open={createFolderOpen}
-        onOpenChange={setCreateFolderOpen}
-        title="新建文件夹"
-        description="创建一个新文件夹来整理文件。"
-        defaultName="新建文件夹"
-        locationLabel="当前文件夹"
-        onSubmit={(name) => void submitCreateFolder(name)}
-      />
-      {createFileType ? (
-        <CreateFileDialog
-          open
-          fileType={createFileType}
-          onOpenChange={(open) => {
-            if (!open) setCreateFileType(null)
-          }}
-          onSubmit={submitCreateFile}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {createFileType ? (
+          <CreateFileDialog
+            open
+            fileType={createFileType}
+            onOpenChange={(open) => {
+              if (!open) setCreateFileType(null)
+            }}
+            onSubmit={submitCreateFile}
+          />
+        ) : null}
+      </Suspense>
     </>
   )
 }

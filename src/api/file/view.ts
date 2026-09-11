@@ -1,6 +1,10 @@
 import { requestJson } from "@/api/client"
 import type {
   OfficeCardPreviewData,
+  ExplorerNode,
+  ArchiveEntryPage,
+  PdfAnnotation,
+  PdfAnnotationDocument,
   PreviewManifest,
 } from "@/api/file/type"
 
@@ -145,6 +149,38 @@ export function saveTextPreview(nodeId: number, content: string, version: string
     method: "PUT",
     headers: { "If-Match": `"${version}"` },
     body: { content, encoding: "utf-8" },
+  })
+}
+
+export function getArchiveEntries(nodeId: number, offset: number, limit = 200) {
+  const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  return requestJson<ArchiveEntryPage>(`/explorer/preview/${nodeId}/archive/entries?${query.toString()}`)
+}
+
+export function getPdfAnnotations(nodeId: number, signal?: AbortSignal) {
+  return requestJson<PdfAnnotationDocument>(`/explorer/preview/${nodeId}/annotations`, { signal })
+}
+
+export function savePdfAnnotations(
+  nodeId: number,
+  sourceVersion: string,
+  revision: number,
+  annotations: PdfAnnotation[]
+) {
+  return requestJson<PdfAnnotationDocument>(`/explorer/preview/${nodeId}/annotations`, {
+    method: "PUT",
+    headers: { "If-Match": `"${revision}"` },
+    body: { source_version: sourceVersion, annotations },
+  })
+}
+
+export function savePreviewImageAs(nodeId: number, file: Blob, filename: string) {
+  const body = new FormData()
+  body.append("name", filename)
+  body.append("file", file, filename)
+  return requestJson<ExplorerNode>(`/explorer/preview/${nodeId}/image/save-as`, {
+    method: "POST",
+    body,
   })
 }
 

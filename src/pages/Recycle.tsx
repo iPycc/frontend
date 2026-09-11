@@ -35,17 +35,12 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
 import type { FileNode, ViewMode } from "@/lib/models"
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/datetime"
 
 const RECYCLE_VIEW_KEY = "cloudrave.recycle.view"
 
 function initialViewMode(): ViewMode {
   return window.localStorage.getItem(RECYCLE_VIEW_KEY) === "grid" ? "grid" : "list"
-}
-
-function deletedAtLabel(value?: string) {
-  if (!value) return "未知"
-  const timestamp = new Date(value)
-  return Number.isNaN(timestamp.getTime()) ? value : timestamp.toLocaleString()
 }
 
 export function Recycle() {
@@ -57,6 +52,7 @@ export function Recycle() {
     restoreNodes,
     permanentlyDeleteNodes,
     formatBytes,
+    settings,
   } = useAppState()
   const items = getRecycleNodes()
   const [viewMode, setViewModeState] = React.useState<ViewMode>(initialViewMode)
@@ -192,6 +188,7 @@ export function Recycle() {
                 selectedIds={selectedIds}
                 busy={Boolean(busyAction)}
                 formatBytes={formatBytes}
+                timezone={settings.timezone}
                 onToggle={toggleSelected}
                 onRestore={(item) => void restore([item.id])}
                 onDelete={(item) => setPendingDeleteIds([item.id])}
@@ -202,6 +199,7 @@ export function Recycle() {
                 selectedIds={selectedIds}
                 busy={Boolean(busyAction)}
                 formatBytes={formatBytes}
+                timezone={settings.timezone}
                 onToggle={toggleSelected}
                 onRestore={(item) => void restore([item.id])}
                 onDelete={(item) => setPendingDeleteIds([item.id])}
@@ -270,6 +268,7 @@ function RecycleGrid({
   selectedIds,
   busy,
   formatBytes,
+  timezone,
   onToggle,
   onRestore,
   onDelete,
@@ -297,7 +296,7 @@ function RecycleGrid({
                   {item.kind === "folder" ? "文件夹" : item.ext?.toUpperCase() || "文件"} · {formatBytes(item.size)}
                 </p>
                 <p className="mt-1 truncate text-xs text-muted-foreground">
-                  删除于 {deletedAtLabel(item.deletedAt)}
+                  删除于 {formatDateTime(item.deletedAt, timezone)}
                 </p>
               </div>
             </div>
@@ -323,6 +322,7 @@ function RecycleList({
   selectedIds,
   busy,
   formatBytes,
+  timezone,
   onToggle,
   onRestore,
   onDelete,
@@ -357,7 +357,7 @@ function RecycleList({
               </TableCell>
               <TableCell>{item.kind === "folder" ? "文件夹" : item.ext?.toUpperCase() || "文件"}</TableCell>
               <TableCell>{formatBytes(item.size)}</TableCell>
-              <TableCell>{deletedAtLabel(item.deletedAt)}</TableCell>
+              <TableCell>{formatDateTime(item.deletedAt, timezone)}</TableCell>
               <TableCell>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" disabled={busy} onClick={() => onRestore(item)}>
@@ -383,6 +383,7 @@ type RecycleItemsProps = {
   selectedIds: string[]
   busy: boolean
   formatBytes: (bytes: number) => string
+  timezone: string
   onToggle: (id: string) => void
   onRestore: (item: FileNode) => void
   onDelete: (item: FileNode) => void

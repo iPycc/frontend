@@ -41,6 +41,15 @@ export default defineConfig(({mode}) => {
                 return 'ui';
               }
             }
+
+            const normalizedId = id.replace(/\\/g, '/');
+            if (
+              normalizedId.includes('/src/pages/AppFiles.tsx') ||
+              normalizedId.includes('/src/components/toolbar/') ||
+              normalizedId.includes('/src/lib/file-view-preferences.ts')
+            ) {
+              return 'files-route';
+            }
           },
         },
       },

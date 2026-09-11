@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -15,13 +15,10 @@ import {
 } from "@tabler/icons-react"
 
 import { ApiError } from "@/api/client"
-import type { PreviewManifest } from "@/api/files"
 import {
-  buildSharedCoverUrl,
   buildSharedDownloadUrl,
-  buildSharedSelectionDownloadUrl,
   buildSharedPreviewUrl,
-  getSharedPreviewManifest,
+  buildSharedSelectionDownloadUrl,
   getShareInfo,
   listSharedNodes,
   recordSharedDirectoryDownload,
@@ -30,8 +27,8 @@ import {
   type ShareNodeInfo,
 } from "@/api/share"
 import { listShared, mountShared } from "@/api/shared"
-import { PreviewRenderer } from "@/components/file-area/preview/PreviewRenderer"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
+import { SharedFilePreviewModal } from "@/components/share/SharedFilePreviewModal"
 import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 import { DownloadMethodDialog } from "@/components/download/DownloadMethodDialog"
 import { TransferManager } from "@/components/transfer"
@@ -41,17 +38,15 @@ import { Input } from "@/components/ui/input"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { useAppState } from "@/state/app"
-import {
-  buildSharedPreviewManifest,
-  sharedAudioExtensions,
-  sharedExtensionOf,
-} from "@/lib/shared-preview"
 import { cn } from "@/lib/utils"
+import { parseDateTime } from "@/lib/datetime"
 import { ShareNotFound } from "./ShareNotFound"
 
 function formatExpiry(value?: string | null) {
   if (!value) return "永久有效"
-  const diff = new Date(value).getTime() - Date.now()
+  const expiry = parseDateTime(value)
+  if (!expiry) return "未知"
+  const diff = expiry.getTime() - Date.now()
   if (diff < 0) return "已过期"
   const days = Math.ceil(diff / 86_400_000)
   return days <= 1 ? "今天过期" : `${days} 天后过期`
@@ -85,16 +80,8 @@ export function ShareDetail() {
   const [verifyingPassword, setVerifyingPassword] = useState(false)
   const [mounting, setMounting] = useState(false)
   const [mountedId, setMountedId] = useState<number | null>(null)
-  const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number } | null>(null)
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
 
   usePageTitle(info ? `${info.owner_name} 的分享` : "分享详情")
-
-  useEffect(() => {
-    const updateViewport = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
-    window.addEventListener("resize", updateViewport)
-    return () => window.removeEventListener("resize", updateViewport)
-  }, [])
 
   const applyInfo = (data: ShareNodeInfo) => {
     setInfo(data)
@@ -147,92 +134,10 @@ export function ShareDetail() {
   }, [isAuthenticated, slug])
 
   const requiresPassword = info?.access === "password"
-  const expired = Boolean(info?.expires_at && new Date(info.expires_at) <= new Date())
+  const expired = Boolean(info?.expires_at && (parseDateTime(info.expires_at)?.getTime() ?? Infinity) <= Date.now())
   const reachedDownloadLimit = Boolean(info?.max_downloads !== null && info && info.download_count >= (info.max_downloads ?? Infinity))
   const canAccess = Boolean(info && !expired && !reachedDownloadLimit && (!requiresPassword || accessToken))
   const isOwnShare = Boolean(info && auth.session?.user.id === info.owner_uid)
-  const previewSource = slug && selected ? buildSharedPreviewUrl(slug, accessToken, selected.id) : ""
-  const coverSource = slug && selected && selected.type === "file" && sharedAudioExtensions.has(sharedExtensionOf(selected.name))
-    ? buildSharedCoverUrl(slug, accessToken, selected.id)
-    : undefined
-  const fallbackManifest = useMemo(
-    () => info && selected?.type === "file" && canAccess
-      ? buildSharedPreviewManifest({
-          node: selected,
-          source: previewSource,
-          version: `share-${info.share_id}-${selected.id}`,
-          cover: coverSource,
-        })
-      : null,
-    [canAccess, coverSource, info, previewSource, selected]
-  )
-  const previewManifestKey = slug && selected
-    ? `${slug}:${selected.id}:${accessToken ?? "public"}`
-    : null
-  const [serverPreview, setServerPreview] = useState<{
-    key: string
-    manifest: PreviewManifest
-  } | null>(null)
-
-  useEffect(() => {
-    if (!slug || !selected || selected.type !== "file" || !canAccess) {
-      setServerPreview(null)
-      return
-    }
-    const controller = new AbortController()
-    const requestKey = `${slug}:${selected.id}:${accessToken ?? "public"}`
-    void getSharedPreviewManifest(slug, accessToken, selected.id, controller.signal)
-      .then((nextManifest) => {
-        if (!controller.signal.aborted) {
-          setServerPreview({ key: requestKey, manifest: nextManifest })
-        }
-      })
-      .catch(() => {
-        // The source-only manifest keeps common formats usable on older servers.
-      })
-    return () => controller.abort()
-  }, [accessToken, canAccess, selected, slug])
-
-  const manifest = serverPreview?.key === previewManifestKey
-    ? serverPreview.manifest
-    : fallbackManifest
-
-  useEffect(() => {
-    setMediaDimensions(null)
-    if (!manifest || (manifest.kind !== "image" && manifest.kind !== "video")) return
-    const metadataWidth = typeof manifest.metadata.width === "number" ? manifest.metadata.width : 0
-    const metadataHeight = typeof manifest.metadata.height === "number" ? manifest.metadata.height : 0
-    if (metadataWidth > 0 && metadataHeight > 0) {
-      setMediaDimensions({ width: metadataWidth, height: metadataHeight })
-      return
-    }
-    if (manifest.kind === "image") {
-      const image = new Image()
-      image.onload = () => image.naturalWidth && image.naturalHeight && setMediaDimensions({ width: image.naturalWidth, height: image.naturalHeight })
-      image.src = manifest.assets.source.url
-      return () => { image.onload = null }
-    }
-    const video = document.createElement("video")
-    video.preload = "metadata"
-    video.onloadedmetadata = () => video.videoWidth && video.videoHeight && setMediaDimensions({ width: video.videoWidth, height: video.videoHeight })
-    video.src = manifest.assets.source.url
-    return () => { video.onloadedmetadata = null; video.removeAttribute("src"); video.load() }
-  }, [manifest])
-
-  const adaptiveMedia = manifest?.kind === "image" || manifest?.kind === "video"
-  const mediaRatio = mediaDimensions ? mediaDimensions.width / mediaDimensions.height : null
-  const shareOuterWidth = Math.max(280, Math.min(1152, viewport.width - 32))
-  const shareAsideSpace = viewport.width >= 1024 ? 308 : 0
-  const shareAvailableWidth = Math.max(280, shareOuterWidth - shareAsideSpace)
-  const shareToolbarHeight = manifest?.kind === "image" ? 48 : 0
-  const shareStageMaxHeight = Math.max(240, viewport.height * 0.7 - shareToolbarHeight)
-  const shareMediaWidth = mediaDimensions && mediaRatio
-    ? Math.min(mediaDimensions.width, shareAvailableWidth, shareStageMaxHeight * mediaRatio)
-    : null
-  const shareMediaHeight = shareMediaWidth && mediaRatio
-    ? shareMediaWidth / mediaRatio + shareToolbarHeight
-    : null
-
   const verifyPassword = async () => {
     if (!slug || !password.trim() || verifyingPassword) {
       if (!password.trim()) toast.error("请输入访问密码")
@@ -378,6 +283,16 @@ export function ShareDetail() {
 
   const checkedNodes = nodes.filter((node) => checkedIds.includes(node.id))
   const allVisibleChecked = nodes.length > 0 && checkedIds.length === nodes.length
+  const previewableNodes = nodes.filter((node) => node.type === "file")
+  const previewIndex = selected
+    ? previewableNodes.findIndex((node) => node.id === selected.id)
+    : -1
+
+  const openAdjacentPreview = (offset: number) => {
+    if (previewIndex < 0 || previewableNodes.length < 2) return
+    const nextIndex = (previewIndex + offset + previewableNodes.length) % previewableNodes.length
+    setSelected(previewableNodes[nextIndex])
+  }
 
   const toggleChecked = (nodeId: number) => {
     setCheckedIds((current) => current.includes(nodeId)
@@ -444,40 +359,7 @@ export function ShareDetail() {
             </div>
           </div>
 
-          {selected && manifest ? (
-            <div className={cn(
-              "items-start gap-5",
-              adaptiveMedia ? "flex flex-col lg:flex-row lg:justify-center" : "grid lg:grid-cols-[minmax(0,1fr)_18rem]"
-            )}>
-              <section
-                className={cn("max-w-full", adaptiveMedia ? "shrink-0" : "min-w-0")}
-                style={adaptiveMedia ? { width: shareMediaWidth ?? Math.min(288, shareOuterWidth) } : undefined}
-              >
-                {adaptiveMedia ? shareMediaWidth && shareMediaHeight ? (
-                  <div
-                    className="overflow-hidden rounded-xl border border-border bg-black"
-                    style={{ width: shareMediaWidth, height: shareMediaHeight }}
-                  >
-                    <PreviewRenderer manifest={manifest} />
-                  </div>
-                ) : (
-                  <div className="flex h-40 w-full items-center justify-center rounded-xl border border-border bg-muted text-sm text-muted-foreground">
-                    正在读取媒体尺寸…
-                  </div>
-                ) : (
-                  <div className="h-[clamp(30rem,65dvh,44rem)] overflow-hidden rounded-xl border border-border bg-background"><PreviewRenderer manifest={manifest} /></div>
-                )}
-              </section>
-              <aside className="w-full shrink-0 rounded-xl border border-border bg-card p-5 lg:w-72">
-                <button type="button" className="mb-4 inline-flex items-center text-sm text-muted-foreground hover:text-foreground" onClick={() => setSelected(null)}><IconChevronLeft size={17} className="mr-1" />返回文件列表</button>
-                <p className="break-words text-base font-semibold">{selected.name}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{sharedExtensionOf(selected.name).toUpperCase() || "文件"} · {formatBytes(selected.size)}</p>
-                <Button className="mt-5 w-full" onClick={() => void downloadNodes([selected])}><IconDownload size={17} className="mr-1.5" />下载</Button>
-                <ShareFacts info={info} requiresPassword={requiresPassword} />
-              </aside>
-            </div>
-          ) : (
-            <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="分享文件列表">
+          <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="分享文件列表">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div className="flex items-center gap-3">
                   <button
@@ -551,10 +433,22 @@ export function ShareDetail() {
                   })}
                 </ul>
               ) : <div className="px-4 py-12 text-center text-sm text-muted-foreground">这个文件夹是空的</div>}
-            </section>
-          )}
+          </section>
         </>
       ) : requiresPassword && !accessToken ? null : <ShareNotFound />}
+      <SharedFilePreviewModal
+        key={slug && selected ? `${slug}:${selected.id}:${accessToken ?? "public"}` : "public-preview-closed"}
+        source={slug ? { type: "public", shareId: slug, accessToken, ownerName: info.owner_name } : null}
+        item={selected}
+        formatBytes={formatBytes}
+        currentIndex={Math.max(0, previewIndex)}
+        totalCount={previewableNodes.length || 1}
+        onClose={() => setSelected(null)}
+        onDownload={() => selected && void downloadNodes([selected])}
+        detailsFooter={<ShareFacts info={info} requiresPassword={requiresPassword} />}
+        onPrev={() => openAdjacentPreview(-1)}
+        onNext={() => openAdjacentPreview(1)}
+      />
       <TransferManager
         downloadTask={fileDownload.task}
         onCancelDownload={fileDownload.cancel}
@@ -576,7 +470,7 @@ export function ShareDetail() {
 
 function ShareFacts({ info, requiresPassword }: { info: ShareNodeInfo; requiresPassword: boolean }) {
   return (
-    <dl className="mt-6 space-y-3 border-t border-border pt-5 text-sm">
+    <dl className="flex flex-col gap-3 text-sm">
       <InfoRow icon={<IconEye size={16} />} label="访问次数" value={`${info.view_count} 次`} />
       <InfoRow icon={<IconDownload size={16} />} label="下载次数" value={`${info.download_count} 次`} />
       <InfoRow icon={<IconClock size={16} />} label="有效期" value={formatExpiry(info.expires_at)} />

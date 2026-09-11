@@ -1,9 +1,9 @@
 import * as React from "react"
-import { IconFileOff, IconFileText, IconLoader2, IconRefresh } from "@tabler/icons-react"
+import { IconFileOff, IconFileText, IconRefresh } from "@tabler/icons-react"
 
 import type { PreviewManifest } from "@/api/files"
-import { AudioPlayer } from "@/components/audio/AudioPlayer"
 import { Button } from "@/components/ui/button"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 const ImagePreview = React.lazy(() => import("./ImagePreview").then((module) => ({ default: module.ImagePreview })))
 const MediaPreview = React.lazy(() => import("./MediaPreview").then((module) => ({ default: module.MediaPreview })))
@@ -11,19 +11,18 @@ const PdfPreview = React.lazy(() => import("./PdfPreview").then((module) => ({ d
 const TextPreview = React.lazy(() => import("./TextPreview").then((module) => ({ default: module.TextPreview })))
 const OfficePreview = React.lazy(() => import("./OfficePreview").then((module) => ({ default: module.OfficePreview })))
 const ArchivePreview = React.lazy(() => import("./ArchivePreview").then((module) => ({ default: module.ArchivePreview })))
-
-function LazyFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-muted-foreground"><IconLoader2 size={20} className="mr-2 animate-spin" />正在加载预览器</div>
-}
+const AudioPlayer = React.lazy(() => import("@/components/audio/AudioPlayer").then((module) => ({ default: module.AudioPlayer })))
 
 export function PreviewRenderer({
   manifest,
   onRetry,
   compactAudio = false,
+  imageToolbarTarget,
 }: {
   manifest: PreviewManifest
   onRetry?: () => void
   compactAudio?: boolean
+  imageToolbarTarget?: HTMLElement | null
 }) {
   if (manifest.status === "failed") {
     return <EmptyState message={manifest.error || "预览生成失败，请下载后查看。"} onRetry={onRetry} />
@@ -34,7 +33,7 @@ export function PreviewRenderer({
 
   const renderer = (() => {
     switch (manifest.kind) {
-      case "image": return <ImagePreview manifest={manifest} />
+      case "image": return <ImagePreview manifest={manifest} toolbarTarget={imageToolbarTarget} />
       case "video": return <MediaPreview manifest={manifest} />
       case "audio": return <AudioPlayer manifest={manifest} compact={compactAudio} />
       case "pdf": return <PdfPreview manifest={manifest} />
@@ -45,7 +44,7 @@ export function PreviewRenderer({
     }
   })()
 
-  return <React.Suspense fallback={<LazyFallback />}>{renderer}</React.Suspense>
+  return <React.Suspense fallback={<PreviewSkeleton kind={manifest.kind} compact={compactAudio} />}>{renderer}</React.Suspense>
 }
 
 function UnknownPreview({ manifest }: { manifest: PreviewManifest }) {
@@ -60,7 +59,7 @@ function UnknownPreview({ manifest }: { manifest: PreviewManifest }) {
       metadata: { ...manifest.metadata, max_bytes: 5 * 1024 * 1024, text_encoding: encoding },
       capabilities: [],
     }
-    return <React.Suspense fallback={<LazyFallback />}><TextPreview manifest={textManifest} /></React.Suspense>
+    return <React.Suspense fallback={<PreviewSkeleton kind="text" />}><TextPreview manifest={textManifest} /></React.Suspense>
   }
 
   const extension = String(manifest.metadata.extension || manifest.name.split(".").pop() || "未知")

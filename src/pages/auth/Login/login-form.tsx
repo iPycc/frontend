@@ -1,12 +1,25 @@
 import * as React from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { ArrowLeft, Loader2, Mail, RectangleEllipsis, ShieldCheck } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  Github,
+  Loader2,
+  LogIn,
+  Mail,
+  RectangleEllipsis,
+  ScanFace,
+  ShieldCheck,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { FilingLink } from "@/components/shared/FilingBar"
 import { ModeToggle } from "@/components/shared/ModeToggle"
 import { useWebsiteSettings } from "@/components/shared/useWebsiteSettings"
+import { getGitHubOAuthStatus, getGoogleOAuthStatus, getQQOAuthStatus } from "@/api/oauth"
+import { GoogleIcon } from "@/components/icons/google-icon"
+import { QQIcon } from "@/components/icons/qq-icon"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -25,6 +38,24 @@ import {
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp"
 import { Logo } from "@/components/ui/logo"
 import { Input } from "@/components/ui/input"
+import {
+  openGitHubOAuthPopup,
+  readGitHubOAuthPopupResult,
+  subscribeGitHubOAuthResults,
+  type GitHubOAuthMessage,
+} from "@/lib/github-oauth-popup"
+import {
+  openGoogleOAuthPopup,
+  readGoogleOAuthPopupResult,
+  subscribeGoogleOAuthResults,
+  type GoogleOAuthMessage,
+} from "@/lib/google-oauth-popup"
+import {
+  openQQOAuthPopup,
+  readQQOAuthPopupResult,
+  subscribeQQOAuthResults,
+  type QQOAuthMessage,
+} from "@/lib/qq-oauth-popup"
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import "@/styles/slide-transition.css"
@@ -34,6 +65,42 @@ type LoginPhase = "initial" | "email" | "password" | "twoFactor"
 function isPasskeyCanceledMessage(message: string | undefined) {
   const normalized = (message || "").trim()
   return normalized === "用户已取消登录"
+}
+
+const GITHUB_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "GitHub 授权已取消。",
+  account_not_found: "关联的 Cloudrave 账号不存在。",
+  account_disabled: "账号已被禁用。",
+  guest_not_supported: "访客账号不能使用 GitHub 登录。",
+  identity_conflict: "该 Cloudrave 账号已关联其他 GitHub 身份。",
+  invalid_state: "登录请求已失效，请重新发起 GitHub 登录。",
+  not_linked: "该 GitHub 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
+  not_configured: "管理员尚未完成 GitHub OAuth 配置。",
+  provider_error: "GitHub 暂时无法完成授权，请稍后再试。",
+}
+
+const GOOGLE_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "Google 授权已取消。",
+  account_not_found: "关联的 Cloudrave 账号不存在。",
+  account_disabled: "账号已被禁用。",
+  guest_not_supported: "访客账号不能使用 Google 登录。",
+  identity_conflict: "该 Cloudrave 账号已关联其他 Google 身份。",
+  invalid_state: "登录请求已失效，请重新发起 Google 登录。",
+  not_linked: "该 Google 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
+  not_configured: "管理员尚未完成 Google OAuth 配置。",
+  provider_error: "Google 暂时无法完成授权，请稍后再试。",
+}
+
+const QQ_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
+  access_denied: "QQ 授权已取消。",
+  account_not_found: "关联的 Cloudrave 账号不存在。",
+  account_disabled: "账号已被禁用。",
+  guest_not_supported: "访客账号不能使用 QQ 登录。",
+  identity_conflict: "该 Cloudrave 账号已关联其他 QQ 身份。",
+  invalid_state: "登录请求已失效，请重新发起 QQ 登录。",
+  not_linked: "该 QQ 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
+  not_configured: "管理员尚未完成 QQ OAuth 配置。",
+  provider_error: "QQ 暂时无法完成授权，请稍后再试。",
 }
 
 export function LoginForm({
@@ -50,7 +117,16 @@ export function LoginForm({
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [twoFactorToken, setTwoFactorToken] = useState<string>("")
-  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey">("password")
+  const [twoFactorMethod, setTwoFactorMethod] = useState<"password" | "passkey" | "github" | "google" | "qq">("password")
+  const [githubOAuthUrl, setGitHubOAuthUrl] = useState<string | null>(null)
+  const [isGitHubOAuthLoading, setIsGitHubOAuthLoading] = useState(true)
+  const [isGitHubLoginLoading, setIsGitHubLoginLoading] = useState(false)
+  const [googleOAuthUrl, setGoogleOAuthUrl] = useState<string | null>(null)
+  const [isGoogleOAuthLoading, setIsGoogleOAuthLoading] = useState(true)
+  const [isGoogleLoginLoading, setIsGoogleLoginLoading] = useState(false)
+  const [qqOAuthUrl, setQQOAuthUrl] = useState<string | null>(null)
+  const [isQQOAuthLoading, setIsQQOAuthLoading] = useState(true)
+  const [isQQLoginLoading, setIsQQLoginLoading] = useState(false)
   const [otpCode, setOtpCode] = useState("")
   const [slideTransition, setSlideTransition] = useState<{
     isAnimating: boolean
@@ -59,6 +135,7 @@ export function LoginForm({
     enteringPhase: LoginPhase
   } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false)
   const [isEnteringApp, setIsEnteringApp] = useState(false)
   const [isLeavingToRegister, setIsLeavingToRegister] = useState(false)
   const [enableHeightTransition, setEnableHeightTransition] = useState(false)
@@ -66,29 +143,176 @@ export function LoginForm({
     state?.fromRegister && state?.initialHeight ? state.initialHeight : "auto"
   )
   const contentRef = useRef<HTMLDivElement>(null)
+  const githubOAuthPopupRef = useRef<Window | null>(null)
+  const googleOAuthPopupRef = useRef<Window | null>(null)
+  const qqOAuthPopupRef = useRef<Window | null>(null)
+  const handledOAuthLoginResultRef = useRef<string | null>(null)
   const hasMeasuredInitialHeight = useRef(false)
+  const isOAuthLoginLoading = isGitHubLoginLoading || isGoogleLoginLoading || isQQLoginLoading
 
   useEffect(() => {
+    const controller = new AbortController()
+    getGitHubOAuthStatus(controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) {
+          setGitHubOAuthUrl(settings.enabled ? settings.authorize_url : null)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGitHubOAuthUrl(null)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsGitHubOAuthLoading(false)
+        }
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getQQOAuthStatus(controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) setQQOAuthUrl(settings.enabled ? settings.authorize_url : null)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setQQOAuthUrl(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsQQOAuthLoading(false)
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getGoogleOAuthStatus(controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) {
+          setGoogleOAuthUrl(settings.enabled ? settings.authorize_url : null)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGoogleOAuthUrl(null)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsGoogleOAuthLoading(false)
+        }
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const oauthError = params.get("oauth_error")
+    const googleOAuthError = params.get("google_oauth_error")
+    const qqOAuthError = params.get("qq_oauth_error")
+    const oauthTwoFactor = params.get("oauth_2fa")
+    const resultKey = oauthTwoFactor
+      ? `2fa:${oauthTwoFactor}`
+      : qqOAuthError
+        ? `qq-error:${qqOAuthError}`
+        : googleOAuthError
+        ? `google-error:${googleOAuthError}`
+        : oauthError
+          ? `github-error:${oauthError}`
+          : null
+
+    if (!resultKey || handledOAuthLoginResultRef.current === resultKey) {
+      return
+    }
+    handledOAuthLoginResultRef.current = resultKey
+
+    if (oauthTwoFactor === "github" || oauthTwoFactor === "google" || oauthTwoFactor === "qq") {
+      setTwoFactorToken("")
+      setTwoFactorMethod(oauthTwoFactor)
+      setOtpCode("")
+      setPhase("twoFactor")
+      navigate("/login", { replace: true })
+      return
+    }
+
+    if (qqOAuthError) {
+      toast.error("QQ 登录失败", {
+        description: QQ_OAUTH_ERROR_DESCRIPTIONS[qqOAuthError] ?? "当前无法完成 QQ 登录。",
+      })
+      navigate("/login", { replace: true })
+      return
+    }
+
+    if (googleOAuthError) {
+      toast.error("Google 登录失败", {
+        description: GOOGLE_OAUTH_ERROR_DESCRIPTIONS[googleOAuthError] ?? "当前无法完成 Google 登录。",
+      })
+      navigate("/login", { replace: true })
+      return
+    }
+
+    if (!oauthError) {
+      navigate("/login", { replace: true })
+      return
+    }
+
+    toast.error("GitHub 登录失败", {
+      description: GITHUB_OAUTH_ERROR_DESCRIPTIONS[oauthError] ?? "当前无法完成 GitHub 登录。",
+    })
+    navigate("/login", { replace: true })
+  }, [location.search, navigate])
+
+  useLayoutEffect(() => {
     if (!contentRef.current || isLeavingToRegister) {
       return
     }
 
-    const height = contentRef.current.offsetHeight
-    if (state?.fromRegister) {
-      requestAnimationFrame(() => {
+    const content = contentRef.current
+    let animationFrame: number | null = null
+
+    const syncContainerHeight = () => {
+      const height = content.offsetHeight
+
+      if (state?.fromRegister && !hasMeasuredInitialHeight.current) {
+        animationFrame = requestAnimationFrame(() => {
+          setContainerHeight(height)
+          setEnableHeightTransition(true)
+          window.history.replaceState({}, document.title)
+        })
+      } else {
         setContainerHeight(height)
-        setEnableHeightTransition(true)
-        window.history.replaceState({}, document.title)
-      })
-      return
+        if (hasMeasuredInitialHeight.current) {
+          setEnableHeightTransition(true)
+        }
+      }
+
+      hasMeasuredInitialHeight.current = true
     }
 
-    setContainerHeight(height)
-    if (hasMeasuredInitialHeight.current) {
-      setEnableHeightTransition(true)
+    syncContainerHeight()
+
+    const resizeObserver = new ResizeObserver(syncContainerHeight)
+    resizeObserver.observe(content)
+
+    return () => {
+      resizeObserver.disconnect()
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame)
+      }
     }
-    hasMeasuredInitialHeight.current = true
-  }, [phase, state?.fromRegister, isLeavingToRegister])
+  }, [
+    githubOAuthUrl,
+    googleOAuthUrl,
+    qqOAuthUrl,
+    isGitHubOAuthLoading,
+    isGoogleOAuthLoading,
+    isQQOAuthLoading,
+    phase,
+    state?.fromRegister,
+    isLeavingToRegister,
+  ])
 
   const handlePhaseChange = (nextPhase: LoginPhase, goingBack = false) => {
     if (phase === nextPhase) {
@@ -106,6 +330,177 @@ export function LoginForm({
       setTimeout(() => setSlideTransition(null), 50)
     }, 300)
   }
+
+  const handleGitHubOAuthResult = React.useCallback((message: GitHubOAuthMessage) => {
+    if (!githubOAuthPopupRef.current) {
+      return
+    }
+
+    githubOAuthPopupRef.current.close()
+    githubOAuthPopupRef.current = null
+    setIsGitHubLoginLoading(false)
+
+    if (message.result === "success") {
+      setIsEnteringApp(true)
+      window.location.assign("/app")
+      return
+    }
+
+    if (message.result === "two_factor") {
+      setTwoFactorToken("")
+      setTwoFactorMethod("github")
+      setOtpCode("")
+      handlePhaseChange("twoFactor")
+      return
+    }
+
+    toast.error("GitHub 登录失败", {
+      description:
+        GITHUB_OAUTH_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 GitHub 登录。",
+    })
+  }, [phase])
+
+  useEffect(() => {
+    return subscribeGitHubOAuthResults(
+      "login",
+      () => githubOAuthPopupRef.current,
+      handleGitHubOAuthResult
+    )
+  }, [handleGitHubOAuthResult])
+
+  useEffect(() => {
+    if (!isGitHubLoginLoading) {
+      return
+    }
+
+    const closeWatcher = window.setInterval(() => {
+      const popup = githubOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        githubOAuthPopupRef.current = null
+        setIsGitHubLoginLoading(false)
+        return
+      }
+
+      const result = readGitHubOAuthPopupResult(popup, "login")
+      if (result) {
+        handleGitHubOAuthResult(result)
+      }
+    }, 250)
+
+    return () => window.clearInterval(closeWatcher)
+  }, [handleGitHubOAuthResult, isGitHubLoginLoading])
+
+  useEffect(() => {
+    return () => githubOAuthPopupRef.current?.close()
+  }, [])
+
+  const handleGoogleOAuthResult = React.useCallback((message: GoogleOAuthMessage) => {
+    if (!googleOAuthPopupRef.current) {
+      return
+    }
+
+    googleOAuthPopupRef.current.close()
+    googleOAuthPopupRef.current = null
+    setIsGoogleLoginLoading(false)
+
+    if (message.result === "success") {
+      setIsEnteringApp(true)
+      window.location.assign("/app")
+      return
+    }
+
+    if (message.result === "two_factor") {
+      setTwoFactorToken("")
+      setTwoFactorMethod("google")
+      setOtpCode("")
+      handlePhaseChange("twoFactor")
+      return
+    }
+
+    toast.error("Google 登录失败", {
+      description:
+        GOOGLE_OAUTH_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 Google 登录。",
+    })
+  }, [phase])
+
+  useEffect(() => {
+    return subscribeGoogleOAuthResults(
+      "login",
+      () => googleOAuthPopupRef.current,
+      handleGoogleOAuthResult
+    )
+  }, [handleGoogleOAuthResult])
+
+  useEffect(() => {
+    if (!isGoogleLoginLoading) {
+      return
+    }
+
+    const closeWatcher = window.setInterval(() => {
+      const popup = googleOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        googleOAuthPopupRef.current = null
+        setIsGoogleLoginLoading(false)
+        return
+      }
+
+      const result = readGoogleOAuthPopupResult(popup, "login")
+      if (result) {
+        handleGoogleOAuthResult(result)
+      }
+    }, 250)
+
+    return () => window.clearInterval(closeWatcher)
+  }, [handleGoogleOAuthResult, isGoogleLoginLoading])
+
+  useEffect(() => {
+    return () => googleOAuthPopupRef.current?.close()
+  }, [])
+
+  const handleQQOAuthResult = React.useCallback((message: QQOAuthMessage) => {
+    if (!qqOAuthPopupRef.current) return
+    qqOAuthPopupRef.current.close()
+    qqOAuthPopupRef.current = null
+    setIsQQLoginLoading(false)
+    if (message.result === "success") {
+      setIsEnteringApp(true)
+      window.location.assign("/app")
+      return
+    }
+    if (message.result === "two_factor") {
+      setTwoFactorToken("")
+      setTwoFactorMethod("qq")
+      setOtpCode("")
+      handlePhaseChange("twoFactor")
+      return
+    }
+    toast.error("QQ 登录失败", {
+      description: QQ_OAUTH_ERROR_DESCRIPTIONS[message.result] ?? "当前无法完成 QQ 登录。",
+    })
+  }, [phase])
+
+  useEffect(() => subscribeQQOAuthResults(
+    "login",
+    () => qqOAuthPopupRef.current,
+    handleQQOAuthResult
+  ), [handleQQOAuthResult])
+
+  useEffect(() => {
+    if (!isQQLoginLoading) return
+    const closeWatcher = window.setInterval(() => {
+      const popup = qqOAuthPopupRef.current
+      if (!popup || popup.closed) {
+        qqOAuthPopupRef.current = null
+        setIsQQLoginLoading(false)
+        return
+      }
+      const result = readQQOAuthPopupResult(popup, "login")
+      if (result) handleQQOAuthResult(result)
+    }, 250)
+    return () => window.clearInterval(closeWatcher)
+  }, [handleQQOAuthResult, isQQLoginLoading])
+
+  useEffect(() => () => qqOAuthPopupRef.current?.close(), [])
 
   const handleEmailSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -181,7 +576,7 @@ export function LoginForm({
 
   const handleBack = () => {
     if (phase === "twoFactor") {
-      if (twoFactorMethod === "passkey") {
+      if (twoFactorMethod === "passkey" || twoFactorMethod === "github" || twoFactorMethod === "google" || twoFactorMethod === "qq") {
         handlePhaseChange("initial", true)
       } else {
         handlePhaseChange("password", true)
@@ -215,11 +610,12 @@ export function LoginForm({
   }
 
   const handlePasskeyLogin = async () => {
-    if (isLoading || isEnteringApp) {
+    if (isLoading || isOAuthLoginLoading || isEnteringApp) {
       return
     }
 
     setIsLoading(true)
+    setIsPasskeyLoading(true)
     try {
       const result = await loginWithPasskey(email || undefined)
       if (result.success) {
@@ -252,8 +648,56 @@ export function LoginForm({
       })
       setIsEnteringApp(false)
     } finally {
+      setIsPasskeyLoading(false)
       setIsLoading(false)
     }
+  }
+
+  const handleGitHubLogin = () => {
+    if (!githubOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) {
+      return
+    }
+
+    const popup = openGitHubOAuthPopup(githubOAuthUrl, "login")
+    if (!popup) {
+      toast.error("无法打开 GitHub 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+
+    githubOAuthPopupRef.current = popup
+    setIsGitHubLoginLoading(true)
+  }
+
+  const handleGoogleLogin = () => {
+    if (!googleOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) {
+      return
+    }
+
+    const popup = openGoogleOAuthPopup(googleOAuthUrl, "login")
+    if (!popup) {
+      toast.error("无法打开 Google 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+
+    googleOAuthPopupRef.current = popup
+    setIsGoogleLoginLoading(true)
+  }
+
+  const handleQQLogin = () => {
+    if (!qqOAuthUrl || isLoading || isOAuthLoginLoading || isEnteringApp) return
+    const popup = openQQOAuthPopup(qqOAuthUrl, "login")
+    if (!popup) {
+      toast.error("无法打开 QQ 授权窗口", {
+        description: "请允许此站点打开弹出式窗口后重试。",
+      })
+      return
+    }
+    qqOAuthPopupRef.current = popup
+    setIsQQLoginLoading(true)
   }
 
   const getTitle = () => {
@@ -348,8 +792,14 @@ export function LoginForm({
                 <div>
                   <FieldGroup>
                     <Field>
-                      <Button variant="outline" type="button" className="w-full" onClick={() => handlePhaseChange("email")}>
-                        <Mail className="size-4" />
+                      <Button
+                        variant="outline"
+                        type="button"
+                        className="w-full"
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
+                        onClick={() => handlePhaseChange("email")}
+                      >
+                        <Mail data-icon="inline-start" />
                         使用邮箱继续
                       </Button>
                     </Field>
@@ -359,13 +809,88 @@ export function LoginForm({
                     </FieldSeparator>
 
                     <Field>
-                      <Button variant="outline" type="button" className="w-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
-                        使用 GitHub 继续
-                      </Button>
-                      <Button variant="outline" type="button" className="w-full" onClick={() => void handlePasskeyLogin()}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01" /><path d="M15 9h.01" /></svg>
-                        使用通行密钥继续
+                      {githubOAuthUrl || isGitHubOAuthLoading ? (
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full"
+                          disabled={isGitHubOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          aria-busy={isGitHubOAuthLoading || isGitHubLoginLoading}
+                          onClick={handleGitHubLogin}
+                        >
+                          {isGitHubOAuthLoading || isGitHubLoginLoading ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <Github data-icon="inline-start" />
+                          )}
+                          {isGitHubOAuthLoading
+                            ? "正在加载 GitHub 登录..."
+                            : isGitHubLoginLoading
+                              ? "等待 GitHub 授权..."
+                              : "使用 GitHub 继续"}
+                        </Button>
+                      ) : null}
+                      {googleOAuthUrl || isGoogleOAuthLoading ? (
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full"
+                          disabled={isGoogleOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          aria-busy={isGoogleOAuthLoading || isGoogleLoginLoading}
+                          onClick={handleGoogleLogin}
+                        >
+                          {isGoogleOAuthLoading || isGoogleLoginLoading ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <GoogleIcon data-icon="inline-start" />
+                          )}
+                          {isGoogleOAuthLoading
+                            ? "正在加载 Google 登录..."
+                            : isGoogleLoginLoading
+                              ? "等待 Google 授权..."
+                              : "使用 Google 继续"}
+                        </Button>
+                      ) : null}
+                      {qqOAuthUrl || isQQOAuthLoading ? (
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full"
+                          disabled={isQQOAuthLoading || isOAuthLoginLoading || isLoading || isEnteringApp || isLeavingToRegister}
+                          aria-busy={isQQOAuthLoading || isQQLoginLoading}
+                          onClick={handleQQLogin}
+                        >
+                          {isQQOAuthLoading || isQQLoginLoading ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <QQIcon data-icon="inline-start" className="text-[#12B7F5]" />
+                          )}
+                          {isQQOAuthLoading
+                            ? "正在加载 QQ 登录..."
+                            : isQQLoginLoading
+                              ? "等待 QQ 授权..."
+                              : "使用 QQ 继续"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="outline"
+                        type="button"
+                        className="w-full"
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
+                        aria-busy={isPasskeyLoading}
+                        onClick={() => void handlePasskeyLogin()}
+                      >
+                        {isPasskeyLoading ? (
+                          <>
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                            通行密钥登录中...
+                          </>
+                        ) : (
+                          <>
+                            <ScanFace data-icon="inline-start" />
+                            使用通行密钥继续
+                          </>
+                        )}
                       </Button>
                     </Field>
                   </FieldGroup>
@@ -395,23 +920,37 @@ export function LoginForm({
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={isLoading || isEnteringApp || isLeavingToRegister}
+                        disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister}
                         className="w-full"
+                        aria-busy={isPasskeyLoading}
                         onClick={() => void handlePasskeyLogin()}
                       >
-                        使用通行密钥登录
+                        {isPasskeyLoading ? (
+                          <>
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                            通行密钥登录中...
+                          </>
+                        ) : (
+                          <>
+                            <ScanFace data-icon="inline-start" />
+                            使用通行密钥登录
+                          </>
+                        )}
                       </Button>
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
-                        {isLoading ? (
+                      <Button type="submit" disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
+                        {isLoading && !isPasskeyLoading ? (
                           <>
-                            <Loader2 className="size-4 animate-spin" />
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
                             处理中...
                           </>
                         ) : (
-                          "下一步"
+                          <>
+                            下一步
+                            <ArrowRight data-icon="inline-end" />
+                          </>
                         )}
                       </Button>
                       <FieldDescription className="text-center">
@@ -464,14 +1003,17 @@ export function LoginForm({
                     </Field>
 
                     <Field>
-                      <Button type="submit" disabled={isLoading || isEnteringApp || isLeavingToRegister} className="w-full">
+                      <Button type="submit" disabled={isLoading || isOAuthLoginLoading || isEnteringApp || isLeavingToRegister} className="w-full">
                         {isLoading ? (
                           <>
                             <Loader2 className="size-4 animate-spin" />
                             登录中...
                           </>
                         ) : (
-                          "登录"
+                          <>
+                            <LogIn data-icon="inline-start" />
+                            登录
+                          </>
                         )}
                       </Button>
                     </Field>
@@ -529,7 +1071,10 @@ export function LoginForm({
                             验证中...
                           </>
                         ) : (
-                          "验证并登录"
+                          <>
+                            <ShieldCheck data-icon="inline-start" />
+                            验证并登录
+                          </>
                         )}
                       </Button>
                     </Field>

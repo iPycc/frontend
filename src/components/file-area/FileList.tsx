@@ -13,18 +13,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { type ItemHandlers } from "./types"
+import { type InlineNameEdit, type ItemHandlers } from "./types"
 import { FileGlyph } from "./FileGlyph"
+import { InlineNameEditor } from "./InlineNameEditor"
 import { ItemContextMenu } from "./ItemContextMenu"
 
 interface FileListProps extends ItemHandlers {
   items: FileNode[]
   selectedIds: string[]
+  inlineEdit?: InlineNameEdit
 }
 
 export function FileList({
   items,
   selectedIds,
+  inlineEdit,
   onSelectNode,
   onPrepareContext,
   onOpenNode,
@@ -47,7 +50,7 @@ export function FileList({
     <Table className="table-fixed">
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="w-14 text-center">图标</TableHead>
+          <TableHead className="w-14 text-center" aria-label="图标" />
           <TableHead>名称</TableHead>
           <TableHead className="w-36">类型</TableHead>
         </TableRow>
@@ -55,16 +58,46 @@ export function FileList({
       <TableBody>
         {items.map((item) => {
           const selected = selectedIds.includes(item.id)
+          const editing = inlineEdit?.itemId === item.id
+
+          if (editing && inlineEdit) {
+            return (
+              <TableRow key={item.id} data-file-card data-file-card-id={item.id}>
+                <TableCell className="w-14 px-3 py-2.5 text-center">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-muted/70">
+                    <FileGlyph item={item} />
+                  </div>
+                </TableCell>
+                <TableCell className="min-w-0 py-2.5">
+                  <InlineNameEditor
+                    edit={inlineEdit}
+                    originalName={inlineEdit.mode === "rename" ? item.name : undefined}
+                    className="max-w-md"
+                  />
+                </TableCell>
+                <TableCell className="w-36 py-2.5 text-sm text-muted-foreground">
+                  {getItemMeta(item)}
+                </TableCell>
+              </TableRow>
+            )
+          }
 
           return (
             <ContextMenu key={item.id}>
               <ContextMenuTrigger
-                onContextMenu={() => onPrepareContext(item.id)}
+                onContextMenu={(event) => {
+                  event.stopPropagation()
+                  onPrepareContext(item.id)
+                }}
                 render={
                   <TableRow
+                    data-file-card
+                    data-file-card-id={item.id}
                     className={cn(
                       "group",
-                      selected && "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/[0.08] dark:bg-primary/10"
+                      selected
+                        ? "bg-primary/[0.06] shadow-[inset_3px_0_0_var(--primary)] hover:bg-primary/[0.08] active:bg-primary/[0.14] dark:bg-primary/10 dark:active:bg-primary/20"
+                        : "active:bg-muted/70 dark:active:bg-white/10"
                     )}
                   >
                     <TableCell className="w-14 px-3 py-2.5 text-center">
@@ -93,10 +126,6 @@ export function FileList({
                     <TableCell className="min-w-0 py-2.5">
                       <button
                         type="button"
-                        onClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onSelectNode(item.id, event)
-                        }}
                         onDoubleClick={(event: MouseEvent) => {
                           event.stopPropagation()
                           onOpenNode(item)
@@ -109,10 +138,6 @@ export function FileList({
                     <TableCell className="w-36 py-2.5">
                       <button
                         type="button"
-                        onClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onSelectNode(item.id, event)
-                        }}
                         onDoubleClick={(event: MouseEvent) => {
                           event.stopPropagation()
                           onOpenNode(item)
@@ -127,7 +152,7 @@ export function FileList({
               />
               <ItemContextMenu
                 item={item}
-                ids={getContextIds(item.id)}
+                getIds={() => getContextIds(item.id)}
                 onOpenNode={onOpenNode}
                 onRenameRequest={onRenameRequest}
                 onMoveRequest={onMoveRequest}

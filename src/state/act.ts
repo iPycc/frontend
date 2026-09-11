@@ -21,7 +21,6 @@ import { useShareActions } from "@/state/act/share"
 import {
   directoryPageKey,
   extractExtension,
-  formatDateTime,
   mapNodeToFileNode,
   removeCachedSubtrees,
   type PageLoadState,
@@ -77,10 +76,14 @@ export function useActions({
       const tempId = `optimistic-folder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const tempNode: FileNode = {
         id: tempId,
+        backendId: null,
         bucketId: bucket.id,
+        mountBackendId: bucket.backendId,
         parentId: uiParentId,
+        parentBackendId: apiParentId ?? null,
         kind: "folder",
         name: trimmedName,
+        size: 0,
         updatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       }
@@ -139,8 +142,11 @@ export function useActions({
       const now = new Date().toISOString()
       const tempNode: FileNode = {
         id: tempId,
+        backendId: null,
         bucketId: bucket.id,
+        mountBackendId: bucket.backendId,
         parentId: uiParentId,
+        parentBackendId: apiParentId ?? null,
         kind: "file",
         name: trimmedName,
         ext: extractExtension(trimmedName),
@@ -268,7 +274,7 @@ export function useActions({
     const session = snapshotRef.current.auth.session
     const backendIds = nodeIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
     if (!session || backendIds.length === 0) {
-      return
+      return false
     }
     const selectedNodes = nodeIds.map(getNodeById).filter(Boolean) as FileNode[]
     const deletingFolder = selectedNodes.some((node) => node.kind === "folder")
@@ -298,7 +304,7 @@ export function useActions({
         nodes: current.nodes.filter((node) => !idsToRemove.has(node.id)),
       }))
     } else {
-      const deletedAt = formatDateTime(new Date().toISOString(), snapshotRef.current.settings.timezone)
+      const deletedAt = new Date().toISOString()
       updateSnapshot((current) => ({
         ...current,
         nodes: current.nodes.map((node) =>
@@ -337,12 +343,14 @@ export function useActions({
       if (!deletingFolder) {
         await Promise.all(affectedBucketIds.map(refreshLoadedCategories))
       }
+      return true
     } catch (error) {
       updateSnapshot((current) => ({
         ...current,
         nodes: previousNodes,
       }))
       toast.error(error instanceof Error ? error.message : "删除失败")
+      return false
     }
   }, [getNodeById, refreshCachedDirectory, refreshLoadedCategories, updateSnapshot])
 

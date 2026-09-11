@@ -1,125 +1,100 @@
+import * as React from "react"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
-import { Boot } from "@/app/boot"
-import { isProtected, ShareGuard } from "@/app/guard"
+import { ShareGuard } from "@/app/guard"
 import { AudioPlayerProvider } from "@/components/audio/AudioPlayerProvider"
 import { ShareLayout } from "@/components/share"
 import { MainLayout } from "@/components/shared/MainLayout"
 import { Toaster } from "@/components/ui/sonner"
-import { useAppState } from "@/state/app"
-import { AppFiles } from "@/pages/AppFiles"
 import { AuthLayout } from "@/pages/AuthLayout"
-import { Buckets } from "@/pages/Buckets"
-import { Discussions } from "@/pages/Discussions"
+import { AppFiles } from "@/pages/AppFiles"
 import { Login } from "@/pages/Login"
-import { Mounts } from "@/pages/Mounts"
-import { Offline } from "@/pages/Offline"
-import { Recycle } from "@/pages/Recycle"
 import { Register } from "@/pages/Register"
-import { ShareDetail } from "@/pages/ShareDetail"
-import { ShareNotFound } from "@/pages/ShareNotFound"
-import { SharedWithMe } from "@/pages/SharedWithMe"
-import { Shares } from "@/pages/Shares"
-import { Store } from "@/pages/Store"
-import { Tasks } from "@/pages/Tasks"
-import { Guests } from "@/pages/admin/Guests"
-import { System } from "@/pages/admin/System"
-import { Users } from "@/pages/admin/Users"
-import {
-  PersonalizationSettingsPage,
-  ProfileSettingsPage,
-  SecuritySettingsPage,
-  SettingsLayout,
-  StorageSettingsPage,
-  WebsiteSettingsPage,
-} from "@/pages/settings"
+import { SettingsLayout } from "@/pages/settings/SettingsLayout"
+import { useAuthState } from "@/state/app"
+
+function lazyNamed<T extends React.ComponentType<any>>(
+  loader: () => Promise<Record<string, T>>,
+  name: string
+) {
+  return React.lazy(async () => ({ default: (await loader())[name] }))
+}
+
+const Buckets = lazyNamed(() => import("@/pages/Buckets"), "Buckets")
+const Discussions = lazyNamed(() => import("@/pages/Discussions"), "Discussions")
+const Mounts = lazyNamed(() => import("@/pages/Mounts"), "Mounts")
+const Offline = lazyNamed(() => import("@/pages/Offline"), "Offline")
+const Recycle = lazyNamed(() => import("@/pages/Recycle"), "Recycle")
+const ShareDetail = lazyNamed(() => import("@/pages/ShareDetail"), "ShareDetail")
+const ShareNotFound = lazyNamed(() => import("@/pages/ShareNotFound"), "ShareNotFound")
+const SharedWithMe = lazyNamed(() => import("@/pages/SharedWithMe"), "SharedWithMe")
+const Shares = lazyNamed(() => import("@/pages/Shares"), "Shares")
+const Store = lazyNamed(() => import("@/pages/Store"), "Store")
+const Tasks = lazyNamed(() => import("@/pages/Tasks"), "Tasks")
+const Guests = lazyNamed(() => import("@/pages/admin/Guests"), "Guests")
+const System = lazyNamed(() => import("@/pages/admin/System"), "System")
+const Users = lazyNamed(() => import("@/pages/admin/Users"), "Users")
+const ProfileSettingsPage = lazyNamed(() => import("@/pages/settings/ProfileSettingsPage"), "ProfileSettingsPage")
+const PersonalizationSettingsPage = lazyNamed(() => import("@/pages/settings/PersonalizationSettingsPage"), "PersonalizationSettingsPage")
+const SecuritySettingsPage = lazyNamed(() => import("@/pages/settings/SecuritySettingsPage"), "SecuritySettingsPage")
+const StorageSettingsPage = lazyNamed(() => import("@/pages/settings/StorageSettingsPage"), "StorageSettingsPage")
+const WebsiteSettingsPage = lazyNamed(() => import("@/pages/settings/WebsiteSettingsPage"), "WebsiteSettingsPage")
+
+function Deferred({ children }: { children: React.ReactNode }) {
+  return <React.Suspense fallback={null}>{children}</React.Suspense>
+}
 
 export default function App() {
-  const { authReady, authSession, currentUser, isAuthenticated } = useAppState()
+  const { authReady, authSession, currentUser, isAuthenticated } = useAuthState()
   const isAdmin = currentUser?.role === "admin"
-  const currentPath = typeof window !== "undefined" ? window.location.pathname : "/"
+  const isGuest = currentUser?.role === "guest"
+  const hasSession = isAuthenticated || Boolean(authSession)
 
-  if (!authReady && authSession && isProtected(currentPath)) {
-    return (
-      <>
-        <Toaster position="bottom-center" richColors />
-        <Boot />
-      </>
-    )
-  }
+  const guestRestricted = (element: React.ReactNode) => isGuest
+    ? <Navigate to="/app" replace />
+    : <Deferred>{element}</Deferred>
 
   return (
     <BrowserRouter>
       <AudioPlayerProvider>
         <Toaster position="bottom-center" richColors />
         <Routes>
-        <Route
-          path="/"
-          element={authReady ? <Navigate to={isAuthenticated ? "/app" : "/login"} replace /> : null}
-        />
+            <Route path="/" element={<Navigate to={hasSession ? "/app" : "/login"} replace />} />
+            <Route element={!authReady || hasSession ? <MainLayout /> : <Navigate to="/login" replace />}>
+              <Route path="/app" element={<AppFiles />} />
+              <Route path="/app/buckets" element={guestRestricted(<Buckets />)} />
+              <Route path="/app/recycle" element={<Deferred><Recycle /></Deferred>} />
+              <Route path="/app/tasks" element={guestRestricted(<Tasks />)} />
+              <Route path="/app/shared-with-me" element={guestRestricted(<SharedWithMe />)} />
+              <Route path="/app/mounts" element={guestRestricted(<Mounts />)} />
+              <Route path="/app/offline" element={guestRestricted(<Offline />)} />
+              <Route path="/app/store" element={guestRestricted(<Store />)} />
+              <Route path="/app/discussions" element={guestRestricted(<Discussions />)} />
 
-        <Route
-          element={
-            !authReady ? null : isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />
-          }
-        >
-          <Route path="/app" element={<AppFiles />} />
-          <Route path="/app/buckets" element={<Buckets />} />
-          <Route path="/app/recycle" element={<Recycle />} />
-          <Route path="/app/tasks" element={<Tasks />} />
-          <Route path="/app/shared-with-me" element={<SharedWithMe />} />
-          <Route path="/app/mounts" element={<Mounts />} />
-          <Route path="/app/offline" element={<Offline />} />
-          <Route path="/app/store" element={<Store />} />
-          <Route path="/app/discussions" element={<Discussions />} />
+              <Route path="/settings" element={<SettingsLayout />}>
+                <Route index element={<Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
+                <Route path="profile" element={isGuest ? <Navigate to="/settings/security" replace /> : <Deferred><ProfileSettingsPage /></Deferred>} />
+                <Route path="personalization" element={isGuest ? <Navigate to="/settings/security" replace /> : <Deferred><PersonalizationSettingsPage /></Deferred>} />
+                <Route path="security" element={<Deferred><SecuritySettingsPage /></Deferred>} />
+                <Route path="storage" element={isGuest ? <Navigate to="/settings/security" replace /> : <Deferred><StorageSettingsPage /></Deferred>} />
+                <Route path="guests" element={isAdmin ? <Deferred><Guests /></Deferred> : <Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
+                <Route path="website" element={isAdmin ? <Deferred><WebsiteSettingsPage /></Deferred> : <Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
+              </Route>
 
-          <Route path="/settings" element={<SettingsLayout />}>
-            <Route index element={<Navigate to="/settings/profile" replace />} />
-            <Route path="profile" element={<ProfileSettingsPage />} />
-            <Route
-              path="personalization"
-              element={<PersonalizationSettingsPage />}
-            />
-            <Route path="security" element={<SecuritySettingsPage />} />
-            <Route path="storage" element={<StorageSettingsPage />} />
-            <Route
-              path="website"
-              element={
-                isAdmin ? (
-                  <WebsiteSettingsPage />
-                ) : (
-                  <Navigate to="/settings/profile" replace />
-                )
-              }
-            />
-          </Route>
+              <Route path="/images" element={<AppFiles />} />
+              <Route path="/admin/users" element={isAdmin ? <Deferred><Users /></Deferred> : <Navigate to="/app" replace />} />
+              <Route path="/admin/guests" element={isAdmin ? <Navigate to="/settings/guests" replace /> : <Navigate to="/app" replace />} />
+              <Route path="/admin/system" element={isAdmin ? <Deferred><System /></Deferred> : <Navigate to="/app" replace />} />
+            </Route>
 
-          <Route path="/images" element={<AppFiles />} />
-
-          <Route path="/admin/users" element={isAdmin ? <Users /> : <Navigate to="/app" replace />} />
-          <Route path="/admin/guests" element={isAdmin ? <Guests /> : <Navigate to="/app" replace />} />
-          <Route path="/admin/system" element={isAdmin ? <System /> : <Navigate to="/app" replace />} />
-        </Route>
-
-        <Route element={<ShareGuard />}>
-          <Route path="/share" element={<Shares />} />
-        </Route>
-
-        <Route element={<ShareLayout />}>
-          <Route path="/share/:slug" element={<ShareDetail />} />
-          <Route path="/share/*" element={<ShareNotFound />} />
-        </Route>
-
-        <Route
-          element={
-            !authReady ? null : isAuthenticated ? <Navigate to="/app" replace /> : <AuthLayout />
-          }
-        >
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/setup" element={<Navigate to="/register" replace />} />
-        </Route>
-        </Routes>
+            <Route element={<ShareGuard />}><Route path="/share" element={isGuest ? <Navigate to="/app" replace /> : <Deferred><Shares /></Deferred>} /></Route>
+            <Route element={<ShareLayout />}><Route path="/share/:slug" element={<Deferred><ShareDetail /></Deferred>} /><Route path="/share/*" element={<Deferred><ShareNotFound /></Deferred>} /></Route>
+            <Route element={hasSession ? <Navigate to="/app" replace /> : <AuthLayout />}>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/setup" element={<Navigate to="/register" replace />} />
+            </Route>
+          </Routes>
       </AudioPlayerProvider>
     </BrowserRouter>
   )

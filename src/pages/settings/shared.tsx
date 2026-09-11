@@ -1,4 +1,5 @@
 import * as React from "react"
+import { UserRoundCog } from "lucide-react"
 import {
   IconBucket,
   IconEyeOff,
@@ -21,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ThemeMode } from "@/lib/models"
+import { formatTimeZoneOffset, getSystemTimeZone } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
 export type SettingsTabId =
@@ -28,6 +30,7 @@ export type SettingsTabId =
   | "personalization"
   | "security"
   | "storage"
+  | "guests"
   | "website"
 
 export const settingsTabs: Array<{
@@ -50,8 +53,8 @@ export const settingsTabs: Array<{
   },
   {
     id: "security",
-    label: "密码和安全",
-    description: "密码、两步验证与登录记录",
+    label: "账号与安全",
+    description: "密码、登录方式与登录记录",
     icon: IconShieldLock,
   },
   {
@@ -59,6 +62,12 @@ export const settingsTabs: Array<{
     label: "存储空间",
     description: "COS 连接策略与挂载配置",
     icon: IconBucket,
+  },
+  {
+    id: "guests",
+    label: "访客管理",
+    description: "临时账号、空间配额与有效期",
+    icon: UserRoundCog,
   },
   {
     id: "website",
@@ -74,20 +83,44 @@ export const languageOptions = [
   { label: "日本語", value: "ja-JP" },
 ]
 
-export const timezoneOptions = [
-  { label: "北京时间 (UTC+8)", value: "Asia/Shanghai" },
-  { label: "东京时间 (UTC+9)", value: "Asia/Tokyo" },
-  { label: "首尔时间 (UTC+9)", value: "Asia/Seoul" },
-  { label: "新加坡时间 (UTC+8)", value: "Asia/Singapore" },
-  { label: "香港时间 (UTC+8)", value: "Asia/Hong_Kong" },
-  { label: "台北时间 (UTC+8)", value: "Asia/Taipei" },
-  { label: "柏林时间 (UTC+1)", value: "Europe/Berlin" },
-  { label: "伦敦时间 (UTC+0)", value: "Europe/London" },
-  { label: "纽约时间 (UTC-5)", value: "America/New_York" },
-  { label: "洛杉矶时间 (UTC-8)", value: "America/Los_Angeles" },
-  { label: "悉尼时间 (UTC+11)", value: "Australia/Sydney" },
-  { label: "UTC", value: "UTC" },
+const namedTimezones = [
+  { name: "北京时间", value: "Asia/Shanghai" },
+  { name: "东京时间", value: "Asia/Tokyo" },
+  { name: "首尔时间", value: "Asia/Seoul" },
+  { name: "新加坡时间", value: "Asia/Singapore" },
+  { name: "香港时间", value: "Asia/Hong_Kong" },
+  { name: "台北时间", value: "Asia/Taipei" },
+  { name: "柏林时间", value: "Europe/Berlin" },
+  { name: "伦敦时间", value: "Europe/London" },
+  { name: "纽约时间", value: "America/New_York" },
+  { name: "洛杉矶时间", value: "America/Los_Angeles" },
+  { name: "悉尼时间", value: "Australia/Sydney" },
+  { name: "协调世界时", value: "UTC" },
 ]
+
+const systemTimezone = getSystemTimeZone()
+const configuredTimezones = namedTimezones.map((item) => ({
+  label: `${item.name} (${formatTimeZoneOffset(item.value)})`,
+  value: item.value,
+}))
+
+export const timezoneOptions = configuredTimezones.some((item) => item.value === systemTimezone)
+  ? configuredTimezones
+  : [
+      {
+        label: `系统时区 · ${systemTimezone} (${formatTimeZoneOffset(systemTimezone)})`,
+        value: systemTimezone,
+      },
+      ...configuredTimezones,
+    ]
+
+export function timezoneOptionsFor(value: string) {
+  if (!value || timezoneOptions.some((item) => item.value === value)) return timezoneOptions
+  return [
+    { label: `${value} (${formatTimeZoneOffset(value)})`, value },
+    ...timezoneOptions,
+  ]
+}
 
 export const themeOptions: Array<{ label: string; value: ThemeMode }> = [
   { label: "浅色", value: "light" },
@@ -150,7 +183,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
+        "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs",
         active
           ? "bg-primary/10 text-primary"
           : "bg-muted text-muted-foreground"
@@ -304,4 +337,3 @@ export function BucketMeta({
     </div>
   )
 }
-

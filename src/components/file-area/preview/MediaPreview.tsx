@@ -13,6 +13,7 @@ import {
 import type { PreviewManifest } from "@/api/files"
 import { previewSourceUrls } from "@/lib/preview-assets"
 import { cn } from "@/lib/utils"
+import { PreviewSkeleton } from "./PreviewSkeleton"
 
 const videoControlButton = "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
 
@@ -27,7 +28,11 @@ function formatTime(value: number) {
 export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
+  const controlsRef = React.useRef<HTMLDivElement>(null)
   const hideTimerRef = React.useRef<number | null>(null)
+  const interactingRef = React.useRef(false)
+  const [controlsVisible, setControlsVisible] = React.useState(true)
+  const autoplayAttemptedRef = React.useRef<string | null>(null)
   const [failed, setFailed] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [playing, setPlaying] = React.useState(false)
@@ -36,14 +41,6 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const [volume, setVolume] = React.useState(1)
   const [muted, setMuted] = React.useState(false)
   const [rate, setRate] = React.useState(1)
-  const [controlsVisible, setControlsVisible] = React.useState(true)
-  const interactingRef = React.useRef(false)
-  const autoplayAttemptedRef = React.useRef<string | null>(null)
-  const isTouch = React.useMemo(
-    () => typeof window !== "undefined" && window.matchMedia("(hover: none), (pointer: coarse)").matches,
-    []
-  )
-  const hideDelayMs = isTouch ? 4500 : 900
   const hlsSource = manifest.assets.hls?.url
   const sources = previewSourceUrls(manifest)
   const sourceSignature = sources.join("\n")
@@ -51,33 +48,27 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const source = sources[sourceIndex]
   const poster = manifest.assets.poster?.url
 
+  const revealControls = React.useCallback(() => {
+    setControlsVisible(true)
+    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = window.setTimeout(() => {
+      if (!videoRef.current?.paused && !interactingRef.current &&
+          !controlsRef.current?.querySelector(":focus-visible")) {
+        setControlsVisible(false)
+      }
+    }, 2500)
+  }, [])
+
+  React.useEffect(() => {
+    revealControls()
+    return () => {
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current)
+    }
+  }, [playing, manifest.node_id, revealControls])
+
   React.useEffect(() => {
     setSourceIndex(0)
   }, [manifest.node_id, manifest.version, sourceSignature])
-
-  const clearHideTimer = React.useCallback(() => {
-    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current)
-    hideTimerRef.current = null
-  }, [])
-
-  const scheduleHide = React.useCallback((delay = hideDelayMs) => {
-    clearHideTimer()
-    hideTimerRef.current = window.setTimeout(() => {
-      if (!interactingRef.current && !videoRef.current?.paused) {
-        setControlsVisible(false)
-      }
-    }, delay)
-  }, [clearHideTimer, hideDelayMs])
-
-  const showControls = React.useCallback((autoHide = true) => {
-    clearHideTimer()
-    setControlsVisible(true)
-    if (!autoHide) return
-    if (isTouch && videoRef.current && videoRef.current.paused) return
-    scheduleHide()
-  }, [clearHideTimer, isTouch, scheduleHide])
-
-  React.useEffect(() => () => clearHideTimer(), [clearHideTimer])
 
   React.useEffect(() => {
     const video = videoRef.current
@@ -116,7 +107,7 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
   const togglePlayback = React.useCallback(() => {
     const video = videoRef.current
     if (!video) return
-    if (video.paused) void video.play()
+    if (video.paused) void video.play().catch(() => setControlsVisible(true))
     else video.pause()
   }, [])
 
@@ -124,7 +115,6 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
     const video = videoRef.current
     if (!video) return
     video.currentTime = Math.min(Math.max(0, video.currentTime + seconds), video.duration || Infinity)
-    showControls()
   }
 
   const toggleMute = () => {
@@ -143,7 +133,7 @@ export function MediaPreview({ manifest }: { manifest: PreviewManifest }) {
     setRate(next)
   }
 
-const toggleFullscreen = () => {
+  const toggleFullscreen = () => {
   const video = videoRef.current
   if (!video) return
 
@@ -153,12 +143,12 @@ const toggleFullscreen = () => {
   }
 
   // 标准全屏（桌面 / Android / iPad）
-  if (typeof video.requestFullscreen === "function") {
-    void video.requestFullscreen()
-    return
-  }
   if (hostRef.current && typeof hostRef.current.requestFullscreen === "function") {
     void hostRef.current.requestFullscreen()
+    return
+  }
+  if (typeof video.requestFullscreen === "function") {
+    void video.requestFullscreen()
     return
   }
 
@@ -184,39 +174,16 @@ const toggleFullscreen = () => {
     else await video.requestPictureInPicture()
   }
 
-  const beginControlInteraction = React.useCallback(() => {
-    interactingRef.current = true
-    clearHideTimer()
-    setControlsVisible(true)
-  }, [clearHideTimer])
-
-  const finishControlInteraction = React.useCallback(() => {
-    interactingRef.current = false
-    setControlsVisible(true)
-    if (!videoRef.current?.paused) scheduleHide()
-  }, [scheduleHide])
-
   return (
     <div
       ref={hostRef}
-      className={cn(
-        "relative flex h-full w-full items-center justify-center overflow-hidden bg-black",
-        playing && !controlsVisible && "cursor-none"
-      )}
-      onPointerEnter={(event) => {
-        if (event.pointerType !== "touch") showControls()
-      }}
-      onPointerMove={(event) => {
-        if (event.pointerType !== "touch") showControls()
-      }}
-      onPointerLeave={(event) => {
-        // iOS Safari emits pointerleave after a finger is lifted. Treating it
-        // like a mouse leave made the whole toolbar disappear immediately.
-        if (event.pointerType === "touch" || interactingRef.current) return
-        clearHideTimer()
-        setControlsVisible(false)
-      }}
+      className={cn("relative h-full min-h-0 w-full overflow-hidden bg-black", playing && !controlsVisible && "cursor-none")}
+      onPointerMove={revealControls}
+      onPointerDown={revealControls}
+      onFocusCapture={revealControls}
       onKeyDown={(event) => {
+        if ((event.target as HTMLElement).closest("button, input, select")) return
+        if ([" ", "k", "ArrowLeft", "ArrowRight", "f"].includes(event.key)) event.stopPropagation()
         if (event.key === " " || event.key === "k") { event.preventDefault(); togglePlayback() }
         if (event.key === "ArrowLeft") seekBy(-5)
         if (event.key === "ArrowRight") seekBy(5)
@@ -224,11 +191,15 @@ const toggleFullscreen = () => {
       }}
       tabIndex={0}
     >
+      <div className="absolute inset-0 overflow-hidden">
       <video
         ref={(element) => { videoRef.current = element }}
         poster={poster}
         playsInline
-        className="h-full w-full object-contain"
+        className={cn(
+          "absolute inset-0 h-full w-full object-contain transition-opacity duration-150",
+          loading ? "opacity-0" : "opacity-100"
+        )}
         preload="metadata"
         onLoadedMetadata={(event) => {
           setLoading(false)
@@ -241,15 +212,15 @@ const toggleFullscreen = () => {
           if (autoplayAttemptedRef.current !== key) {
             autoplayAttemptedRef.current = key
             void event.currentTarget.play().catch(() => {
-              setControlsVisible(true)
+              // Autoplay can be blocked; the play button remains available.
             })
           }
         }}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
-        onPlay={() => { setPlaying(true); showControls() }}
-        onPause={() => { setPlaying(false); showControls() }}
-        onEnded={() => { setPlaying(false); setControlsVisible(true) }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
         onError={() => {
           if (!hlsSource && sourceIndex + 1 < sources.length) {
             setLoading(true)
@@ -259,13 +230,7 @@ const toggleFullscreen = () => {
           setLoading(false)
           setFailed(true)
         }}
-        onPointerDown={(event) => {
-          if (event.pointerType === "touch") showControls(false)
-        }}
-        onClick={() => {
-          togglePlayback()
-          showControls()
-        }}
+        onClick={togglePlayback}
         onDoubleClick={() => void toggleFullscreen()}
       />
 
@@ -275,21 +240,23 @@ const toggleFullscreen = () => {
         </div>
       ) : null}
       {failed ? <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0b0c0e] px-6 text-center text-sm text-white/70">浏览器无法解码此媒体，兼容版本也尚未生成。仍可下载原文件。</div> : null}
-      {loading && manifest.status !== "processing" && !failed ? <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-white/65"><IconLoader2 size={22} className="animate-spin" /><span className="ml-2 text-sm">正在读取媒体信息</span></div> : null}
+      {loading && manifest.status !== "processing" && !failed ? <PreviewSkeleton kind="video" className="pointer-events-none absolute inset-0 z-10" /> : null}
 
+      </div>
       <div
+        ref={controlsRef}
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 px-4 pb-2.5 pt-10 text-white transition-opacity duration-100",
-          "bg-gradient-to-t from-black/85 via-black/35 to-transparent",
+          "absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 text-white transition-opacity duration-200 sm:px-4",
+          "bg-gradient-to-t from-black/85 via-black/40 to-transparent",
           playing && !controlsVisible && "pointer-events-none opacity-0"
         )}
-        onPointerDown={beginControlInteraction}
-        onPointerUp={finishControlInteraction}
-        onPointerCancel={finishControlInteraction}
-        onPointerLeave={(event) => {
-          if (event.pointerType === "touch") return
-          finishControlInteraction()
-        }}
+        aria-label="视频控制栏"
+        onPointerEnter={(event) => { if (event.pointerType !== "touch") interactingRef.current = true }}
+        onPointerLeave={() => { interactingRef.current = false; revealControls() }}
+        onPointerDown={() => { interactingRef.current = true }}
+        onPointerUp={() => { interactingRef.current = false; revealControls() }}
+        onPointerCancel={() => { interactingRef.current = false; revealControls() }}
+        onBlur={revealControls}
       >
         <input
           type="range"

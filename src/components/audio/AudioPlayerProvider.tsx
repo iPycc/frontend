@@ -4,12 +4,16 @@ import { toast } from "sonner"
 
 import { buildDownloadUrl, getPreviewManifest, peekPreviewManifest, type PreviewManifest } from "@/api/files"
 import { requestResponse } from "@/api/client"
-import { AudioPlayer } from "@/components/audio/AudioPlayer"
 import { Button } from "@/components/ui/button"
+import { PreviewSkeleton } from "@/components/file-area/preview/PreviewSkeleton"
 import type { FileNode } from "@/lib/models"
 import { cn } from "@/lib/utils"
 
 type PlayerMode = "window" | "minimized"
+
+const AudioPlayer = React.lazy(async () => ({
+  default: (await import("@/components/audio/AudioPlayer")).AudioPlayer,
+}))
 
 interface AudioPlayerContextValue {
   openAudio: (file: FileNode, queue?: FileNode[]) => void
@@ -157,23 +161,22 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
                 {error}
               </div>
             ) : loading || !manifest ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-                <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                正在读取音频信息
-              </div>
+              <PreviewSkeleton kind="audio" compact={minimized} />
             ) : (
-              <AudioPlayer
-                manifest={manifest}
-                fallbackName={activeFile.name}
-                compact={minimized}
-                onToggleCompact={() => setMode(minimized ? "window" : "minimized")}
-                onClose={minimized ? closeAudio : undefined}
-                onPrevious={queue.length > 1 ? () => changeTrack(-1) : undefined}
-                onNext={queue.length > 1 ? () => changeTrack(1) : undefined}
-                hasPrevious={queue.length > 1}
-                hasNext={queue.length > 1}
-                queuePosition={minimized ? undefined : `${index + 1} / ${queue.length}`}
-              />
+              <React.Suspense fallback={<PreviewSkeleton kind="audio" compact={minimized} />}>
+                <AudioPlayer
+                  manifest={manifest}
+                  fallbackName={activeFile.name}
+                  compact={minimized}
+                  onToggleCompact={() => setMode(minimized ? "window" : "minimized")}
+                  onClose={minimized ? closeAudio : undefined}
+                  onPrevious={queue.length > 1 ? () => changeTrack(-1) : undefined}
+                  onNext={queue.length > 1 ? () => changeTrack(1) : undefined}
+                  hasPrevious={queue.length > 1}
+                  hasNext={queue.length > 1}
+                  queuePosition={minimized ? undefined : `${index + 1} / ${queue.length}`}
+                />
+              </React.Suspense>
             )}
           </section>
         </div>
