@@ -9,6 +9,10 @@ export type ExplorerMount = {
   mount_slug: string
   root_path: string
   provider_label?: string | null
+  driver_id: string
+  driver_label: string
+  driver_kind: string
+  driver_capabilities: string[]
   is_enabled: boolean
   mode: MountMode
   read_only: boolean

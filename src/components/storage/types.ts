@@ -32,6 +32,26 @@ export interface LocalStorageDraft {
   partSize: string
 }
 
+export interface AliyunStorageDraft {
+  name: string
+  bucketName: string
+  region: string
+  endpoint: string
+  prefix: string
+  mountMode: "managed" | "mirror"
+  readOnly: boolean
+  legacyPrefixedKeys: boolean
+  objectKeyStyle: "readable" | "opaque"
+  accessKeyId: string
+  accessKeySecret: string
+  securityToken: string
+  concurrency: number
+  multipartThreshold: string
+  partSize: string
+  serverSideEncryption: "none" | "SSE-OSS" | "SSE-KMS"
+  kmsKeyId: string
+}
+
 export interface StrategyOption {
   strategy: StorageStrategyKey
   label: string

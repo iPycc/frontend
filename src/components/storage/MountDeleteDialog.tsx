@@ -30,7 +30,7 @@ function previewSummary(preview: MountDeletePreview) {
   if (preview.folder_count) items.push(`${preview.folder_count} 个文件夹`)
   if (preview.active_upload_count) items.push(`${preview.active_upload_count} 个未完成上传`)
   if (preview.pending_cleanup_count) items.push(`${preview.pending_cleanup_count} 个待清理任务`)
-  if (preview.remote_objects && !preview.file_count) items.push("COS 中存在未同步文件")
+  if (preview.remote_objects && !preview.file_count) items.push("远端存储中存在未同步文件")
   return items
 }
 
@@ -43,8 +43,7 @@ export function MountDeleteDialog({
   onOpenChange,
   onDelete,
 }: MountDeleteDialogProps) {
-  const isCos = preview?.provider === "tencent_cos" || bucket?.storageType === "tencent"
-  const storageLabel = isCos ? "COS" : "本地存储"
+  const storageLabel = bucket?.provider || "存储服务"
   const busy = deletingMode !== null
   const summary = preview ? previewSummary(preview) : []
   const scope = preview?.prefix

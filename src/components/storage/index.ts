@@ -1,6 +1,7 @@
 ﻿﻿import type { BucketMount } from "@/lib/models"
 
 import { AliyunStorageForm } from "@/components/storage/aliyun/AliyunStorageForm"
+import { AliyunCorsStep } from "@/components/storage/aliyun/AliyunCorsStep"
 import { LocalStorageForm } from "@/components/storage/local/LocalStorageForm"
 import { ProviderSelector } from "@/components/storage/ProviderSelector"
 import { StoragePolicyCard } from "@/components/storage/StoragePolicyCard"
@@ -9,6 +10,7 @@ import { TencentCorsStep } from "@/components/storage/tencent/TencentCorsStep"
 import { TencentStorageForm } from "@/components/storage/tencent/TencentStorageForm"
 import type {
   LocalStorageDraft,
+  AliyunStorageDraft,
   StorageModuleDefinition,
   StorageStrategyKey,
   TencentStorageDraft,
@@ -16,6 +18,7 @@ import type {
 
 export {
   AliyunStorageForm,
+  AliyunCorsStep,
   LocalStorageForm,
   ProviderSelector,
   StoragePolicyCard,
@@ -26,6 +29,7 @@ export {
 
 export type {
   LocalStorageDraft,
+  AliyunStorageDraft,
   StorageStrategyKey,
   TencentStorageDraft,
 }
@@ -46,8 +50,8 @@ const storageModules: Record<StorageStrategyKey, StorageModuleDefinition> = {
   aliyun: {
     strategy: "aliyun",
     label: "阿里云 OSS",
-    canCreate: false,
-    canEdit: () => false,
+    canCreate: true,
+    canEdit: (bucket: BucketMount) => bucket.driverId === "aliyun_oss" || bucket.storageType === "aliyun",
   },
 }
 
@@ -56,6 +60,10 @@ export function getStorageModule(strategy: StorageStrategyKey) {
 }
 
 export function resolveStorageStrategy(bucket: BucketMount): StorageStrategyKey {
+  if (bucket.driverId === "local_fs") return "local"
+  if (bucket.driverId === "aliyun_oss") return "aliyun"
+  if (bucket.driverId === "tencent_cos") return "tencent"
+
   if (bucket.storageType) {
     return bucket.storageType
   }
@@ -74,4 +82,3 @@ export function resolveStorageStrategy(bucket: BucketMount): StorageStrategyKey 
 
   return "tencent"
 }
-

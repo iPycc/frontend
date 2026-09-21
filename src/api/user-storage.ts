@@ -18,7 +18,7 @@ export type UserMountResource = {
 export type UserMountDeletePreview = {
   mount_id: number
   mount_name: string
-  provider: "local_fs" | "tencent_cos"
+  provider: string
   bucket_name: string
   prefix: string
   file_count: number

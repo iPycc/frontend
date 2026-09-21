@@ -1,16 +1,26 @@
 import { requestJson } from "./client"
 
+export type StorageDriverId = "local_fs" | "tencent_cos" | "aliyun_oss" | (string & {})
+
+export type StorageDriver = {
+  id: StorageDriverId
+  label: string
+  kind: string
+  icon_key: string
+  enabled: boolean
+  capabilities: string[]
+}
+
 export type StoragePolicy = {
   id: number
   name: string
-  provider: "local_fs" | "tencent_cos"
+  provider: StorageDriverId
   bucket_name: string
   region?: string | null
   endpoint?: string | null
   base_prefix: string
-  secret_id?: string | null
-  secret_key?: string | null
-  session_token?: string | null
+  credentials_configured: boolean
+  credential_fields: string[]
   status: string
   description?: string | null
   multipart_threshold_mb: number
@@ -53,6 +63,10 @@ export type BucketMount = {
   mount_slug: string
   root_path: string
   provider_label?: string | null
+  driver_id: StorageDriverId
+  driver_label: string
+  driver_kind: string
+  driver_capabilities: string[]
   is_enabled: boolean
   mode: MountMode
   read_only: boolean
@@ -70,7 +84,7 @@ export type BucketMount = {
 export type MountDeletePreview = {
   mount_id: number
   mount_name: string
-  provider: "local_fs" | "tencent_cos"
+  provider: StorageDriverId
   bucket_name: string
   prefix: string
   file_count: number
@@ -88,14 +102,12 @@ export type MountDeleteResult = {
 
 export type CreateStoragePolicyInput = {
   name: string
-  provider: "local_fs" | "tencent_cos"
+  provider: StorageDriverId
   bucket_name: string
   region?: string | null
   endpoint?: string | null
   base_prefix?: string
-  secret_id?: string | null
-  secret_key?: string | null
-  session_token?: string | null
+  credentials?: Record<string, string>
   status?: string
   description?: string | null
   multipart_threshold_mb?: number
@@ -121,6 +133,10 @@ export type CreateBucketMountInput = {
   extra?: Record<string, unknown>
 }
 export type UpdateBucketMountInput = Partial<CreateBucketMountInput>
+
+export async function listStorageDrivers(token: string) {
+  return requestJson<StorageDriver[]>("/storage/drivers", { token })
+}
 
 export async function listPolicies(token: string) {
   return requestJson<StoragePolicy[]>("/admin/policy", { token })

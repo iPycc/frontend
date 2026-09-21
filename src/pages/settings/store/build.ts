@@ -4,6 +4,7 @@ import type {
 } from "@/api/storage"
 import type {
   LocalStorageDraft,
+  AliyunStorageDraft,
   TencentStorageDraft,
 } from "@/components/storage"
 import {
@@ -17,7 +18,7 @@ export type View =
   | { type: "list" }
   | { type: "select-provider" }
   | { type: "form"; strategy: StorageStrategyKey }
-  | { type: "cors-step" }
+  | { type: "cors-step"; strategy: "tencent" | "aliyun" }
   | { type: "edit"; bucket: BucketMount }
 
 export function createEmptyTencentDraft(): TencentStorageDraft {
@@ -34,6 +35,28 @@ export function createEmptyTencentDraft(): TencentStorageDraft {
     accessDomain: "",
     secretId: "",
     secretKey: "",
+    concurrency: 3,
+    multipartThreshold: "25 MB",
+    partSize: "25 MB",
+    serverSideEncryption: "none",
+    kmsKeyId: "",
+  }
+}
+
+export function createEmptyAliyunDraft(): AliyunStorageDraft {
+  return {
+    name: "",
+    bucketName: "",
+    region: "cn-hangzhou",
+    endpoint: "",
+    prefix: "",
+    mountMode: "managed",
+    readOnly: false,
+    legacyPrefixedKeys: false,
+    objectKeyStyle: "readable",
+    accessKeyId: "",
+    accessKeySecret: "",
+    securityToken: "",
     concurrency: 3,
     multipartThreshold: "25 MB",
     partSize: "25 MB",
@@ -133,8 +156,10 @@ export function buildTencentPolicyInput(draft: TencentStorageDraft): CreateStora
     region: draft.region.trim(),
     endpoint: draft.accessDomain.trim() || undefined,
     base_prefix: "",
-    secret_id: draft.secretId.trim(),
-    secret_key: draft.secretKey.trim(),
+    credentials: {
+      secret_id: draft.secretId.trim(),
+      secret_key: draft.secretKey.trim(),
+    },
     status: "active",
     description: `Tencent COS bucket ${draft.bucketName.trim()}`,
     multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
@@ -153,6 +178,62 @@ export function buildTencentPolicyInput(draft: TencentStorageDraft): CreateStora
       part_size_mb: parseSizeMb(draft.partSize, 25),
       server_side_encryption: draft.serverSideEncryption,
       kms_key_id: draft.serverSideEncryption === "SSE-KMS" ? draft.kmsKeyId.trim() : "",
+    },
+  }
+}
+
+export function buildAliyunPolicyInput(draft: AliyunStorageDraft): CreateStoragePolicyInput {
+  return {
+    name: draft.name.trim(),
+    provider: "aliyun_oss",
+    bucket_name: draft.bucketName.trim(),
+    region: draft.region.trim(),
+    endpoint: draft.endpoint.trim() || undefined,
+    base_prefix: "",
+    credentials: {
+      access_key_id: draft.accessKeyId.trim(),
+      access_key_secret: draft.accessKeySecret.trim(),
+      ...(draft.securityToken.trim() ? { security_token: draft.securityToken.trim() } : {}),
+    },
+    status: "active",
+    description: `Aliyun OSS bucket ${draft.bucketName.trim()}`,
+    multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+    part_size_mb: parseSizeMb(draft.partSize, 25),
+    presign_ttl_seconds: 900,
+    is_default: false,
+    cors_auto_configured: false,
+    extra: {
+      provider_label: "Aliyun OSS",
+      storage_type: "aliyun",
+      concurrency: draft.concurrency,
+      multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+      part_size_mb: parseSizeMb(draft.partSize, 25),
+      server_side_encryption: draft.serverSideEncryption,
+      kms_key_id: draft.serverSideEncryption === "SSE-KMS" ? draft.kmsKeyId.trim() : "",
+    },
+  }
+}
+
+export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: string, policyId: number): CreateBucketMountInput {
+  return {
+    policy_id: policyId,
+    name: draft.name.trim(),
+    mount_slug: slugify(draft.name) || fallbackSlug,
+    root_path: draft.prefix.trim().replace(/^\/+|\/+$/g, ""),
+    provider_label: "Aliyun OSS",
+    is_enabled: true,
+    mode: draft.mountMode,
+    read_only: draft.readOnly,
+    legacy_prefixed_keys: draft.legacyPrefixedKeys,
+    extra: {
+      provider_label: "Aliyun OSS",
+      storage_type: "aliyun",
+      concurrency: draft.concurrency,
+      multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
+      part_size_mb: parseSizeMb(draft.partSize, 25),
+      mount_mode: draft.mountMode,
+      read_only: draft.readOnly,
+      object_key_style: draft.objectKeyStyle,
     },
   }
 }

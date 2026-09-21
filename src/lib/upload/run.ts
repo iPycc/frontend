@@ -26,6 +26,7 @@ import { partLimit } from "@/lib/upload/pool"
 import { trackParts } from "@/lib/upload/progress"
 import { putPart } from "@/lib/upload/put"
 import { retryPart, retryRateLimited } from "@/lib/upload/retry"
+import { requiresUploadResponseHeader, usesCloudraveTransport } from "@/lib/upload/transport"
 
 type UploadTarget = {
   mountId: string
@@ -165,6 +166,8 @@ export function useUploadRun({
                 part_size: existing.part_size,
                 part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
                 upload_urls: [],
+                transport: existing.transport,
+                required_response_headers: existing.required_response_headers,
               }
               serverParts = existing.parts
             }
@@ -315,7 +318,7 @@ export function useUploadRun({
         const getPartPlan = (partNumber: number, refresh = false) => {
           const cached = refresh ? undefined : uploadPlans.get(partNumber)
           if (cached) return cached
-          if (bucket.storageType === "local") return Promise.resolve(undefined)
+          if (usesCloudraveTransport(plan)) return Promise.resolve(undefined)
 
           const requested = uploadApiSchedulerRef.current.run(
             () => getUploadPartUrl(
@@ -335,7 +338,7 @@ export function useUploadRun({
 
         const prefetchNextWave = (partNumber: number) => {
           const nextPartNumber = partNumber + partConcurrency
-          if (singlePut || bucket.storageType === "local" || nextPartNumber > partCount) return
+          if (singlePut || usesCloudraveTransport(plan) || nextPartNumber > partCount) return
           void getPartPlan(nextPartNumber).catch(() => {
             // The worker will request a fresh URL when it reaches this part.
           })
@@ -356,7 +359,7 @@ export function useUploadRun({
             progressTracker.begin(partNumber)
             const uploadPlan = await getPartPlan(partNumber, attempt > 0)
             throwIfAborted()
-            if (!uploadPlan || uploadPlan.url.startsWith("/api/") || bucket.storageType === "local") {
+            if (usesCloudraveTransport(plan)) {
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
@@ -374,6 +377,9 @@ export function useUploadRun({
               throwIfAborted()
               return { etag: part.etag ?? `part-${partNumber}`, recorded: true }
             }
+            if (!uploadPlan) {
+              throw new Error("存储驱动未返回可用的上传地址")
+            }
 
             const responseEtag = await uploadGateRef.current.run(
               () => putPart(
@@ -385,8 +391,8 @@ export function useUploadRun({
               controller.signal,
             )
             throwIfAborted()
-            if (!responseEtag && !singlePut) {
-              const error = new Error("COS 响应未暴露 ETag，请检查存储桶 CORS 配置")
+            if (!responseEtag && requiresUploadResponseHeader(plan, "ETag")) {
+              const error = new Error("存储服务响应未暴露 ETag，请检查当前存储桶的 CORS 配置")
               Object.assign(error, { retryable: false })
               throw error
             }

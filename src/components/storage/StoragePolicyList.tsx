@@ -45,7 +45,7 @@ export function StoragePolicyList({
             className="flex min-h-[120px] items-center justify-center gap-2 rounded-2xl bg-muted/30 text-[15px] text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
           >
             <IconPlus size={18} />
-            添加存储策略
+            添加存储空间
           </button>
         ) : null}
 
@@ -63,7 +63,7 @@ export function StoragePolicyList({
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <div>共 {buckets.length} 项存储策略</div>
+        <div>共 {buckets.length} 个存储空间</div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" disabled>上一页</Button>
           <Button variant="ghost" size="sm" disabled>下一页</Button>

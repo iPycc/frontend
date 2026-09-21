@@ -60,7 +60,7 @@ export const settingsTabs: Array<{
   {
     id: "storage",
     label: "存储空间",
-    description: "COS 连接策略与挂载配置",
+    description: "多驱动连接与挂载配置",
     icon: IconBucket,
   },
   {

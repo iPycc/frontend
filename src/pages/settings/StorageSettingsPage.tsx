@@ -2,6 +2,8 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import {
+  listStorageDrivers,
+  type StorageDriver,
   type UpdateBucketMountInput,
   type UpdateStoragePolicyInput,
 } from "@/api/storage"
@@ -18,6 +20,8 @@ import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, valid
 import { attachStorage } from "@/lib/storage/attach"
 import {
   getStorageModule,
+  AliyunCorsStep,
+  AliyunStorageForm,
   LocalStorageForm,
   ProviderSelector,
   resolveStorageStrategy,
@@ -25,17 +29,20 @@ import {
   TencentCorsStep,
   TencentStorageForm,
 } from "@/components/storage"
-import type { LocalStorageDraft, TencentStorageDraft } from "@/components/storage"
+import type { AliyunStorageDraft, LocalStorageDraft, TencentStorageDraft } from "@/components/storage"
 import {
   MountDeleteDialog,
   type MountDeleteMode,
 } from "@/components/storage/MountDeleteDialog"
 import {
+  buildAliyunMountInput,
+  buildAliyunPolicyInput,
   buildLocalDraft,
   buildLocalMountInput,
   buildLocalPolicyInput,
   buildTencentMountInput,
   buildTencentPolicyInput,
+  createEmptyAliyunDraft,
   createEmptyTencentDraft,
   normalizeStorageRoot,
   parseSizeMb,
@@ -46,10 +53,13 @@ import {
 export function StorageSettingsPage() {
   const { authSession, buckets, currentUser, profile, reloadWorkspace } = useAppState()
   const [view, setView] = React.useState<View>({ type: "list" })
+  const [drivers, setDrivers] = React.useState<StorageDriver[] | null>(null)
   const [tencentDraft, setTencentDraft] = React.useState<TencentStorageDraft>(createEmptyTencentDraft)
   const [initialTencentDraft, setInitialTencentDraft] = React.useState<TencentStorageDraft | undefined>()
   const [localDraft, setLocalDraft] = React.useState<LocalStorageDraft>(buildLocalDraft(profile.uid || profile.username || "workspace"))
   const [initialLocalDraft, setInitialLocalDraft] = React.useState<LocalStorageDraft | undefined>()
+  const [aliyunDraft, setAliyunDraft] = React.useState<AliyunStorageDraft>(createEmptyAliyunDraft)
+  const [initialAliyunDraft, setInitialAliyunDraft] = React.useState<AliyunStorageDraft | undefined>()
   const [submitting, setSubmitting] = React.useState(false)
   const [syncingMountId, setSyncingMountId] = React.useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<BucketMount | null>(null)
@@ -66,28 +76,37 @@ export function StorageSettingsPage() {
   const userSeed = profile.uid || profile.username || "workspace"
   const canManageMounts = currentUser?.role === "user" || currentUser?.role === "admin"
 
+  React.useEffect(() => {
+    if (!token || !canManageMounts) return
+    let active = true
+    void listStorageDrivers(token)
+      .then((items) => {
+        if (active) setDrivers(items)
+      })
+      .catch(() => {
+        if (active) setDrivers(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [canManageMounts, token])
+
   const providerOptions = React.useMemo(
-    () => [
-      {
-        strategy: "local" as const,
-        label: getStorageModule("local").label,
-        description: "默认按当前用户自动生成独立本机目录，支持路径联想和合法性校验。",
-        enabled: true,
-      },
-      {
-        strategy: "tencent" as const,
-        label: getStorageModule("tencent").label,
-        description: "保留腾讯云 COS 的真实创建、编辑与跨域配置流程。",
-        enabled: true,
-      },
-      {
-        strategy: "aliyun" as const,
-        label: getStorageModule("aliyun").label,
-        description: "已预留接入位，后续扩展时无需侵入主页面。",
-        enabled: false,
-      },
-    ],
-    []
+    () => {
+      const byId = new Map((drivers ?? []).map((driver) => [driver.id, driver]))
+      const option = (strategy: StorageStrategyKey, driverId: string, description: string) => ({
+        strategy,
+        label: byId.get(driverId)?.label ?? getStorageModule(strategy).label,
+        description,
+        enabled: drivers === null ? true : Boolean(byId.get(driverId)?.enabled),
+      })
+      return [
+        option("local", "local_fs", "默认按当前用户自动生成独立本机目录，支持路径联想和合法性校验。"),
+        option("tencent", "tencent_cos", "连接腾讯云 COS，支持直传、分片续传、镜像同步与服务端加密。"),
+        option("aliyun", "aliyun_oss", "连接阿里云 OSS，支持直传、分片续传、镜像同步与服务端加密。"),
+      ]
+    },
+    [drivers]
   )
 
   const requireToken = React.useCallback(() => {
@@ -125,6 +144,8 @@ export function StorageSettingsPage() {
     setLocalDraft(buildLocalDraft(userSeed))
     setInitialTencentDraft(undefined)
     setInitialLocalDraft(undefined)
+    setAliyunDraft(createEmptyAliyunDraft())
+    setInitialAliyunDraft(undefined)
     setView({ type: "select-provider" })
   }
 
@@ -140,7 +161,12 @@ export function StorageSettingsPage() {
       setTencentDraft(createEmptyTencentDraft())
       setInitialTencentDraft(undefined)
       setView({ type: "form", strategy: "tencent" })
+      return
     }
+
+    setAliyunDraft(createEmptyAliyunDraft())
+    setInitialAliyunDraft(undefined)
+    setView({ type: "form", strategy: "aliyun" })
   }
 
   const handleTencentNext = () => {
@@ -149,7 +175,7 @@ export function StorageSettingsPage() {
       return
     }
 
-    setView({ type: "cors-step" })
+    setView({ type: "cors-step", strategy: "tencent" })
   }
 
   const handleTencentSubmit = (autoConfigure: boolean) =>
@@ -173,6 +199,37 @@ export function StorageSettingsPage() {
 
       await reloadWorkspace()
       toast.success("腾讯云 COS 存储策略已创建。")
+      setView({ type: "list" })
+    })
+
+  const handleAliyunNext = () => {
+    if (!aliyunDraft.name.trim() || !aliyunDraft.bucketName.trim() || !aliyunDraft.region.trim()) {
+      toast.error("请先填写完整的 OSS 基本信息。")
+      return
+    }
+    setView({ type: "cors-step", strategy: "aliyun" })
+  }
+
+  const handleAliyunSubmit = (autoConfigure: boolean) =>
+    void withSubmit(async () => {
+      const accessToken = requireToken()
+      const fallbackSlug = slugify(`${userSeed}-${aliyunDraft.name}`) || slugify(userSeed) || "aliyun-oss"
+      const created = await attachStorage(
+        accessToken,
+        buildAliyunPolicyInput(aliyunDraft),
+        (policyId) => buildAliyunMountInput(aliyunDraft, fallbackSlug, policyId)
+      )
+
+      if (autoConfigure) {
+        try {
+          await applyUserMountCors(accessToken, created.mount.id)
+        } catch (error) {
+          toast.warning(error instanceof Error ? error.message : "已创建 OSS 挂载，但跨域配置尚未完成。")
+        }
+      }
+
+      await reloadWorkspace()
+      toast.success("阿里云 OSS 存储空间已创建。")
       setView({ type: "list" })
     })
 
@@ -210,7 +267,7 @@ export function StorageSettingsPage() {
       }
       setLocalDraft(draft)
       setInitialLocalDraft(draft)
-    } else {
+    } else if (strategy === "tencent") {
       const draft: TencentStorageDraft = {
         name: bucket.name,
         bucketName: bucket.bucket ?? "",
@@ -235,6 +292,29 @@ export function StorageSettingsPage() {
       }
       setTencentDraft(draft)
       setInitialTencentDraft(draft)
+    } else {
+      const encryption = bucket.extra?.server_side_encryption
+      const draft: AliyunStorageDraft = {
+        name: bucket.name,
+        bucketName: bucket.bucket ?? "",
+        region: bucket.region ?? "cn-hangzhou",
+        endpoint: bucket.endpoint ?? "",
+        prefix: bucket.rootPath ?? "",
+        mountMode: bucket.mountMode,
+        readOnly: bucket.readOnly,
+        legacyPrefixedKeys: bucket.legacyPrefixedKeys,
+        objectKeyStyle: bucket.objectKeyStyle,
+        accessKeyId: "",
+        accessKeySecret: "",
+        securityToken: "",
+        concurrency: Math.max(1, Math.min(3, bucket.strategy?.concurrency ?? 3)),
+        multipartThreshold: bucket.strategy?.multipartThreshold ?? "25 MB",
+        partSize: bucket.strategy?.partSize ?? "25 MB",
+        serverSideEncryption: encryption === "SSE-OSS" || encryption === "SSE-KMS" ? encryption : "none",
+        kmsKeyId: typeof bucket.extra?.kms_key_id === "string" ? bucket.extra.kms_key_id : "",
+      }
+      setAliyunDraft(draft)
+      setInitialAliyunDraft(draft)
     }
 
     setView({ type: "edit", bucket })
@@ -355,7 +435,7 @@ export function StorageSettingsPage() {
 
         await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
         toast.success("本机存储策略已保存。")
-      } else {
+      } else if (strategy === "tencent") {
         const policyPatch: UpdateStoragePolicyInput = {
           name: tencentDraft.name.trim(),
           bucket_name: tencentDraft.bucketName.trim(),
@@ -377,11 +457,11 @@ export function StorageSettingsPage() {
             kms_key_id: tencentDraft.serverSideEncryption === "SSE-KMS" ? tencentDraft.kmsKeyId.trim() : "",
           },
         }
-        if (tencentDraft.secretId.trim()) {
-          policyPatch.secret_id = tencentDraft.secretId.trim()
-        }
-        if (tencentDraft.secretKey.trim()) {
-          policyPatch.secret_key = tencentDraft.secretKey.trim()
+        if (tencentDraft.secretId.trim() || tencentDraft.secretKey.trim()) {
+          policyPatch.credentials = {
+            ...(tencentDraft.secretId.trim() ? { secret_id: tencentDraft.secretId.trim() } : {}),
+            ...(tencentDraft.secretKey.trim() ? { secret_key: tencentDraft.secretKey.trim() } : {}),
+          }
         }
 
         const mountPatch: UpdateBucketMountInput = {
@@ -409,6 +489,53 @@ export function StorageSettingsPage() {
 
         await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
         toast.success("腾讯云 COS 存储策略已保存。")
+      } else {
+        const policyPatch: UpdateStoragePolicyInput = {
+          name: aliyunDraft.name.trim(),
+          bucket_name: aliyunDraft.bucketName.trim(),
+          region: aliyunDraft.region.trim(),
+          endpoint: aliyunDraft.endpoint.trim() || undefined,
+          multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
+          part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
+          extra: {
+            ...(bucket.extra ?? {}),
+            provider_label: "Aliyun OSS",
+            storage_type: "aliyun",
+            concurrency: aliyunDraft.concurrency,
+            multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
+            part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
+            server_side_encryption: aliyunDraft.serverSideEncryption,
+            kms_key_id: aliyunDraft.serverSideEncryption === "SSE-KMS" ? aliyunDraft.kmsKeyId.trim() : "",
+          },
+        }
+        if (aliyunDraft.accessKeyId.trim() || aliyunDraft.accessKeySecret.trim() || aliyunDraft.securityToken.trim()) {
+          policyPatch.credentials = {
+            ...(aliyunDraft.accessKeyId.trim() ? { access_key_id: aliyunDraft.accessKeyId.trim() } : {}),
+            ...(aliyunDraft.accessKeySecret.trim() ? { access_key_secret: aliyunDraft.accessKeySecret.trim() } : {}),
+            ...(aliyunDraft.securityToken.trim() ? { security_token: aliyunDraft.securityToken.trim() } : {}),
+          }
+        }
+        const mountPatch: UpdateBucketMountInput = {
+          name: aliyunDraft.name.trim(),
+          root_path: aliyunDraft.prefix.trim().replace(/^\/+|\/+$/g, ""),
+          provider_label: "Aliyun OSS",
+          mode: aliyunDraft.mountMode,
+          read_only: aliyunDraft.readOnly,
+          legacy_prefixed_keys: aliyunDraft.legacyPrefixedKeys,
+          extra: {
+            ...(bucket.extra ?? {}),
+            provider_label: "Aliyun OSS",
+            storage_type: "aliyun",
+            concurrency: aliyunDraft.concurrency,
+            multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
+            part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
+            mount_mode: aliyunDraft.mountMode,
+            read_only: aliyunDraft.readOnly,
+            object_key_style: aliyunDraft.objectKeyStyle,
+          },
+        }
+        await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
+        toast.success("阿里云 OSS 存储空间已保存。")
       }
 
       await reloadWorkspace()
@@ -489,8 +616,22 @@ export function StorageSettingsPage() {
         />
       )}
 
-      {view.type === "cors-step" && (
+      {view.type === "form" && view.strategy === "aliyun" && (
+        <AliyunStorageForm
+          draft={aliyunDraft}
+          onChange={setAliyunDraft}
+          onBack={() => setView({ type: "select-provider" })}
+          onSubmit={handleAliyunNext}
+          submitLabel={submitLabel}
+        />
+      )}
+
+      {view.type === "cors-step" && view.strategy === "tencent" && (
         <TencentCorsStep onBack={() => setView({ type: "form", strategy: "tencent" })} onSubmit={handleTencentSubmit} />
+      )}
+
+      {view.type === "cors-step" && view.strategy === "aliyun" && (
+        <AliyunCorsStep onBack={() => setView({ type: "form", strategy: "aliyun" })} onSubmit={handleAliyunSubmit} />
       )}
 
       {view.type === "edit" && resolveStorageStrategy(view.bucket) === "tencent" && (
@@ -511,6 +652,18 @@ export function StorageSettingsPage() {
           initialDraft={initialLocalDraft}
           mode={view.bucket.canEditConnection ? "edit" : "readonly"}
           onChange={setLocalDraft}
+          onBack={() => setView({ type: "list" })}
+          onSubmit={() => handleSaveEdit(view.bucket)}
+          submitLabel={editSubmitLabel}
+        />
+      )}
+
+      {view.type === "edit" && resolveStorageStrategy(view.bucket) === "aliyun" && (
+        <AliyunStorageForm
+          draft={aliyunDraft}
+          initialDraft={initialAliyunDraft}
+          mode={view.bucket.canEditConnection ? "edit" : "readonly"}
+          onChange={setAliyunDraft}
           onBack={() => setView({ type: "list" })}
           onSubmit={() => handleSaveEdit(view.bucket)}
           submitLabel={editSubmitLabel}

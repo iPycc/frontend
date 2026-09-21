@@ -219,6 +219,9 @@ export const EMPTY_BUCKET: BucketMount = {
   policyId: 0,
   name: "我的文件",
   provider: "Local Storage",
+  driverId: "local_fs",
+  driverKind: "local",
+  driverCapabilities: ["direct_write", "single_put", "range"],
   storageType: "local",
   ownerBackendId: 0,
   strategy: {
@@ -233,8 +236,8 @@ export const EMPTY_BUCKET: BucketMount = {
   rootNodeId: "root:empty",
   mountMode: "managed",
   readOnly: false,
-    legacyPrefixedKeys: false,
-    objectKeyStyle: "readable",
+  legacyPrefixedKeys: false,
+  objectKeyStyle: "readable",
   syncStatus: "idle",
   syncedObjects: 0,
   createdAt: "",
@@ -348,6 +351,11 @@ export function loadSnapshot(): AppSnapshot {
 }
 
 function normalizeStorageType(mount: ExplorerMount) {
+  if (mount.driver_id === "local_fs") return "local" as const
+  if (mount.driver_id === "aliyun_oss") return "aliyun" as const
+  if (mount.driver_id === "tencent_cos") return "tencent" as const
+
+  // One-release compatibility for servers that have not exposed driver_id yet.
   const storageType = String(mount.extra?.storage_type ?? "").toLowerCase()
   const providerLabel = String(mount.provider_label ?? mount.extra?.provider_label ?? "").toLowerCase()
 
@@ -390,7 +398,7 @@ function resolveMountStorageRoot(mount: ExplorerMount, storageType: ReturnType<t
 export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, _timezone?: string): BucketMount {
   const storageType = normalizeStorageType(mount)
   const extra = mount.extra ?? {}
-  const provider = String(mount.provider_label ?? extra.provider_label ?? (storageType === "local" ? "Local Storage" : "Tencent COS"))
+  const provider = String(mount.driver_label ?? mount.provider_label ?? extra.provider_label ?? mount.driver_id)
   const storageRoot = resolveMountStorageRoot(mount, storageType)
   const systemManaged = Boolean(extra.system_managed)
 
@@ -401,6 +409,9 @@ export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, _ti
     name: mount.name,
     provider,
     providerLabel: provider,
+    driverId: mount.driver_id,
+    driverKind: mount.driver_kind,
+    driverCapabilities: mount.driver_capabilities ?? [],
     storageType,
     ownerBackendId: mount.owner_id,
     ownerId: String(mount.owner_id),

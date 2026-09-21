@@ -115,6 +115,9 @@ export interface BucketMount {
   name: string
   provider: string
   providerLabel?: string
+  driverId: string
+  driverKind: string
+  driverCapabilities: string[]
   storageType: StorageStrategyKey
   ownerId?: string
   ownerBackendId: number
@@ -122,9 +125,6 @@ export interface BucketMount {
   endpoint?: string
   bucket?: string
   basePrefix?: string
-  secretId?: string
-  secretKey?: string
-  sessionToken?: string
   strategy: BucketStrategy
   rootNodeId: string
   rootPath?: string

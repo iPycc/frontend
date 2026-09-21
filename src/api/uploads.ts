@@ -22,6 +22,8 @@ export type UploadSessionPlan = {
   expires_at?: string | null
   is_duplicate?: boolean
   node_id?: number | null
+  transport: "cloudrave" | "presigned"
+  required_response_headers: string[]
 }
 
 export type UploadSession = {
@@ -39,6 +41,8 @@ export type UploadSession = {
   part_size: number
   created_at: string
   updated_at: string
+  transport: "cloudrave" | "presigned"
+  required_response_headers: string[]
   parts: Array<{
     id: number
     part_number: number
