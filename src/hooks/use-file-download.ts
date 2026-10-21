@@ -75,6 +75,33 @@ function getSourceLabel(response: Response) {
   }
 }
 
+function startNativeDownload(url: string, name: string) {
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = name
+  // Provider downloads may finish on a cross-origin redirect. Keep the file
+  // manager alive if a browser extension intercepts or blocks that navigation.
+  anchor.target = "_blank"
+  anchor.referrerPolicy = "no-referrer"
+  anchor.rel = "noreferrer"
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+async function downloadMode(url: string, signal: AbortSignal) {
+  const response = await requestResponse(url, {
+    method: "HEAD",
+    headers: { Accept: "application/octet-stream" },
+    signal,
+    cache: "no-store",
+  })
+  return {
+    mode: response.headers.get("X-Cloudrave-Download-Mode") === "browser" ? "browser" as const : "cloudrave" as const,
+    url: response.headers.get("X-Cloudrave-Download-URL") || url,
+  }
+}
+
 async function ensureWritePermission(handle: DirectoryHandle) {
   if (!handle.queryPermission) return true
   if (await handle.queryPermission({ mode: "readwrite" }) === "granted") return true
@@ -121,6 +148,13 @@ export function useFileDownload() {
     let fileHandle: FileHandle | null = null
 
     try {
+      const prepared = await downloadMode(url, controller.signal)
+      if (prepared.mode === "browser") {
+        startNativeDownload(prepared.url, name)
+        setTask(null)
+        return "browser" as const
+      }
+
       if (picker) {
         setTask({ name, phase: "choosing", loaded: 0, total: null })
         fileHandle = await picker.call(window, { suggestedName: name })
@@ -206,7 +240,7 @@ export function useFileDownload() {
 
       reportProgress(true)
       finishTask({ name, phase: "complete", loaded, total: total ?? loaded, speed, sourceLabel })
-      return true
+      return "cloudrave" as const
     } catch (error) {
       if (isAbortError(error) || controller.signal.aborted) {
         setTask(null)

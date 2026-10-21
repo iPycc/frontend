@@ -120,12 +120,14 @@ export function buildSharedDownloadUrl(shareId: string, accessToken?: string | n
 export function buildSharedSelectionDownloadUrl(
   shareId: string,
   accessToken: string | null | undefined,
-  nodeIds: number[]
+  nodeIds: number[],
+  downloadName?: string
 ) {
   const url = `/api/v1/share/${shareId}/download`
   const query = new URLSearchParams()
   if (accessToken) query.set("access_token", accessToken)
   nodeIds.forEach((nodeId) => query.append("node_ids", String(nodeId)))
+  if (downloadName) query.set("download_name", downloadName)
   return query.size ? `${url}?${query.toString()}` : url
 }
 

@@ -114,7 +114,7 @@ function mapUpload(item: UploadQueueItem, storageLabel?: string): TransferItem {
 }
 
 function getDownloadStatus(task: DownloadTask): Pick<TransferItem, "status" | "statusLabel"> {
-  if (task.phase === "complete") return { status: "completed", statusLabel: "下载完成" }
+  if (task.phase === "complete") return { status: "completed", statusLabel: task.message || "下载完成" }
   if (task.phase === "error") return { status: "failed", statusLabel: task.message || "下载失败" }
   if (task.phase === "choosing") return { status: "pending", statusLabel: task.message || "等待选择保存位置" }
   if (task.phase === "preparing") return { status: "processing", statusLabel: task.message || "正在准备" }
