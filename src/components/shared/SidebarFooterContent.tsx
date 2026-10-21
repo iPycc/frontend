@@ -13,9 +13,6 @@ export function SidebarFooterContent({ className }: { className?: string }) {
     return null
   }
 
-  const code = settings.filing_text?.trim() ?? ""
-  const queryUrl = code ? `https://beian.mps.gov.cn/#/query/webSearch?code=${encodeURIComponent(code)}` : "#"
-
   return (
     <div className={cn("space-y-2.5 border-t border-border/60 pt-3 pb-1", className)}>
       {showFooter ? (
@@ -27,7 +24,7 @@ export function SidebarFooterContent({ className }: { className?: string }) {
       {showFiling ? (
         <div className="flex justify-center">
           <a
-            href={queryUrl}
+            href="http://beian.miit.gov.cn/"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
