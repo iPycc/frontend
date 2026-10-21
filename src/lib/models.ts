@@ -70,7 +70,7 @@ export interface AppUser {
 }
 
 export function hasCapability(user: AppUser | null | undefined, capability: Capability) {
-  return Boolean(user?.capabilities.includes(capability))
+  return Array.isArray(user?.capabilities) && user.capabilities.includes(capability)
 }
 
 export interface AuthTokens {
