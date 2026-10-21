@@ -214,6 +214,7 @@ export interface UploadQueueItem {
   uploadedBytes: number
   totalBytes: number
   speedBytesPerSecond?: number
+  progressStage?: "hashing" | "uploading"
   partSizeBytes?: number
   partCount?: number
   speedText: string

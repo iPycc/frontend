@@ -22,6 +22,7 @@ import {
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
 import { fingerprintFile, hashFile } from "@/lib/upload/hash"
+import { hashBlob, type UploadHashAlgorithm } from "@/lib/upload/incremental-hash"
 import { partLimit } from "@/lib/upload/pool"
 import { trackParts } from "@/lib/upload/progress"
 import { putPart } from "@/lib/upload/put"
@@ -95,21 +96,50 @@ export function useUploadRun({
       let stopHeartbeat: (() => void) | undefined
       try {
         const queueItem = getUploadQueueItem(id)
+        const providerHashAlgorithm: UploadHashAlgorithm | null =
+          bucket.driverId === "drive_139"
+            ? "sha256"
+            : bucket.driverId === "drive_189"
+              ? "md5"
+              : null
         updateUploadQueueItem(id, {
           status: "preparing",
           totalBytes: saved.file.size,
-          speedText: sessionId ? "正在验证文件并查询已上传分片..." : "计算校验值...",
+          speedBytesPerSecond: 0,
+          progressStage: providerHashAlgorithm ? "hashing" : undefined,
+          speedText: providerHashAlgorithm
+            ? `正在计算 ${providerHashAlgorithm === "sha256" ? "SHA-256" : "MD5"}`
+            : sessionId
+              ? "正在验证文件并查询已上传分片..."
+              : "正在准备...",
           errorMessage: undefined,
           requiresFileSelection: false,
+          ...(providerHashAlgorithm ? { progress: 0, uploadedBytes: 0 } : {}),
         })
         const apiParentId =
           saved.target.parentId && !saved.target.parentId.startsWith("root:")
             ? Number(saved.target.parentId)
             : undefined
 
-        const [checksum, fileFingerprint] = await Promise.all([
+        const [checksum, fileFingerprint, providerChecksum] = await Promise.all([
           hashFile(saved.file),
           fingerprintFile(saved.file),
+          providerHashAlgorithm
+            ? hashBlob(saved.file, providerHashAlgorithm, controller.signal, ({
+                processedBytes,
+                totalBytes,
+                bytesPerSecond,
+              }) => {
+                updateUploadQueueItem(id, {
+                  status: "preparing",
+                  progressStage: "hashing",
+                  uploadedBytes: processedBytes,
+                  totalBytes,
+                  progress: totalBytes > 0 ? (processedBytes / totalBytes) * 100 : 100,
+                  speedBytesPerSecond: bytesPerSecond,
+                })
+              })
+            : Promise.resolve(null),
         ])
         throwIfAborted()
         if (queueItem?.fileFingerprint && queueItem.fileFingerprint !== fileFingerprint) {
@@ -122,6 +152,10 @@ export function useUploadRun({
           checksum: checksum ?? queueItem?.checksum,
           fileFingerprint,
           fileLastModified: saved.file.lastModified,
+          progressStage: undefined,
+          speedBytesPerSecond: 0,
+          speedText: sessionId ? "正在查询已上传分片..." : "正在创建上传任务...",
+          ...(providerHashAlgorithm ? { progress: 0, uploadedBytes: 0 } : {}),
         })
 
         let plan: UploadSessionPlan | undefined
@@ -139,7 +173,8 @@ export function useUploadRun({
               existing.mount_id !== bucket.backendId ||
               existing.file_name !== saved.file.name ||
               existing.size !== saved.file.size ||
-              (existing.checksum && checksum && existing.checksum !== checksum)
+              (existing.checksum && checksum && existing.checksum !== checksum) ||
+              (existing.provider_checksum && providerChecksum && existing.provider_checksum !== providerChecksum)
             ) {
               throw new Error("原上传会话与所选文件不匹配")
             }
@@ -149,6 +184,7 @@ export function useUploadRun({
                 progress: 100,
                 uploadedBytes: saved.file.size,
                 speedBytesPerSecond: 0,
+                progressStage: undefined,
                 speedText: "已上传",
               })
               scheduleUploadRefresh(saved.target.parentId, bucket.id)
@@ -168,6 +204,7 @@ export function useUploadRun({
                 upload_urls: [],
                 transport: existing.transport,
                 required_response_headers: existing.required_response_headers,
+                part_checksum_algorithm: existing.part_checksum_algorithm,
               }
               serverParts = existing.parts
             }
@@ -182,6 +219,7 @@ export function useUploadRun({
             sessionId: undefined,
             progress: 0,
             uploadedBytes: 0,
+            progressStage: undefined,
             speedText: queueItem?.sessionId ? "原会话已失效，正在创建新上传任务..." : "正在创建上传任务...",
           })
           plan = await retryRateLimited(
@@ -192,6 +230,7 @@ export function useUploadRun({
                 file_name: saved.file.name,
                 relative_path: saved.relativePath,
                 checksum: checksum ?? undefined,
+                provider_checksum: providerChecksum ?? undefined,
                 size: saved.file.size,
                 content_type: saved.file.type || "application/octet-stream",
                 mode: "auto",
@@ -211,6 +250,7 @@ export function useUploadRun({
             status: "completed",
             progress: 100,
             uploadedBytes: saved.file.size,
+            progressStage: undefined,
             speedText: "秒传完成",
           })
           scheduleUploadRefresh(saved.target.parentId, bucket.id)
@@ -220,6 +260,7 @@ export function useUploadRun({
           sessionId,
           expiresAt: plan.expires_at ?? undefined,
           status: "uploading",
+          progressStage: "uploading",
           requiresFileSelection: false,
         })
         const heartbeatController = new AbortController()
@@ -289,14 +330,18 @@ export function useUploadRun({
             ? `已恢复 ${formatBytes(resumedBytes)}，继续上传剩余分片`
             : "正在上传",
         })
-        const partConcurrency = partLimit(bucket.strategy.concurrency)
+        const partConcurrency = bucket.driverId === "drive_139"
+          ? 1
+          : partLimit(bucket.strategy.concurrency)
         const uploadPlans = new Map<number, Promise<UploadPartPlan | undefined>>()
+        const partChecksums = new Map<number, Promise<string>>()
         plan.upload_urls.forEach((item) => uploadPlans.set(item.part_number, Promise.resolve(item)))
         const progressTracker = trackParts(
           saved.file.size,
           ({ uploadedBytes, progress, bytesPerSecond }) => {
             updateUploadQueueItem(id, {
               status: "uploading",
+              progressStage: "uploading",
               uploadedBytes,
               progress,
               speedBytesPerSecond: bytesPerSecond,
@@ -315,7 +360,7 @@ export function useUploadRun({
         let nextMissingPart = 0
         let partFailure: unknown = null
 
-        const getPartPlan = (partNumber: number, refresh = false) => {
+        const getPartPlan = (partNumber: number, refresh = false, partChecksum?: string) => {
           const cached = refresh ? undefined : uploadPlans.get(partNumber)
           if (cached) return cached
           if (usesCloudraveTransport(plan)) return Promise.resolve(undefined)
@@ -325,6 +370,7 @@ export function useUploadRun({
               session.tokens.accessToken,
               activeSessionId,
               partNumber,
+              partChecksum,
               controller.signal
             ),
             controller.signal
@@ -338,7 +384,12 @@ export function useUploadRun({
 
         const prefetchNextWave = (partNumber: number) => {
           const nextPartNumber = partNumber + partConcurrency
-          if (singlePut || usesCloudraveTransport(plan) || nextPartNumber > partCount) return
+          if (
+            singlePut ||
+            usesCloudraveTransport(plan) ||
+            plan.part_checksum_algorithm ||
+            nextPartNumber > partCount
+          ) return
           void getPartPlan(nextPartNumber).catch(() => {
             // The worker will request a fresh URL when it reaches this part.
           })
@@ -355,9 +406,19 @@ export function useUploadRun({
           const chunk = saved.file.slice(start, end)
           prefetchNextWave(partNumber)
 
+          let partChecksum: string | undefined
+          if (plan.part_checksum_algorithm) {
+            let pending = partChecksums.get(partNumber)
+            if (!pending) {
+              pending = hashBlob(chunk, plan.part_checksum_algorithm, controller.signal)
+              partChecksums.set(partNumber, pending)
+            }
+            partChecksum = await pending
+          }
+
           const uploaded = await retryPart(async (attempt) => {
             progressTracker.begin(partNumber)
-            const uploadPlan = await getPartPlan(partNumber, attempt > 0)
+            const uploadPlan = await getPartPlan(partNumber, attempt > 0, partChecksum)
             throwIfAborted()
             if (usesCloudraveTransport(plan)) {
               const part = await uploadApiSchedulerRef.current.run(
@@ -456,6 +517,7 @@ export function useUploadRun({
         updateUploadQueueItem(id, {
           status: "processing",
           progress: 100,
+          progressStage: undefined,
           speedText: "处理中...",
         })
         await retryRateLimited(
@@ -470,6 +532,7 @@ export function useUploadRun({
           progress: 100,
           uploadedBytes: saved.file.size,
           speedBytesPerSecond: 0,
+          progressStage: undefined,
           speedText: "已上传",
         })
         scheduleUploadRefresh(saved.target.parentId, bucket.id)
@@ -493,6 +556,7 @@ export function useUploadRun({
           status: paused ? "paused" : canceled ? "canceled" : "failed",
           errorMessage: paused || canceled ? undefined : error instanceof Error ? error.message : "上传失败",
           speedBytesPerSecond: 0,
+          progressStage: undefined,
           speedText: paused ? "已暂停，可继续上传" : canceled ? "已取消" : "上传中断，可从已完成分片继续",
         })
       } finally {

@@ -84,7 +84,10 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
     status: "paused",
     statusLabel: item.requiresFileSelection ? "请选择原文件以继续" : "已暂停，可继续上传",
   }
-  if (item.status === "preparing") return { status: "active", statusLabel: "正在准备" }
+  if (item.status === "preparing") return {
+    status: "active",
+    statusLabel: item.progressStage === "hashing" ? item.speedText : "正在准备",
+  }
   if (item.status === "uploading") return { status: "active", statusLabel: "正在上传" }
   return { status: "pending", statusLabel: "等待上传" }
 }
@@ -507,6 +510,7 @@ function TransferDetails({
   formatBytes: (value?: number) => string
 }) {
   const remaining = item.total !== null && item.speed > 0 ? Math.max(item.total - item.loaded, 0) / item.speed : 0
+  const isHashing = item.upload?.status === "preparing" && item.upload.progressStage === "hashing"
   const sizeText = item.total !== null
     ? `${formatBytes(item.total)}${item.partCount && item.partSize ? `（${item.partCount} 个分片，每片 ${formatBytes(item.partSize)}）` : ""}`
     : "未知"
@@ -517,8 +521,8 @@ function TransferDetails({
         ["文件大小", sizeText],
         ["存储策略", item.storageLabel || "当前存储"],
         ["存放位置", item.detail || "当前目录"],
-        ["上传进度", progressText],
-        ["当前速率", item.speed > 0 ? `${formatBytes(item.speed)}/s` : "—"],
+        [isHashing ? "校验进度" : "上传进度", progressText],
+        [isHashing ? "校验速度" : "当前速率", item.speed > 0 ? `${formatBytes(item.speed)}/s` : "—"],
         ["预计剩余", remaining > 0 ? formatDuration(remaining) : "—"],
         ["断点续传", item.upload?.sessionId ? `会话 ${item.upload.sessionId.slice(0, 8)}… 已保存` : "等待创建会话"],
         ["上传签名", formatExpiry(item.expiresAt)],

@@ -9,6 +9,11 @@ export type UploadPartPlan = {
   url: string
   headers: Record<string, string>
   expires_at?: string | null
+  body_mode?: "raw" | "multipart"
+  form_fields?: Record<string, string>
+  file_field?: string
+  record_etag?: string | null
+  response_mode?: "header" | "wopan_json" | "opaque" | "skip"
 }
 
 export type UploadSessionPlan = {
@@ -24,6 +29,7 @@ export type UploadSessionPlan = {
   node_id?: number | null
   transport: "cloudrave" | "presigned"
   required_response_headers: string[]
+  part_checksum_algorithm?: "md5" | null
 }
 
 export type UploadSession = {
@@ -37,12 +43,14 @@ export type UploadSession = {
   file_name: string
   content_type?: string | null
   checksum?: string | null
+  provider_checksum?: string | null
   size: number
   part_size: number
   created_at: string
   updated_at: string
   transport: "cloudrave" | "presigned"
   required_response_headers: string[]
+  part_checksum_algorithm?: "md5" | null
   parts: Array<{
     id: number
     part_number: number
@@ -58,6 +66,7 @@ export type CreateUploadSessionInput = {
   file_name: string
   relative_path?: string | null
   checksum?: string | null | undefined
+  provider_checksum?: string | null | undefined
   object_key?: string | null
   mode?: UploadRequestMode
   size: number
@@ -85,11 +94,14 @@ export async function getUploadPartUrl(
   token: string,
   sessionId: string,
   partNumber: number,
+  partChecksum?: string,
   signal?: AbortSignal
 ) {
-  return requestJson<UploadPartPlan>(`/explorer/upload/${sessionId}/part/${partNumber}/url`, {
+  const query = partChecksum ? `?part_checksum=${encodeURIComponent(partChecksum)}` : ""
+  return requestJson<UploadPartPlan>(`/explorer/upload/${sessionId}/part/${partNumber}/url${query}`, {
     token,
     signal,
+    cache: "no-store",
   })
 }
 
