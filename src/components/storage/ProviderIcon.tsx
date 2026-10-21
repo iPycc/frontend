@@ -2,6 +2,10 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+const mobileCloudIcon = new URL("../../assets/provider-icons/mobile-cloud.svg", import.meta.url).href
+const telecomCloudIcon = new URL("../../assets/provider-icons/telecom-cloud.svg", import.meta.url).href
+const unicomCloudIcon = new URL("../../assets/provider-icons/unicom-cloud.svg", import.meta.url).href
+
 type ProviderIconProps = {
   driverId?: string
   provider?: string
@@ -15,7 +19,23 @@ function resolveDriverId(driverId?: string, provider?: string) {
   if (value.includes("aliyun") || value.includes("阿里") || value.includes("oss")) return "aliyun_oss"
   if (value.includes("local") || value.includes("本机")) return "local_fs"
   if (value.includes("tencent") || value.includes("腾讯") || value.includes("cos")) return "tencent_cos"
+  if (value.includes("移动") || value.includes("139")) return "drive_139"
+  if (value.includes("天翼") || value.includes("189")) return "drive_189"
+  if (value.includes("联通") || value.includes("wopan") || value.includes("wo")) return "drive_wo"
   return "unknown"
+}
+
+const providerDisplayNames: Record<string, string> = {
+  local_fs: "Local Storage",
+  tencent_cos: "Tencent COS",
+  aliyun_oss: "Aliyun OSS",
+  drive_139: "139zhey",
+  drive_189: "189 Cloud",
+  drive_wo: "Wo Cloud",
+}
+
+export function getProviderDisplayName(driverId?: string, provider?: string) {
+  return providerDisplayNames[resolveDriverId(driverId, provider)] ?? provider ?? driverId ?? ""
 }
 
 export function ProviderIcon({ driverId, provider, size = 28, className }: ProviderIconProps) {
@@ -49,6 +69,24 @@ export function ProviderIcon({ driverId, provider, size = 28, className }: Provi
         <circle cx="20" cy="38" r="3.5" fill="white" />
         <circle cx="30" cy="38" r="3.5" fill="white" />
       </svg>
+    )
+  }
+
+  if (id === "drive_139" || id === "drive_189" || id === "drive_wo") {
+    const src = id === "drive_139"
+      ? mobileCloudIcon
+      : id === "drive_189"
+        ? telecomCloudIcon
+        : unicomCloudIcon
+    return (
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        style={style}
+        className={cn("shrink-0 object-contain", className)}
+        aria-hidden="true"
+      />
     )
   }
 
