@@ -354,6 +354,9 @@ function normalizeStorageType(mount: ExplorerMount) {
   if (mount.driver_id === "local_fs") return "local" as const
   if (mount.driver_id === "aliyun_oss") return "aliyun" as const
   if (mount.driver_id === "tencent_cos") return "tencent" as const
+  if (mount.driver_id === "drive_139") return "139" as const
+  if (mount.driver_id === "drive_189") return "189" as const
+  if (mount.driver_id === "drive_wo") return "wo" as const
 
   // One-release compatibility for servers that have not exposed driver_id yet.
   const storageType = String(mount.extra?.storage_type ?? "").toLowerCase()
@@ -365,6 +368,9 @@ function normalizeStorageType(mount: ExplorerMount) {
   if (storageType === "aliyun" || providerLabel.includes("aliyun")) {
     return "aliyun" as const
   }
+  if (storageType === "139" || providerLabel.includes("移动")) return "139" as const
+  if (storageType === "189" || providerLabel.includes("天翼")) return "189" as const
+  if (storageType === "wo" || providerLabel.includes("联通")) return "wo" as const
   return "tencent" as const
 }
 

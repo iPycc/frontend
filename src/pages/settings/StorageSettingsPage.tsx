@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import {
   listStorageDrivers,
   type StorageDriver,
+  type StorageDriverInspection,
   type UpdateBucketMountInput,
   type UpdateStoragePolicyInput,
 } from "@/api/storage"
@@ -11,6 +12,7 @@ import {
   applyUserMountCors,
   deleteUserMount,
   getUserMountDeletePreview,
+  syncUserMount,
   syncUserMountPages,
   updateUserMount,
   type UserMountDeletePreview,
@@ -24,28 +26,34 @@ import {
   AliyunStorageForm,
   LocalStorageForm,
   ProviderSelector,
+  RemoteDriveForm,
   resolveStorageStrategy,
   StoragePolicyList,
   TencentCorsStep,
   TencentStorageForm,
 } from "@/components/storage"
-import type { AliyunStorageDraft, LocalStorageDraft, TencentStorageDraft } from "@/components/storage"
+import type { AliyunStorageDraft, LocalStorageDraft, RemoteDriveDraft, TencentStorageDraft } from "@/components/storage"
 import {
   MountDeleteDialog,
   type MountDeleteMode,
 } from "@/components/storage/MountDeleteDialog"
+import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
 import {
   buildAliyunMountInput,
   buildAliyunPolicyInput,
   buildLocalDraft,
   buildLocalMountInput,
   buildLocalPolicyInput,
+  buildRemoteDriveMountInput,
+  buildRemoteDrivePolicyInput,
   buildTencentMountInput,
   buildTencentPolicyInput,
   createEmptyAliyunDraft,
+  createEmptyRemoteDriveDraft,
   createEmptyTencentDraft,
   normalizeStorageRoot,
   parseSizeMb,
+  remoteDriveLabel,
   slugify,
   type View,
 } from "./store/build"
@@ -60,6 +68,9 @@ export function StorageSettingsPage() {
   const [initialLocalDraft, setInitialLocalDraft] = React.useState<LocalStorageDraft | undefined>()
   const [aliyunDraft, setAliyunDraft] = React.useState<AliyunStorageDraft>(createEmptyAliyunDraft)
   const [initialAliyunDraft, setInitialAliyunDraft] = React.useState<AliyunStorageDraft | undefined>()
+  const [remoteDraft, setRemoteDraft] = React.useState<RemoteDriveDraft>(() => createEmptyRemoteDriveDraft("139"))
+  const [initialRemoteDraft, setInitialRemoteDraft] = React.useState<RemoteDriveDraft | undefined>()
+  const [remoteInspection, setRemoteInspection] = React.useState<StorageDriverInspection | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [syncingMountId, setSyncingMountId] = React.useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = React.useState<BucketMount | null>(null)
@@ -96,7 +107,7 @@ export function StorageSettingsPage() {
       const byId = new Map((drivers ?? []).map((driver) => [driver.id, driver]))
       const option = (strategy: StorageStrategyKey, driverId: string, description: string) => ({
         strategy,
-        label: byId.get(driverId)?.label ?? getStorageModule(strategy).label,
+        label: getProviderDisplayName(driverId, byId.get(driverId)?.label ?? getStorageModule(strategy).label),
         description,
         enabled: drivers === null ? true : Boolean(byId.get(driverId)?.enabled),
       })
@@ -104,6 +115,9 @@ export function StorageSettingsPage() {
         option("local", "local_fs", "默认按当前用户自动生成独立本机目录，支持路径联想和合法性校验。"),
         option("tencent", "tencent_cos", "连接腾讯云 COS，支持直传、分片续传、镜像同步与服务端加密。"),
         option("aliyun", "aliyun_oss", "连接阿里云 OSS，支持直传、分片续传、镜像同步与服务端加密。"),
+        option("139", "drive_139", "粘贴 Authorization 与 ud_id，验证移动云盘登录并自动读取空间容量。"),
+        option("189", "drive_189", "粘贴 189 会话 JSON，验证天翼云盘并以只读镜像方式导入目录。"),
+        option("wo", "drive_wo", "粘贴 WoCloud-Web-Token，验证联通云盘并读取总量、已用和剩余空间。"),
       ]
     },
     [drivers]
@@ -146,6 +160,9 @@ export function StorageSettingsPage() {
     setInitialLocalDraft(undefined)
     setAliyunDraft(createEmptyAliyunDraft())
     setInitialAliyunDraft(undefined)
+    setRemoteDraft(createEmptyRemoteDriveDraft("139"))
+    setInitialRemoteDraft(undefined)
+    setRemoteInspection(null)
     setView({ type: "select-provider" })
   }
 
@@ -161,6 +178,14 @@ export function StorageSettingsPage() {
       setTencentDraft(createEmptyTencentDraft())
       setInitialTencentDraft(undefined)
       setView({ type: "form", strategy: "tencent" })
+      return
+    }
+
+    if (strategy === "139" || strategy === "189" || strategy === "wo") {
+      setRemoteDraft(createEmptyRemoteDriveDraft(strategy))
+      setInitialRemoteDraft(undefined)
+      setRemoteInspection(null)
+      setView({ type: "form", strategy })
       return
     }
 
@@ -254,6 +279,32 @@ export function StorageSettingsPage() {
       setView({ type: "list" })
     })
 
+  const handleRemoteDriveSubmit = (inspection: StorageDriverInspection | null) =>
+    void withSubmit(async () => {
+      if (!inspection) {
+        toast.error("请先重新验证登录状态与容量。")
+        return
+      }
+      const accessToken = requireToken()
+      const fallbackSlug = slugify(`${userSeed}-${remoteDraft.name}`) || `${remoteDraft.provider}-drive`
+      const created = await attachStorage(
+        accessToken,
+        buildRemoteDrivePolicyInput(remoteDraft, inspection),
+        (policyId) => buildRemoteDriveMountInput(remoteDraft, inspection, fallbackSlug, policyId)
+      )
+
+      let firstSyncComplete = false
+      try {
+        const sync = await syncUserMount(accessToken, created.mount.id)
+        firstSyncComplete = sync.complete
+      } catch (error) {
+        toast.warning(error instanceof Error ? error.message : "挂载已创建，但首次目录同步尚未完成。")
+      }
+      await reloadWorkspace()
+      toast.success(firstSyncComplete ? "云盘已挂载，目录索引同步完成。" : "云盘已挂载，已导入首批目录索引。")
+      setView({ type: "list" })
+    })
+
   const handleEditPolicy = (bucket: BucketMount) => {
     const strategy = resolveStorageStrategy(bucket)
     if (strategy === "local") {
@@ -292,7 +343,7 @@ export function StorageSettingsPage() {
       }
       setTencentDraft(draft)
       setInitialTencentDraft(draft)
-    } else {
+    } else if (strategy === "aliyun") {
       const encryption = bucket.extra?.server_side_encryption
       const draft: AliyunStorageDraft = {
         name: bucket.name,
@@ -315,6 +366,29 @@ export function StorageSettingsPage() {
       }
       setAliyunDraft(draft)
       setInitialAliyunDraft(draft)
+    } else {
+      const provider = strategy as RemoteDriveDraft["provider"]
+      const draft: RemoteDriveDraft = {
+        provider,
+        name: bucket.name,
+        token: "",
+        userDomainId: "",
+        rootId: typeof bucket.extra?.root_id === "string" ? bucket.extra.root_id : createEmptyRemoteDriveDraft(provider).rootId,
+      }
+      const total = Number(bucket.extra?.provider_total_bytes ?? bucket.quota?.total ?? 0)
+      const used = Number(bucket.extra?.provider_used_bytes ?? bucket.quota?.used ?? 0)
+      setRemoteDraft(draft)
+      setInitialRemoteDraft(draft)
+      setRemoteInspection(total > 0 ? {
+        provider: bucket.driverId,
+        account_id: String(bucket.extra?.account_id ?? bucket.bucket ?? ""),
+        display_name: typeof bucket.extra?.display_name === "string" ? bucket.extra.display_name : null,
+        root_id: draft.rootId,
+        used_bytes: used,
+        total_bytes: total,
+        free_bytes: Math.max(0, total - used),
+        extra: {},
+      } : null)
     }
 
     setView({ type: "edit", bucket })
@@ -542,6 +616,58 @@ export function StorageSettingsPage() {
       setView({ type: "list" })
     })
 
+  const handleSaveRemoteDrive = (bucket: BucketMount, inspection: StorageDriverInspection | null) =>
+    void withSubmit(async () => {
+      const accessToken = requireToken()
+      if (!bucket.backendId || !bucket.policyId) {
+        toast.error("当前挂载缺少后端标识，无法保存。")
+        return
+      }
+      const label = remoteDriveLabel(remoteDraft.provider)
+      const policyPatch: UpdateStoragePolicyInput = {
+        ...(inspection ? { bucket_name: inspection.account_id } : {}),
+        extra: {
+          ...(bucket.extra ?? {}),
+          provider_label: label,
+          storage_type: remoteDraft.provider,
+          ...(inspection ? {
+            account_id: inspection.account_id,
+            display_name: inspection.display_name,
+            root_id: inspection.root_id,
+            provider_used_bytes: inspection.used_bytes,
+            provider_total_bytes: inspection.total_bytes,
+            provider_free_bytes: inspection.free_bytes,
+          } : {}),
+        },
+      }
+      if (inspection && remoteDraft.token.trim()) {
+        policyPatch.credentials = buildRemoteDrivePolicyInput(remoteDraft, inspection).credentials
+      }
+      await updateUserMount(accessToken, bucket.backendId, policyPatch, {
+        name: remoteDraft.name.trim(),
+        provider_label: label,
+        read_only: false,
+        ...(inspection ? { quota_bytes: inspection.total_bytes } : {}),
+        extra: {
+          ...(bucket.extra ?? {}),
+          provider_label: label,
+          storage_type: remoteDraft.provider,
+          read_only: false,
+          ...(inspection ? {
+            account_id: inspection.account_id,
+            display_name: inspection.display_name,
+            root_id: inspection.root_id,
+            provider_used_bytes: inspection.used_bytes,
+            provider_total_bytes: inspection.total_bytes,
+            provider_free_bytes: inspection.free_bytes,
+          } : {}),
+        },
+      })
+      await reloadWorkspace()
+      toast.success(`${label}挂载已保存。`)
+      setView({ type: "list" })
+    })
+
   const handleSyncMount = React.useCallback(async (bucket: BucketMount) => {
     const accessToken = requireToken()
     if (!bucket.backendId || bucket.mountMode !== "mirror") {
@@ -626,6 +752,17 @@ export function StorageSettingsPage() {
         />
       )}
 
+      {view.type === "form" && (view.strategy === "139" || view.strategy === "189" || view.strategy === "wo") && (
+        <RemoteDriveForm
+          accessToken={token ?? ""}
+          draft={remoteDraft}
+          onChange={setRemoteDraft}
+          onBack={() => setView({ type: "select-provider" })}
+          onSubmit={handleRemoteDriveSubmit}
+          submitLabel={submitLabel}
+        />
+      )}
+
       {view.type === "cors-step" && view.strategy === "tencent" && (
         <TencentCorsStep onBack={() => setView({ type: "form", strategy: "tencent" })} onSubmit={handleTencentSubmit} />
       )}
@@ -666,6 +803,20 @@ export function StorageSettingsPage() {
           onChange={setAliyunDraft}
           onBack={() => setView({ type: "list" })}
           onSubmit={() => handleSaveEdit(view.bucket)}
+          submitLabel={editSubmitLabel}
+        />
+      )}
+
+      {view.type === "edit" && ["139", "189", "wo"].includes(resolveStorageStrategy(view.bucket)) && (
+        <RemoteDriveForm
+          accessToken={token ?? ""}
+          draft={remoteDraft}
+          initialDraft={initialRemoteDraft}
+          initialInspection={remoteInspection}
+          mode={view.bucket.canEditConnection ? "edit" : "readonly"}
+          onChange={setRemoteDraft}
+          onBack={() => setView({ type: "list" })}
+          onSubmit={(inspection) => handleSaveRemoteDrive(view.bucket, inspection)}
           submitLabel={editSubmitLabel}
         />
       )}

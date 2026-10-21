@@ -1,12 +1,16 @@
 import type {
   CreateBucketMountInput,
   CreateStoragePolicyInput,
+  StorageDriverInspection,
+  StorageDriverId,
 } from "@/api/storage"
 import type {
   LocalStorageDraft,
   AliyunStorageDraft,
+  RemoteDriveDraft,
   TencentStorageDraft,
 } from "@/components/storage"
+import { remoteDriveCredentials } from "@/components/storage/remote/RemoteDriveForm"
 import {
   buildLocalStoragePath,
   type BucketMount,
@@ -62,6 +66,93 @@ export function createEmptyAliyunDraft(): AliyunStorageDraft {
     partSize: "25 MB",
     serverSideEncryption: "none",
     kmsKeyId: "",
+  }
+}
+
+const remoteDriveDefaults = {
+  "139": { name: "139zhey", rootId: "/" },
+  "189": { name: "189 Cloud", rootId: "-11" },
+  wo: { name: "Wo Cloud", rootId: "0" },
+} as const
+
+export function createEmptyRemoteDriveDraft(provider: RemoteDriveDraft["provider"]): RemoteDriveDraft {
+  const defaults = remoteDriveDefaults[provider]
+  return { provider, name: defaults.name, token: "", userDomainId: "", rootId: defaults.rootId }
+}
+
+export function remoteDriveId(provider: RemoteDriveDraft["provider"]): StorageDriverId {
+  if (provider === "139") return "drive_139"
+  if (provider === "189") return "drive_189"
+  return "drive_wo"
+}
+
+export function remoteDriveLabel(provider: RemoteDriveDraft["provider"]) {
+  return remoteDriveDefaults[provider].name
+}
+
+export function buildRemoteDrivePolicyInput(
+  draft: RemoteDriveDraft,
+  inspection: StorageDriverInspection
+): CreateStoragePolicyInput {
+  const label = remoteDriveLabel(draft.provider)
+  const partSizeMb = draft.provider === "189" ? 10 : draft.provider === "wo" ? 5 : 25
+  return {
+    name: draft.name.trim(),
+    provider: remoteDriveId(draft.provider),
+    bucket_name: inspection.account_id,
+    credentials: remoteDriveCredentials({ ...draft, rootId: inspection.root_id }),
+    status: "active",
+    description: `${label} account ${inspection.account_id}`,
+    multipart_threshold_mb: 25,
+    part_size_mb: partSizeMb,
+    presign_ttl_seconds: 900,
+    is_default: false,
+    cors_auto_configured: false,
+    extra: {
+      provider_label: label,
+      storage_type: draft.provider,
+      account_id: inspection.account_id,
+      display_name: inspection.display_name,
+      root_id: inspection.root_id,
+      provider_used_bytes: inspection.used_bytes,
+      provider_total_bytes: inspection.total_bytes,
+      provider_free_bytes: inspection.free_bytes,
+      mount_mode: "mirror",
+      read_only: false,
+    },
+  }
+}
+
+export function buildRemoteDriveMountInput(
+  draft: RemoteDriveDraft,
+  inspection: StorageDriverInspection,
+  fallbackSlug: string,
+  policyId: number
+): CreateBucketMountInput {
+  const label = remoteDriveLabel(draft.provider)
+  return {
+    policy_id: policyId,
+    name: draft.name.trim(),
+    mount_slug: slugify(draft.name) || fallbackSlug,
+    root_path: "",
+    provider_label: label,
+    is_enabled: true,
+    mode: "mirror",
+    read_only: false,
+    quota_bytes: inspection.total_bytes,
+    extra: {
+      provider_label: label,
+      storage_type: draft.provider,
+      account_id: inspection.account_id,
+      display_name: inspection.display_name,
+      root_id: inspection.root_id,
+      provider_used_bytes: inspection.used_bytes,
+      provider_total_bytes: inspection.total_bytes,
+      provider_free_bytes: inspection.free_bytes,
+      mount_mode: "mirror",
+      read_only: false,
+      object_key_style: "readable",
+    },
   }
 }
 
