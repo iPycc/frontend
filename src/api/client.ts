@@ -148,6 +148,10 @@ async function requestResponseInternal(
   if (!response.ok) {
     const rawText = await response.text()
     const payload = rawText ? parseMaybeJson(rawText) : null
+    if (typeof window !== "undefined" && payload && typeof payload === "object" &&
+        (payload as Record<string, unknown>).code === "storage_reauthorization_required") {
+      window.dispatchEvent(new Event("cloudrave:storage-reauthorization"))
+    }
     throw new ApiError(
       response.status,
       pickErrorMessage(payload, response.status),

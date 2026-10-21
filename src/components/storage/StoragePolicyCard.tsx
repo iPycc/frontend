@@ -55,7 +55,7 @@ export function StoragePolicyCard({ bucket, onEdit, onDelete, onSync, syncing }:
             onClick={() => onEdit(bucket)}
           >
             <IconPencil size={14} />
-            编辑
+            {bucket.extra?.requires_reauthorization === true && bucket.canEditConnection ? "重新授权" : "编辑"}
           </Button>
           {bucket.mountMode === "mirror" ? (
             <Button
