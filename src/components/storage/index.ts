@@ -8,7 +8,9 @@ import { StoragePolicyCard } from "@/components/storage/StoragePolicyCard"
 import { StoragePolicyList } from "@/components/storage/StoragePolicyList"
 import { TencentCorsStep } from "@/components/storage/tencent/TencentCorsStep"
 import { TencentStorageForm } from "@/components/storage/tencent/TencentStorageForm"
+import { RemoteDriveForm } from "@/components/storage/remote/RemoteDriveForm"
 import type {
+  RemoteDriveDraft,
   LocalStorageDraft,
   AliyunStorageDraft,
   StorageModuleDefinition,
@@ -25,6 +27,7 @@ export {
   StoragePolicyList,
   TencentCorsStep,
   TencentStorageForm,
+  RemoteDriveForm,
 }
 
 export type {
@@ -32,26 +35,45 @@ export type {
   AliyunStorageDraft,
   StorageStrategyKey,
   TencentStorageDraft,
+  RemoteDriveDraft,
 }
 
 const storageModules: Record<StorageStrategyKey, StorageModuleDefinition> = {
   tencent: {
     strategy: "tencent",
-    label: "腾讯云 COS",
+    label: "Tencent COS",
     canCreate: true,
     canEdit: (bucket: BucketMount) => bucket.storageType === "tencent" || !bucket.storageType,
   },
   local: {
     strategy: "local",
-    label: "Local Storage（本机存储）",
+    label: "Local Storage",
     canCreate: true,
     canEdit: (bucket: BucketMount) => bucket.storageType === "local" || bucket.isLocal,
   },
   aliyun: {
     strategy: "aliyun",
-    label: "阿里云 OSS",
+    label: "Aliyun OSS",
     canCreate: true,
     canEdit: (bucket: BucketMount) => bucket.driverId === "aliyun_oss" || bucket.storageType === "aliyun",
+  },
+  "139": {
+    strategy: "139",
+    label: "139zhey",
+    canCreate: true,
+    canEdit: (bucket) => bucket.driverId === "drive_139",
+  },
+  "189": {
+    strategy: "189",
+    label: "189 Cloud",
+    canCreate: true,
+    canEdit: (bucket) => bucket.driverId === "drive_189",
+  },
+  wo: {
+    strategy: "wo",
+    label: "Wo Cloud",
+    canCreate: true,
+    canEdit: (bucket) => bucket.driverId === "drive_wo",
   },
 }
 
@@ -63,6 +85,9 @@ export function resolveStorageStrategy(bucket: BucketMount): StorageStrategyKey 
   if (bucket.driverId === "local_fs") return "local"
   if (bucket.driverId === "aliyun_oss") return "aliyun"
   if (bucket.driverId === "tencent_cos") return "tencent"
+  if (bucket.driverId === "drive_139") return "139"
+  if (bucket.driverId === "drive_189") return "189"
+  if (bucket.driverId === "drive_wo") return "wo"
 
   if (bucket.storageType) {
     return bucket.storageType

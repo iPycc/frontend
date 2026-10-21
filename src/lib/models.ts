@@ -7,7 +7,7 @@ export type MediaType = "image" | "video" | "audio" | "document" | "archive" | "
 export type MountMode = "managed" | "mirror"
 export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
 
-export type StorageStrategyKey = "tencent" | "local" | "aliyun"
+export type StorageStrategyKey = "tencent" | "local" | "aliyun" | "139" | "189" | "wo"
 export type UserRole = "admin" | "user" | "guest"
 export type Capability =
   | "file.read"

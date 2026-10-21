@@ -1,6 +1,13 @@
 import { requestJson } from "./client"
 
-export type StorageDriverId = "local_fs" | "tencent_cos" | "aliyun_oss" | (string & {})
+export type StorageDriverId =
+  | "local_fs"
+  | "tencent_cos"
+  | "aliyun_oss"
+  | "drive_139"
+  | "drive_189"
+  | "drive_wo"
+  | (string & {})
 
 export type StorageDriver = {
   id: StorageDriverId
@@ -9,6 +16,17 @@ export type StorageDriver = {
   icon_key: string
   enabled: boolean
   capabilities: string[]
+}
+
+export type StorageDriverInspection = {
+  provider: StorageDriverId
+  account_id: string
+  display_name?: string | null
+  root_id: string
+  used_bytes: number
+  total_bytes: number
+  free_bytes: number
+  extra: Record<string, unknown>
 }
 
 export type StoragePolicy = {
@@ -136,6 +154,18 @@ export type UpdateBucketMountInput = Partial<CreateBucketMountInput>
 
 export async function listStorageDrivers(token: string) {
   return requestJson<StorageDriver[]>("/storage/drivers", { token })
+}
+
+export async function inspectStorageDriver(
+  token: string,
+  provider: StorageDriverId,
+  credentials: Record<string, string>
+) {
+  return requestJson<StorageDriverInspection>(`/storage/drivers/${provider}/inspect`, {
+    method: "POST",
+    token,
+    body: { credentials },
+  })
 }
 
 export async function listPolicies(token: string) {

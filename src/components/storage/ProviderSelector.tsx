@@ -16,6 +16,9 @@ const providerDriverMap: Record<StorageStrategyKey, string> = {
   tencent: "tencent_cos",
   local: "local_fs",
   aliyun: "aliyun_oss",
+  "139": "drive_139",
+  "189": "drive_189",
+  wo: "drive_wo",
 }
 
 export function ProviderSelector({ onBack, onSelect, options }: ProviderSelectorProps) {
@@ -23,7 +26,7 @@ export function ProviderSelector({ onBack, onSelect, options }: ProviderSelector
     <div className="flex flex-col gap-6">
       <StorageFormHeader title="选择存储方式" onBack={onBack} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {options.map((option) => (
           <button
             key={option.strategy}
