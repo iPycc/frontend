@@ -265,7 +265,7 @@ export function SharedWithMe() {
         buildSharedMountDownloadUrl(selectedMount.id, item.id),
         name
       )
-      if (completed) toast.success("下载已保存")
+      if (completed) toast.success(completed === "browser" ? "已交给浏览器下载" : "下载已保存")
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "下载失败")
     }
