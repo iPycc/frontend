@@ -24,6 +24,7 @@ import {
 } from "@/components/share/SharedList"
 import { SharedFilePreviewModal } from "@/components/share/SharedFilePreviewModal"
 import { PageShell } from "@/components/shared/PageShell"
+import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
 import { TransferManager } from "@/components/transfer"
 import { Button } from "@/components/ui/button"
 import { useFileDownload } from "@/hooks/use-file-download"
@@ -162,12 +163,15 @@ export function SharedWithMe() {
   )
 
   const saveRoots = useMemo(
-    () => writableBuckets.map((bucket) => ({
-      id: `${bucket.backendId}:`,
-      name: bucket.name,
-      description: `${bucket.provider} · ${bucket.region || "本机"}`,
-      provider: bucket.provider,
-    })),
+    () => writableBuckets.map((bucket) => {
+      const provider = getProviderDisplayName(bucket.driverId, bucket.provider)
+      return {
+        id: `${bucket.backendId}:`,
+        name: bucket.name,
+        description: `${provider} · ${bucket.region || "本机"}`,
+        provider,
+      }
+    }),
     [writableBuckets]
   )
 

@@ -8,7 +8,7 @@ import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MountStatus } from "@/components/storage/MountStatus"
-import { ProviderIcon } from "@/components/storage/ProviderIcon"
+import { getProviderDisplayName, ProviderIcon } from "@/components/storage/ProviderIcon"
 
 export function Buckets() {
   usePageTitle("存储桶")
@@ -73,7 +73,9 @@ export function Buckets() {
                   <h3 className="truncate text-sm font-medium" title={bucket.name}>
                     {bucket.name}
                   </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{bucket.provider}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {getProviderDisplayName(bucket.driverId, bucket.provider)}
+                  </p>
                 </div>
 
                 <div className="mt-4 space-y-1 text-xs text-muted-foreground">

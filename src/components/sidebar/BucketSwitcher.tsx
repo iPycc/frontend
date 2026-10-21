@@ -3,7 +3,7 @@ import { IconCheck, IconChevronDown, IconPlus } from "@tabler/icons-react"
 
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
-import { ProviderIcon as DriveIcon } from "@/components/storage/ProviderIcon"
+import { getProviderDisplayName, ProviderIcon as DriveIcon } from "@/components/storage/ProviderIcon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +48,7 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
               {activeBucket.name}
             </div>
             <div className="truncate text-xs text-muted-foreground">
-              {/local|本机/i.test(activeBucket.provider) ? "本机存储" : activeBucket.provider}
+              {getProviderDisplayName(activeBucket.driverId, activeBucket.provider)}
             </div>
           </div>
         </div>}
@@ -74,7 +74,7 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">{bucket.name}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {bucket.provider} · {bucket.region || "本机"}
+                  {getProviderDisplayName(bucket.driverId, bucket.provider)} · {bucket.region || "本机"}
                 </span>
               </div>
               {activeBucket.id === bucket.id ? <IconCheck size={16} className="shrink-0 text-primary" /> : null}
