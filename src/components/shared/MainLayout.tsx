@@ -9,6 +9,7 @@ import { PropertiesPanelProvider, usePropertiesPanel } from "./PropertiesPanelCo
 
 const PropertiesPanel = React.lazy(() => import("./PropertiesPanel").then((module) => ({ default: module.PropertiesPanel })))
 const SiteUrlMismatchAlert = React.lazy(() => import("./SiteUrlMismatchAlert").then((module) => ({ default: module.SiteUrlMismatchAlert })))
+const DatabaseSwitchAlert = React.lazy(() => import("./DatabaseSwitchAlert").then((module) => ({ default: module.DatabaseSwitchAlert })))
 
 export function MainLayout() {
   const { activeBucket, formatBytes } = useAppState()
@@ -29,6 +30,7 @@ export function MainLayout() {
           </div>
         </div>
         <React.Suspense fallback={null}><SiteUrlMismatchAlert /></React.Suspense>
+        <React.Suspense fallback={null}><DatabaseSwitchAlert /></React.Suspense>
       </PropertiesPanelProvider>
     </SidebarProvider>
   )

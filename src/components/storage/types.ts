@@ -1,6 +1,7 @@
 ﻿﻿import type { BucketMount } from "@/lib/models"
 
-export type StorageStrategyKey = "tencent" | "local" | "aliyun"
+export type DriveStrategyKey = "139" | "189" | "wo"
+export type StorageStrategyKey = "tencent" | "local" | "aliyun" | DriveStrategyKey
 export type StorageFormMode = "create" | "edit" | "readonly"
 
 export interface TencentStorageDraft {
@@ -30,6 +31,34 @@ export interface LocalStorageDraft {
   concurrency: number
   multipartThreshold: string
   partSize: string
+}
+
+export interface AliyunStorageDraft {
+  name: string
+  bucketName: string
+  region: string
+  endpoint: string
+  prefix: string
+  mountMode: "managed" | "mirror"
+  readOnly: boolean
+  legacyPrefixedKeys: boolean
+  objectKeyStyle: "readable" | "opaque"
+  accessKeyId: string
+  accessKeySecret: string
+  securityToken: string
+  concurrency: number
+  multipartThreshold: string
+  partSize: string
+  serverSideEncryption: "none" | "SSE-OSS" | "SSE-KMS"
+  kmsKeyId: string
+}
+
+export interface RemoteDriveDraft {
+  provider: DriveStrategyKey
+  name: string
+  token: string
+  userDomainId: string
+  rootId: string
 }
 
 export interface StrategyOption {

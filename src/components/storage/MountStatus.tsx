@@ -18,6 +18,14 @@ export function MountStatus({ bucket }: { bucket: BucketMount }) {
   const { settings } = useSettingsState()
   const running = bucket.syncStatus === "running" || bucket.syncStatus === "pending"
   const failed = bucket.syncStatus === "failed"
+  if (bucket.extra?.requires_reauthorization === true) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-destructive" role="status">
+        <IconAlertCircle className="size-3.5" />
+        登录已失效，请重新授权
+      </span>
+    )
+  }
   const Icon = running ? IconLoader2 : failed ? IconAlertCircle : IconCheck
 
   return (

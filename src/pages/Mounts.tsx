@@ -5,6 +5,7 @@ import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { IconArrowRight } from "@tabler/icons-react"
 import { MountStatus } from "@/components/storage/MountStatus"
+import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
 
 export function Mounts() {
   usePageTitle("存储桶")
@@ -28,7 +29,9 @@ export function Mounts() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium">{bucket.name}</div>
-                <div className="text-sm text-muted-foreground">{bucket.provider}</div>
+                <div className="text-sm text-muted-foreground">
+                  {getProviderDisplayName(bucket.driverId, bucket.provider)}
+                </div>
               </div>
               <span className="text-sm text-muted-foreground">{bucket.corsStatus === "healthy" ? "CORS 正常" : "待处理"}</span>
             </div>

@@ -523,7 +523,7 @@ export function AppFiles() {
     try {
       if (!node.backendId) throw new Error("没有可下载的文件")
       const completed = await fileDownload.download(buildDownloadUrl(node.backendId), node.name)
-      if (completed) toast.success("下载已保存")
+      if (completed) toast.success(completed === "browser" ? "已交给浏览器下载" : "下载已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "下载失败")
     }
@@ -548,12 +548,12 @@ export function AppFiles() {
     const backendIds = nodes.map((node) => node.backendId).filter((id): id is number => Boolean(id))
     const onlyNode = nodes.length === 1 ? nodes[0] : null
     try {
+      const name = onlyNode ? `${onlyNode.name}.zip` : `Cloudrave-${nodes.length}项.zip`
       const url = onlyNode?.kind === "folder"
         ? buildFolderDownloadUrl(backendIds[0])
-        : buildArchiveDownloadUrl(backendIds)
-      const name = onlyNode ? `${onlyNode.name}.zip` : `Cloudrave-${nodes.length}项.zip`
+        : buildArchiveDownloadUrl(backendIds, name)
       const completed = await fileDownload.download(url, name)
-      if (completed) toast.success("ZIP 下载已保存")
+      if (completed) toast.success(completed === "browser" ? "已交给浏览器下载" : "ZIP 下载已保存")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "下载失败")
     } finally {
@@ -579,7 +579,7 @@ export function AppFiles() {
             type: node.type,
             size: node.size,
           })),
-          buildFileUrl: (file) => buildDownloadUrl(file.id),
+          buildFileUrl: (file) => buildDownloadUrl(file.id, true),
         }
       )
       if (completed) toast.success("原始文件已保存")

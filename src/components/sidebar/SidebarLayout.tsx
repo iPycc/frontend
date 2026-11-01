@@ -45,8 +45,6 @@ const utilityPaths = [
   "/app/mounts",
   "/app/tasks",
   "/app/offline",
-  "/app/store",
-  "/app/discussions",
 ]
 
 export function SidebarLayout() {

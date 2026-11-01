@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { checkBackendHealth } from "@/api/system"
+import { getPreviewManifest, listUserMounts, saveTextPreview } from "@/api/files"
 import {
   formatBytes,
   type AppSnapshot,
@@ -134,11 +135,79 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const currentUser = authSession?.user ?? null
   const isAuthenticated = Boolean(authSession && currentUser && !isExpired(authSession.tokens.accessExpiresAt))
 
+  const reauthorizationNotifiedRef = React.useRef(new Set<string>())
+  const remoteMountsPresent = snapshot.buckets.some((bucket) =>
+    ["drive_139", "drive_189", "drive_wo"].includes(bucket.driverId ?? "")
+  )
+
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      reauthorizationNotifiedRef.current.clear()
+      return
+    }
+    const invalid = new Set(snapshot.buckets.filter((bucket) => bucket.extra?.requires_reauthorization === true).map((bucket) => bucket.id))
+    for (const id of reauthorizationNotifiedRef.current) {
+      if (!invalid.has(id)) reauthorizationNotifiedRef.current.delete(id)
+    }
+    for (const bucket of snapshot.buckets) {
+      if (!invalid.has(bucket.id) || reauthorizationNotifiedRef.current.has(bucket.id)) continue
+      reauthorizationNotifiedRef.current.add(bucket.id)
+      toast.error(`「${bucket.name}」需要重新授权`, {
+        id: `storage-reauthorization:${bucket.id}`,
+        description: bucket.canEditConnection
+          ? "登录信息已失效，请重新登录运营商网页并更新该云盘的登录信息。"
+          : "登录信息已失效，请联系此存储的管理员更新授权。",
+        action: bucket.canEditConnection
+          ? { label: "前往存储设置", onClick: () => window.location.assign("/settings/storage") }
+          : undefined,
+        duration: 10000,
+      })
+    }
+  }, [isAuthenticated, snapshot.buckets])
+
   const updateSnapshot = React.useCallback((recipe: (current: AppSnapshot) => AppSnapshot) => {
     const next = recipe(snapshotRef.current)
     snapshotRef.current = next
     setSnapshot(next)
   }, [])
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !remoteMountsPresent) return
+    let active = true
+    let pending = false
+    const refreshStorageAuth = async () => {
+      const token = snapshotRef.current.auth.session?.tokens.accessToken
+      if (!token || pending || document.visibilityState === "hidden") return
+      pending = true
+      try {
+        const mounts = await listUserMounts(token)
+        if (!active) return
+        const byId = new Map(mounts.map((mount) => [mount.id, mount]))
+        updateSnapshot((current) => ({
+          ...current,
+          buckets: current.buckets.map((bucket) => {
+            const mount = bucket.backendId === undefined ? undefined : byId.get(bucket.backendId)
+            if (!mount || !["drive_139", "drive_189", "drive_wo"].includes(bucket.driverId ?? "")) return bucket
+            return { ...bucket, extra: { ...bucket.extra, requires_reauthorization: mount.extra?.requires_reauthorization === true } }
+          }),
+        }))
+      } catch {
+        // A connection failure is not evidence that provider authorization expired.
+      } finally {
+        pending = false
+      }
+    }
+    void refreshStorageAuth()
+    const timer = window.setInterval(() => void refreshStorageAuth(), 60000)
+    window.addEventListener("focus", refreshStorageAuth)
+    window.addEventListener("cloudrave:storage-reauthorization", refreshStorageAuth)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refreshStorageAuth)
+      window.removeEventListener("cloudrave:storage-reauthorization", refreshStorageAuth)
+    }
+  }, [isAuthenticated, remoteMountsPresent, updateSnapshot])
 
   const updatePageState = React.useCallback((key: string, recipe: (current: PageLoadState) => PageLoadState) => {
     const current = pageStatesRef.current
@@ -265,9 +334,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const getFileContent = React.useCallback((fileId: string) => snapshot.fileContents[fileId] ?? "", [snapshot.fileContents])
 
-  const updateFileContent = React.useCallback(() => {
-    toast.info("在线编辑保存功能暂未接入后端")
-  }, [])
+  const updateFileContent = React.useCallback(async (fileId: string, content: string) => {
+    const nodeId = Number(fileId)
+    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
+      toast.error("无法保存文件：文件编号无效")
+      return
+    }
+    try {
+      const manifest = await getPreviewManifest(nodeId)
+      await saveTextPreview(nodeId, content, manifest.version)
+      updateSnapshot((current) => ({
+        ...current,
+        fileContents: { ...current.fileContents, [fileId]: content },
+      }))
+      toast.success("文件已保存")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败，请刷新后重试")
+    }
+  }, [updateSnapshot])
 
   const value = React.useMemo<AppStateValue>(() => ({
     auth: snapshot.auth,

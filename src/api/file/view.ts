@@ -8,13 +8,14 @@ import type {
   PreviewManifest,
 } from "@/api/file/type"
 
-export function buildDownloadUrl(nodeId: number) {
-  return `/api/v1/explorer/download/${nodeId}`
+export function buildDownloadUrl(nodeId: number, relay = false) {
+  return `/api/v1/explorer/download/${nodeId}${relay ? "?relay=true" : ""}`
 }
 
-export function buildArchiveDownloadUrl(nodeIds: number[]) {
+export function buildArchiveDownloadUrl(nodeIds: number[], downloadName?: string) {
   const query = new URLSearchParams()
   nodeIds.forEach((nodeId) => query.append("node_ids", String(nodeId)))
+  if (downloadName) query.set("download_name", downloadName)
   return `/api/v1/explorer/download/archive?${query.toString()}`
 }
 

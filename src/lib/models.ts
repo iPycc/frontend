@@ -7,7 +7,7 @@ export type MediaType = "image" | "video" | "audio" | "document" | "archive" | "
 export type MountMode = "managed" | "mirror"
 export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
 
-export type StorageStrategyKey = "tencent" | "local" | "aliyun"
+export type StorageStrategyKey = "tencent" | "local" | "aliyun" | "139" | "189" | "wo"
 export type UserRole = "admin" | "user" | "guest"
 export type Capability =
   | "file.read"
@@ -70,7 +70,7 @@ export interface AppUser {
 }
 
 export function hasCapability(user: AppUser | null | undefined, capability: Capability) {
-  return Boolean(user?.capabilities.includes(capability))
+  return Array.isArray(user?.capabilities) && user.capabilities.includes(capability)
 }
 
 export interface AuthTokens {
@@ -115,6 +115,9 @@ export interface BucketMount {
   name: string
   provider: string
   providerLabel?: string
+  driverId: string
+  driverKind: string
+  driverCapabilities: string[]
   storageType: StorageStrategyKey
   ownerId?: string
   ownerBackendId: number
@@ -122,9 +125,6 @@ export interface BucketMount {
   endpoint?: string
   bucket?: string
   basePrefix?: string
-  secretId?: string
-  secretKey?: string
-  sessionToken?: string
   strategy: BucketStrategy
   rootNodeId: string
   rootPath?: string
@@ -214,6 +214,7 @@ export interface UploadQueueItem {
   uploadedBytes: number
   totalBytes: number
   speedBytesPerSecond?: number
+  progressStage?: "hashing" | "uploading"
   partSizeBytes?: number
   partCount?: number
   speedText: string

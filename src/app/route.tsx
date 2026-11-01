@@ -21,7 +21,6 @@ function lazyNamed<T extends React.ComponentType<any>>(
 }
 
 const Buckets = lazyNamed(() => import("@/pages/Buckets"), "Buckets")
-const Discussions = lazyNamed(() => import("@/pages/Discussions"), "Discussions")
 const Mounts = lazyNamed(() => import("@/pages/Mounts"), "Mounts")
 const Offline = lazyNamed(() => import("@/pages/Offline"), "Offline")
 const Recycle = lazyNamed(() => import("@/pages/Recycle"), "Recycle")
@@ -29,7 +28,6 @@ const ShareDetail = lazyNamed(() => import("@/pages/ShareDetail"), "ShareDetail"
 const ShareNotFound = lazyNamed(() => import("@/pages/ShareNotFound"), "ShareNotFound")
 const SharedWithMe = lazyNamed(() => import("@/pages/SharedWithMe"), "SharedWithMe")
 const Shares = lazyNamed(() => import("@/pages/Shares"), "Shares")
-const Store = lazyNamed(() => import("@/pages/Store"), "Store")
 const Tasks = lazyNamed(() => import("@/pages/Tasks"), "Tasks")
 const Guests = lazyNamed(() => import("@/pages/admin/Guests"), "Guests")
 const System = lazyNamed(() => import("@/pages/admin/System"), "System")
@@ -68,8 +66,6 @@ export default function App() {
               <Route path="/app/shared-with-me" element={guestRestricted(<SharedWithMe />)} />
               <Route path="/app/mounts" element={guestRestricted(<Mounts />)} />
               <Route path="/app/offline" element={guestRestricted(<Offline />)} />
-              <Route path="/app/store" element={guestRestricted(<Store />)} />
-              <Route path="/app/discussions" element={guestRestricted(<Discussions />)} />
 
               <Route path="/settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
@@ -85,6 +81,7 @@ export default function App() {
               <Route path="/admin/users" element={isAdmin ? <Deferred><Users /></Deferred> : <Navigate to="/app" replace />} />
               <Route path="/admin/guests" element={isAdmin ? <Navigate to="/settings/guests" replace /> : <Navigate to="/app" replace />} />
               <Route path="/admin/system" element={isAdmin ? <Deferred><System /></Deferred> : <Navigate to="/app" replace />} />
+              <Route path="*" element={<Navigate to="/app" replace />} />
             </Route>
 
             <Route element={<ShareGuard />}><Route path="/share" element={isGuest ? <Navigate to="/app" replace /> : <Deferred><Shares /></Deferred>} /></Route>

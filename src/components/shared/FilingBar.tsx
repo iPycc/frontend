@@ -12,12 +12,9 @@ export function FilingLink({ className }: { className?: string }) {
     return null
   }
 
-  const code = settings.filing_text.trim()
-  const queryUrl = `https://beian.mps.gov.cn/#/query/webSearch?code=${encodeURIComponent(code)}`
-
   return (
     <a
-      href={queryUrl}
+      href="http://beian.miit.gov.cn/"
       target="_blank"
       rel="noreferrer"
       className={cn(

@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { motion } from "motion/react"
-import { IconArrowRight, IconBucket, IconCheck, IconCloud, IconDatabase, IconExclamationCircle } from "@tabler/icons-react"
+import { IconArrowRight, IconBucket, IconCheck, IconExclamationCircle } from "@tabler/icons-react"
 
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
@@ -8,12 +8,7 @@ import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MountStatus } from "@/components/storage/MountStatus"
-
-const providerIcon: Record<string, typeof IconDatabase> = {
-  local: IconDatabase,
-  aliyun: IconCloud,
-  tencent: IconCloud,
-}
+import { getProviderDisplayName, ProviderIcon } from "@/components/storage/ProviderIcon"
 
 export function Buckets() {
   usePageTitle("存储桶")
@@ -47,7 +42,6 @@ export function Buckets() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {buckets.map((bucket, index) => {
-            const Icon = providerIcon[bucket.storageType] || IconDatabase
             const healthy = bucket.corsStatus === "healthy"
 
             return (
@@ -60,7 +54,7 @@ export function Buckets() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <Icon size={22} className="text-primary" />
+                    <ProviderIcon driverId={bucket.driverId} provider={bucket.provider} size={28} />
                   </div>
                   <span
                     className={cn(
@@ -79,7 +73,9 @@ export function Buckets() {
                   <h3 className="truncate text-sm font-medium" title={bucket.name}>
                     {bucket.name}
                   </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{bucket.provider}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {getProviderDisplayName(bucket.driverId, bucket.provider)}
+                  </p>
                 </div>
 
                 <div className="mt-4 space-y-1 text-xs text-muted-foreground">

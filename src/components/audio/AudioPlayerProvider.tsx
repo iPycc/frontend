@@ -88,7 +88,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   const download = React.useCallback(async () => {
     if (!activeFile?.backendId) return
     try {
-      const response = await requestResponse(buildDownloadUrl(activeFile.backendId), {
+      const response = await requestResponse(buildDownloadUrl(activeFile.backendId, true), {
         headers: { Accept: "application/octet-stream" },
       })
       const blob = await response.blob()

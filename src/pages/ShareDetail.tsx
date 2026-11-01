@@ -233,7 +233,7 @@ export function ShareDetail() {
       const completed = await fileDownload.download(buildSharedDownloadUrl(slug, accessToken, onlyNode.id), onlyNode.name)
       if (completed) {
         recordShareDownload(slug)
-        toast.success("下载已保存")
+        toast.success(completed === "browser" ? "已交给浏览器下载" : "下载已保存")
       }
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "下载失败")
@@ -244,15 +244,15 @@ export function ShareDetail() {
     if (!slug || !downloadDialogNodes.length) return
     const nodesToDownload = downloadDialogNodes
     const onlyNode = nodesToDownload.length === 1 ? nodesToDownload[0] : null
+    const name = onlyNode ? `${onlyNode.name}.zip` : `Cloudrave-分享-${nodesToDownload.length}项.zip`
     const url = onlyNode
       ? buildSharedDownloadUrl(slug, accessToken, onlyNode.id)
-      : buildSharedSelectionDownloadUrl(slug, accessToken, nodesToDownload.map((node) => node.id))
-    const name = onlyNode ? `${onlyNode.name}.zip` : `Cloudrave-分享-${nodesToDownload.length}项.zip`
+      : buildSharedSelectionDownloadUrl(slug, accessToken, nodesToDownload.map((node) => node.id), name)
     try {
       const completed = await fileDownload.download(url, name)
       if (completed) {
         recordShareDownload(slug)
-        toast.success("ZIP 下载已保存")
+        toast.success(completed === "browser" ? "已交给浏览器下载" : "ZIP 下载已保存")
       }
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "下载失败")
