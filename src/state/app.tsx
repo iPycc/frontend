@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { checkBackendHealth } from "@/api/system"
-import { listUserMounts } from "@/api/files"
+import { getPreviewManifest, listUserMounts, saveTextPreview } from "@/api/files"
 import {
   formatBytes,
   type AppSnapshot,
@@ -334,9 +334,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const getFileContent = React.useCallback((fileId: string) => snapshot.fileContents[fileId] ?? "", [snapshot.fileContents])
 
-  const updateFileContent = React.useCallback(() => {
-    toast.info("在线编辑保存功能暂未接入后端")
-  }, [])
+  const updateFileContent = React.useCallback(async (fileId: string, content: string) => {
+    const nodeId = Number(fileId)
+    if (!Number.isSafeInteger(nodeId) || nodeId <= 0) {
+      toast.error("无法保存文件：文件编号无效")
+      return
+    }
+    try {
+      const manifest = await getPreviewManifest(nodeId)
+      await saveTextPreview(nodeId, content, manifest.version)
+      updateSnapshot((current) => ({
+        ...current,
+        fileContents: { ...current.fileContents, [fileId]: content },
+      }))
+      toast.success("文件已保存")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败，请刷新后重试")
+    }
+  }, [updateSnapshot])
 
   const value = React.useMemo<AppStateValue>(() => ({
     auth: snapshot.auth,

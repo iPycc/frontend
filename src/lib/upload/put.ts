@@ -113,7 +113,7 @@ export function putPart(
           ? "运营商上传地址不可达或被浏览器跨域策略拦截，未经过 Cloudrave 中转"
           : "上传分片时网络连接中断"
       )
-      Object.assign(error, { retryable: true })
+      Object.assign(error, { retryable: true, relayable: Boolean(plan.relay_url) })
       finish(() => reject(error))
     }
     request.onabort = () => finish(() => reject(new DOMException("aborted", "AbortError")))

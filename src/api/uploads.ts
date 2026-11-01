@@ -14,6 +14,7 @@ export type UploadPartPlan = {
   file_field?: string
   record_etag?: string | null
   response_mode?: "header" | "wopan_json" | "opaque" | "skip"
+  relay_url?: string | null
 }
 
 export type UploadSessionPlan = {

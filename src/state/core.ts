@@ -173,7 +173,7 @@ export type AppStateValue = {
   pasteNodes: (targetParentId: string | null, bucketId?: string) => Promise<void>
   formatBytes: (size?: number) => string
   getFileContent: (fileId: string) => string
-  updateFileContent: (fileId: string, content: string) => void
+  updateFileContent: (fileId: string, content: string) => Promise<void>
 }
 
 export const AppStateContext = React.createContext<AppStateValue | null>(null)

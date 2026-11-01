@@ -442,15 +442,37 @@ export function useUploadRun({
               throw new Error("存储驱动未返回可用的上传地址")
             }
 
-            const responseEtag = await uploadGateRef.current.run(
-              () => putPart(
-                uploadPlan,
-                chunk,
+            let responseEtag: string | null
+            try {
+              responseEtag = await uploadGateRef.current.run(
+                () => putPart(
+                  uploadPlan,
+                  chunk,
+                  controller.signal,
+                  (loaded) => progressTracker.update(partNumber, loaded)
+                ),
                 controller.signal,
-                (loaded) => progressTracker.update(partNumber, loaded)
-              ),
-              controller.signal,
-            )
+              )
+            } catch (error) {
+              const relayable = error instanceof Error && (error as Error & { relayable?: boolean }).relayable === true
+              if (!relayable || !uploadPlan.relay_url) throw error
+              const part = await uploadApiSchedulerRef.current.run(
+                () => uploadGateRef.current.run(
+                  () => uploadLocalPart(
+                    session.tokens.accessToken,
+                    activeSessionId,
+                    chunk,
+                    partNumber,
+                    chunk.size,
+                    controller.signal
+                  ),
+                  controller.signal
+                ),
+                controller.signal
+              )
+              throwIfAborted()
+              return { etag: part.etag ?? `part-${partNumber}`, recorded: true }
+            }
             throwIfAborted()
             if (!responseEtag && requiresUploadResponseHeader(plan, "ETag")) {
               const error = new Error("存储服务响应未暴露 ETag，请检查当前存储桶的 CORS 配置")
