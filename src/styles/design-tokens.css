@@ -5,7 +5,7 @@
  * 确保全局样式一致，符合大厂规范。
  */
 
-@theme inline {
+@theme {
   /* ---- 圆角 ---- */
   --radius-xs: 6px;
   --radius-sm: 8px;
