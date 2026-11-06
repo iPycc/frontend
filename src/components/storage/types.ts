@@ -37,6 +37,8 @@ export interface LocalStorageDraft {
 }
 
 export interface AliyunStorageDraft {
+  downloadDomainType: "default" | "origin"
+  downloadDomain: string
   name: string
   bucketName: string
   region: string

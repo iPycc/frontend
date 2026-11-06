@@ -3,7 +3,7 @@ import { IconExternalLink } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { FormCard, FormRow, StorageFormHeader } from "@/components/storage/shared"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
@@ -25,7 +25,7 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
   const update = <K extends keyof AliyunStorageDraft>(key: K, value: AliyunStorageDraft[K]) => onChange({ ...draft, [key]: value })
   const dirty = mode === "edit" && Boolean(initialDraft) && JSON.stringify(draft) !== JSON.stringify(initialDraft)
   const credentialsReady = mode === "edit" || (draft.accessKeyId.trim().length > 0 && draft.accessKeySecret.trim().length > 0)
-  const canSubmit = !readonly && draft.name.trim().length > 0 && draft.bucketName.trim().length > 0 && draft.region.trim().length > 0 && credentialsReady
+  const canSubmit = !readonly && draft.name.trim().length > 0 && draft.bucketName.trim().length > 0 && draft.region.trim().length > 0 && credentialsReady && (draft.downloadDomainType === "default" || draft.downloadDomain.trim().length > 0)
 
   return (
     <div className="flex flex-col gap-3">
@@ -54,6 +54,15 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
             <Input className="sm:col-span-2" type="password" value={draft.securityToken} onChange={(event) => update("securityToken", event.target.value)} placeholder="STS Security Token（可选）" disabled={readonly} />
           </div>
         </FormRow>
+        <FormRow label="下载域名">
+          <Select value={draft.downloadDomainType} onValueChange={(value) => update("downloadDomainType", value as AliyunStorageDraft["downloadDomainType"])} disabled={readonly}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup><SelectItem value="default">OSS 默认域名</SelectItem><SelectItem value="origin">自定义 OSS 域名</SelectItem></SelectGroup></SelectContent>
+          </Select>
+        </FormRow>
+        {draft.downloadDomainType === "origin" ? <FormRow label="域名地址" hint="用于下载、预览和分享；私有文件自动签名。域名须绑定到此 Bucket，HTTPS 证书在阿里云控制台配置。">
+          <Input value={draft.downloadDomain} onChange={(event) => update("downloadDomain", event.target.value)} placeholder="https://files.example.com" disabled={readonly} />
+        </FormRow> : null}
         <FormRow label="对象前缀" hint="仅管理此前缀下的对象；留空表示 Bucket 根目录。">
           <Input className="font-mono" value={draft.prefix} onChange={(event) => update("prefix", event.target.value.replace(/^\/+/, ""))} placeholder="users/primary" disabled={readonly} />
         </FormRow>

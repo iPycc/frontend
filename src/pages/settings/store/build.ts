@@ -52,6 +52,8 @@ export function createEmptyTencentDraft(): TencentStorageDraft {
 
 export function createEmptyAliyunDraft(): AliyunStorageDraft {
   return {
+    downloadDomainType: "default",
+    downloadDomain: "",
     name: "",
     bucketName: "",
     region: "cn-hangzhou",
@@ -302,6 +304,8 @@ export function buildAliyunPolicyInput(draft: AliyunStorageDraft): CreateStorage
     extra: {
       provider_label: "Aliyun OSS",
       storage_type: "aliyun",
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
       part_size_mb: parseSizeMb(draft.partSize, 25),
@@ -325,6 +329,8 @@ export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: s
     extra: {
       provider_label: "Aliyun OSS",
       storage_type: "aliyun",
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
       part_size_mb: parseSizeMb(draft.partSize, 25),

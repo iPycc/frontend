@@ -349,6 +349,8 @@ export function StorageSettingsPage() {
     } else if (strategy === "aliyun") {
       const encryption = bucket.extra?.server_side_encryption
       const draft: AliyunStorageDraft = {
+        downloadDomainType: bucket.extra?.download_domain_type === "origin" ? "origin" : "default",
+        downloadDomain: typeof bucket.extra?.download_domain === "string" ? bucket.extra.download_domain : "",
         name: bucket.name,
         bucketName: bucket.bucket ?? "",
         region: bucket.region ?? "cn-hangzhou",
@@ -577,13 +579,15 @@ export function StorageSettingsPage() {
           name: aliyunDraft.name.trim(),
           bucket_name: aliyunDraft.bucketName.trim(),
           region: aliyunDraft.region.trim(),
-          endpoint: aliyunDraft.endpoint.trim() || undefined,
+          endpoint: aliyunDraft.endpoint.trim() || null,
           multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
           part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
           extra: {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            download_domain_type: aliyunDraft.downloadDomainType,
+            download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
@@ -609,6 +613,8 @@ export function StorageSettingsPage() {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            download_domain_type: aliyunDraft.downloadDomainType,
+            download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),

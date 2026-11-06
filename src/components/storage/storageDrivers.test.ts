@@ -4,7 +4,19 @@ import test from "node:test"
 
 import { resolveStorageStrategy } from "@/components/storage"
 import type { BucketMount } from "@/lib/models"
-import { buildAliyunPolicyInput, createEmptyAliyunDraft, buildTencentPolicyInput, buildTencentMountInput, createEmptyTencentDraft } from "@/pages/settings/store/build"
+import { buildAliyunPolicyInput, buildAliyunMountInput, createEmptyAliyunDraft, buildTencentPolicyInput, buildTencentMountInput, createEmptyTencentDraft } from "@/pages/settings/store/build"
+
+test("OSS custom download domain survives policy and mount creation", () => {
+  const draft = { ...createEmptyAliyunDraft(), downloadDomainType: "origin" as const, downloadDomain: " https://files.example.com ", endpoint: "https://oss-cn-hangzhou-internal.aliyuncs.com" }
+  const policy = buildAliyunPolicyInput(draft)
+  const mount = buildAliyunMountInput(draft, "oss", 1)
+  for (const input of [policy, mount]) {
+    assert.equal(input.extra?.download_domain_type, "origin")
+    assert.equal(input.extra?.download_domain, "https://files.example.com")
+  }
+  assert.equal(policy.endpoint, draft.endpoint)
+  assert.equal(createEmptyAliyunDraft().downloadDomainType, "default")
+})
 
 test("COS download routing survives policy and mount creation without changing API endpoint", () => {
   for (const mode of ["default", "origin", "cdn"] as const) {
