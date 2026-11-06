@@ -1,8 +1,8 @@
+import { GitHubIcon } from "@/components/icons/github-icon"
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   Check,
-  Github,
   LockKeyhole,
   Pencil,
   Plus,
@@ -1123,7 +1123,7 @@ export function SecuritySettingsPage() {
               {isLoadingGitHubOAuth ? (
                 <Spinner data-icon="inline-start" />
               ) : (
-                <Github data-icon="inline-start" />
+                <GitHubIcon data-icon="inline-start" />
               )}
               {githubConfigExpanded ? "收起配置" : "配置 GitHub OAuth"}
             </Button>
@@ -1222,7 +1222,7 @@ export function SecuritySettingsPage() {
                       alt={githubUsername ? `${githubUsername} 的 GitHub 头像` : "GitHub 头像"}
                     />
                     <AvatarFallback>
-                      <Github aria-hidden="true" />
+                      <GitHubIcon aria-hidden="true" />
                     </AvatarFallback>
                   </Avatar>
                   <div className="truncate text-sm font-medium">
@@ -1254,7 +1254,7 @@ export function SecuritySettingsPage() {
                 {isLinkingGitHub ? (
                   <Spinner data-icon="inline-start" />
                 ) : (
-                  <Github data-icon="inline-start" />
+                  <GitHubIcon data-icon="inline-start" />
                 )}
                 {isLinkingGitHub ? "等待 GitHub 授权..." : "关联 GitHub"}
               </Button>

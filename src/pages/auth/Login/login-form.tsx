@@ -1,10 +1,10 @@
+import { GitHubIcon } from "@/components/icons/github-icon"
 import * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
   ArrowRight,
-  Github,
   Loader2,
   LogIn,
   Mail,
@@ -821,7 +821,7 @@ export function LoginForm({
                           {isGitHubOAuthLoading || isGitHubLoginLoading ? (
                             <Loader2 data-icon="inline-start" className="animate-spin" />
                           ) : (
-                            <Github data-icon="inline-start" />
+                            <GitHubIcon data-icon="inline-start" />
                           )}
                           {isGitHubOAuthLoading
                             ? "正在加载 GitHub 登录..."
