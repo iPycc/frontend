@@ -4,7 +4,23 @@ import test from "node:test"
 
 import { resolveStorageStrategy } from "@/components/storage"
 import type { BucketMount } from "@/lib/models"
-import { buildAliyunPolicyInput, createEmptyAliyunDraft } from "@/pages/settings/store/build"
+import { buildAliyunPolicyInput, createEmptyAliyunDraft, buildTencentPolicyInput, buildTencentMountInput, createEmptyTencentDraft } from "@/pages/settings/store/build"
+
+test("COS download routing survives policy and mount creation without changing API endpoint", () => {
+  for (const mode of ["default", "origin", "cdn"] as const) {
+    const draft = { ...createEmptyTencentDraft(), downloadDomainType: mode, downloadDomain: " https://files.example.com ", accessDomain: "https://api.example.com" }
+    const policy = buildTencentPolicyInput(draft)
+    const mount = buildTencentMountInput(draft, "test", 1)
+    assert.equal(policy.endpoint, "https://api.example.com")
+    for (const extra of [policy.extra, mount.extra]) {
+      assert.equal(extra?.download_domain_type, mode)
+      assert.equal(extra?.download_domain, "https://files.example.com")
+      assert.equal(extra?.download_cdn_auth, "cos")
+    }
+  }
+  const draft = { ...createEmptyTencentDraft(), downloadDomainType: "cdn" as const, downloadCdnAuth: "public" as const }
+  assert.equal(buildTencentPolicyInput(draft).extra?.download_cdn_auth, "public")
+})
 
 test("aliyun storage input uses write-only provider-neutral credentials", () => {
   const draft = {

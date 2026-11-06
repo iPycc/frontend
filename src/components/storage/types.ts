@@ -1,4 +1,4 @@
-﻿﻿import type { BucketMount } from "@/lib/models"
+﻿import type { BucketMount } from "@/lib/models"
 
 export type DriveStrategyKey = "139" | "189" | "wo"
 export type StorageStrategyKey = "tencent" | "local" | "aliyun" | DriveStrategyKey
@@ -14,6 +14,9 @@ export interface TencentStorageDraft {
   legacyPrefixedKeys: boolean
   objectKeyStyle: "readable" | "opaque"
   accessPermission: "private" | "public-read"
+  downloadDomainType: "default" | "origin" | "cdn"
+  downloadDomain: string
+  downloadCdnAuth: "cos" | "public"
   accessDomain: string
   secretId: string
   secretKey: string
