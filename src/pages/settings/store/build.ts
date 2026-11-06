@@ -70,7 +70,7 @@ export function createEmptyAliyunDraft(): AliyunStorageDraft {
 }
 
 const remoteDriveDefaults = {
-  "139": { name: "139zhey", rootId: "/" },
+  "139": { name: "139 Cloud", rootId: "/" },
   "189": { name: "189 Cloud", rootId: "-11" },
   wo: { name: "Wo Cloud", rootId: "0" },
 } as const

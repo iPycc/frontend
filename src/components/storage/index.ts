@@ -59,7 +59,7 @@ const storageModules: Record<StorageStrategyKey, StorageModuleDefinition> = {
   },
   "139": {
     strategy: "139",
-    label: "139zhey",
+    label: "139 Cloud",
     canCreate: true,
     canEdit: (bucket) => bucket.driverId === "drive_139",
   },
