@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/ui/switch"
 import { FormCard, FormRow, StorageFormHeader } from "@/components/storage/shared"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
+import { AliyunDomains } from "./AliyunDomains"
 
 type Props = {
   draft: AliyunStorageDraft
@@ -16,11 +17,13 @@ type Props = {
   onBack?: () => void
   onSubmit: () => void
   submitLabel?: string
+  mountId?: number
+  accessToken?: string
 }
 
 const sizeOptions = ["5 MB", "10 MB", "16 MB", "25 MB", "50 MB", "64 MB", "100 MB"]
 
-export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel }: Props) {
+export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel, mountId, accessToken }: Props) {
   const readonly = mode === "readonly"
   const update = <K extends keyof AliyunStorageDraft>(key: K, value: AliyunStorageDraft[K]) => onChange({ ...draft, [key]: value })
   const dirty = mode === "edit" && Boolean(initialDraft) && JSON.stringify(draft) !== JSON.stringify(initialDraft)
@@ -88,6 +91,8 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
         </FormRow>
         {draft.serverSideEncryption === "SSE-KMS" ? <FormRow label="KMS Key ID" hint="填写有权限使用的 KMS Key ID。"><Input value={draft.kmsKeyId} onChange={(event) => update("kmsKeyId", event.target.value)} placeholder="KMS Key ID" disabled={readonly} /></FormRow> : null}
       </FormCard>
+
+      {mode === "edit" && mountId && accessToken ? <AliyunDomains key={mountId} mountId={mountId} accessToken={accessToken} domain={draft.downloadDomain} onUseDomain={(domain) => onChange({ ...draft, downloadDomainType: "origin", downloadDomain: `https://${domain}` })} /> : null}
 
       {dirty ? (
         <div className="fixed bottom-6 left-6 z-50 flex items-center gap-3 rounded-xl border bg-background p-3 shadow-lg">

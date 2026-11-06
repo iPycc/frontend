@@ -814,6 +814,8 @@ export function StorageSettingsPage() {
         <AliyunStorageForm
           draft={aliyunDraft}
           initialDraft={initialAliyunDraft}
+          mountId={view.bucket.backendId}
+          accessToken={token ?? ""}
           mode={view.bucket.canEditConnection ? "edit" : "readonly"}
           onChange={setAliyunDraft}
           onBack={() => setView({ type: "list" })}

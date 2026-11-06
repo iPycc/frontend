@@ -37,6 +37,24 @@ export type UserMountDeleteResult = {
 
 type UserBucketMountInput = Omit<CreateBucketMountInput, "policy_id" | "owner_id">
 
+export type OssDomainResult = {
+  cname_target: string
+  domains?: { domain: string; status: string }[]
+  domain?: string
+  txt_name?: string
+  token?: string
+  expires_at?: string
+  status?: string
+  bound?: boolean
+  test_url?: string
+}
+
+export async function manageOssDomains(token: string, mountId: number, action: "list" | "token" | "bind" | "unbind" | "check", domain = "") {
+  return requestJson<OssDomainResult>(`/mounts/${mountId}/oss/domains`, {
+    method: "POST", token, body: { action, domain },
+  })
+}
+
 export async function createUserMount(
   token: string,
   policy: CreateStoragePolicyInput,
