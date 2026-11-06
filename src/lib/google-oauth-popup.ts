@@ -64,8 +64,10 @@ function isGoogleOAuthPayload(data: unknown, flow?: GoogleOAuthFlow): data is Go
 }
 
 export function publishGoogleOAuthResult(message: GoogleOAuthMessage) {
-  if (window.opener && !window.opener.closed) {
-    window.opener.postMessage(message, window.location.origin)
+  try {
+    window.opener?.postMessage(message, window.location.origin)
+  } catch {
+    // COOP can sever the opener; same-origin channels still deliver the result.
   }
 
   if (typeof window.BroadcastChannel !== "undefined") {
@@ -96,6 +98,12 @@ export function readGoogleOAuthPopupResult(
     }
 
     const params = new URLSearchParams(location.search)
+    if (location.pathname === "/oauth/google/complete") {
+      const returnedFlow = params.get("flow") === "link" ? "link" : "login"
+      return returnedFlow === flow
+        ? { type: GOOGLE_OAUTH_MESSAGE_TYPE, flow, result: params.get("result") || "provider_error" }
+        : null
+    }
     if (flow === "login") {
       if (location.pathname === "/app" || location.pathname.startsWith("/app/")) {
         return { type: GOOGLE_OAUTH_MESSAGE_TYPE, flow, result: "success" }

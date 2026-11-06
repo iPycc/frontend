@@ -55,7 +55,6 @@ import {
 } from "@/lib/github-oauth-popup"
 import {
   openGoogleOAuthPopup,
-  readGoogleOAuthPopupResult,
   subscribeGoogleOAuthResults,
   type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
@@ -98,6 +97,7 @@ const GOOGLE_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
   invalid_state: "关联请求已失效，请重新发起。",
   not_configured: "管理员尚未完成 Google OAuth 配置。",
   provider_error: "Google 暂时无法完成授权，请稍后再试。",
+  timeout: "Google 授权等待超时，请关闭授权窗口后重试。",
 }
 
 const QQ_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
@@ -787,7 +787,6 @@ export function SecuritySettingsPage() {
       return
     }
 
-    googleOAuthPopupRef.current.close()
     googleOAuthPopupRef.current = null
     setIsLinkingGoogle(false)
 
@@ -815,25 +814,16 @@ export function SecuritySettingsPage() {
       return
     }
 
-    const closeWatcher = window.setInterval(() => {
-      const popup = googleOAuthPopupRef.current
-      if (!popup || popup.closed) {
-        googleOAuthPopupRef.current = null
-        setIsLinkingGoogle(false)
-        return
-      }
+    // Google may isolate its window with COOP. Do not inspect its WindowProxy.
+    const timeout = window.setTimeout(() => {
+      handleGoogleLinkResult({ type: "cloudrave:google-oauth-result", flow: "link", result: "timeout" })
+    }, 10 * 60 * 1000)
 
-      const result = readGoogleOAuthPopupResult(popup, "link")
-      if (result) {
-        handleGoogleLinkResult(result)
-      }
-    }, 250)
-
-    return () => window.clearInterval(closeWatcher)
+    return () => window.clearTimeout(timeout)
   }, [handleGoogleLinkResult, isLinkingGoogle])
 
   React.useEffect(() => {
-    return () => googleOAuthPopupRef.current?.close()
+    return () => { googleOAuthPopupRef.current = null }
   }, [])
 
   const unlinkGoogle = async () => {
