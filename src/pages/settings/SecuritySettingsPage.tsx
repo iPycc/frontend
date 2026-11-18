@@ -89,6 +89,42 @@ const GITHUB_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
   provider_error: "GitHub 暂时无法完成授权，请稍后再试。",
 }
 
+function OAuthGuide({ provider, callbackUrl }: { provider: "GitHub" | "Google" | "QQ"; callbackUrl: string }) {
+  const urls = {
+    GitHub: "https://github.com/settings/developers",
+    Google: "https://console.cloud.google.com/auth/clients",
+    QQ: "https://connect.qq.com/manage.html#/",
+  }
+  const instructions = {
+    GitHub: "创建 OAuth App，将回调地址填入 Authorization callback URL。",
+    Google: "配置应用信息和受众，创建 Web application 客户端，将回调地址填入 Authorized redirect URIs。测试状态下按控制台要求添加测试用户。",
+    QQ: "创建网站应用，按平台要求填写站点资料和回调地址并提交审核。",
+  }
+  return (
+    <details className="text-sm text-muted-foreground">
+      <summary className="cursor-pointer font-medium text-foreground">配置步骤</summary>
+      <ol className="mt-3 list-decimal space-y-2 pl-5">
+        <li>
+          在站点设置中保存网站链接，复制回调地址。{" "}
+          <button
+            type="button"
+            className="text-primary underline underline-offset-4 disabled:opacity-50"
+            disabled={!callbackUrl}
+            onClick={() => void navigator.clipboard.writeText(callbackUrl).then(
+              () => toast.success("回调地址已复制"),
+              () => toast.error("复制失败，请手动复制回调地址")
+            )}
+          >复制回调地址</button>
+        </li>
+        <li>
+          前往 <a className="text-primary underline underline-offset-4" href={urls[provider]} target="_blank" rel="noreferrer">{provider} 开发者平台</a>。{instructions[provider]}
+        </li>
+        <li>将应用凭据填入下方，保存并开启，然后关联账号。</li>
+      </ol>
+    </details>
+  )
+}
+
 const GOOGLE_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
   access_denied: "Google 授权已取消。",
   account_not_found: "Cloudrave 账号不存在或已被禁用。",
@@ -1120,6 +1156,7 @@ export function SecuritySettingsPage() {
 
             {githubConfigExpanded ? (
               <FieldGroup className="max-w-xl gap-4">
+                <OAuthGuide provider="GitHub" callbackUrl={githubCallbackUrl} />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field data-disabled={isLoadingGitHubOAuth || isSavingGitHubOAuth}>
                     <FieldLabel htmlFor="github-client-id">Client ID</FieldLabel>
@@ -1276,6 +1313,7 @@ export function SecuritySettingsPage() {
 
             {googleConfigExpanded ? (
               <FieldGroup className="max-w-xl gap-4">
+                <OAuthGuide provider="Google" callbackUrl={googleCallbackUrl} />
                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
                   <Field data-disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}>
                     <FieldLabel htmlFor="google-client-id">Client ID</FieldLabel>
@@ -1427,6 +1465,7 @@ export function SecuritySettingsPage() {
 
             {qqConfigExpanded ? (
               <FieldGroup className="max-w-xl gap-4">
+                <OAuthGuide provider="QQ" callbackUrl={qqCallbackUrl} />
                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
                   <Field data-disabled={isLoadingQQOAuth || isSavingQQOAuth}>
                     <FieldLabel htmlFor="qq-app-id">App ID</FieldLabel>
