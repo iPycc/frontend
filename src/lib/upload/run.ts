@@ -429,7 +429,8 @@ export function useUploadRun({
                     chunk,
                     partNumber,
                     chunk.size,
-                    controller.signal
+                    controller.signal,
+                    (loaded) => progressTracker.update(partNumber, loaded)
                   ),
                   controller.signal
                 ),
@@ -464,7 +465,8 @@ export function useUploadRun({
                     chunk,
                     partNumber,
                     chunk.size,
-                    controller.signal
+                    controller.signal,
+                    (loaded) => progressTracker.update(partNumber, loaded)
                   ),
                   controller.signal
                 ),

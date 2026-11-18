@@ -112,7 +112,8 @@ export async function uploadLocalPart(
   file: Blob,
   partNumber: number,
   size?: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (loaded: number) => void
 ) {
   const form = new FormData()
   form.set("part_number", String(partNumber))
@@ -124,6 +125,7 @@ export async function uploadLocalPart(
     token,
     body: form,
     signal,
+    onUploadProgress: onProgress ? (loaded, total) => onProgress(Math.min(file.size, file.size * loaded / total)) : undefined,
   })
 }
 

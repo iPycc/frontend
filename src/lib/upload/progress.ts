@@ -13,13 +13,11 @@ export function trackParts(
   onUpdate: (snapshot: PartProgressSnapshot) => void,
   initialParts: Array<{ partNumber: number; size: number }> = []
 ) {
-  const startedAt = Date.now()
   const committedByPart = new Map<number, number>(
     initialParts.map((part) => [part.partNumber, Math.max(0, part.size)])
   )
   const inFlightByPart = new Map<number, number>()
-  const resumedBytes = Array.from(committedByPart.values()).reduce((sum, value) => sum + value, 0)
-  let highWaterBytes = resumedBytes
+  const samples: Array<{ at: number; bytes: number }> = []
   let timer: number | null = null
 
   const emit = () => {
@@ -28,15 +26,18 @@ export function trackParts(
     const inFlightBytes = Array.from(inFlightByPart.values()).reduce((sum, value) => sum + value, 0)
     const allCommitted = committedBytes >= totalBytes
     const visibleLimit = allCommitted ? totalBytes : Math.max(totalBytes - 1, 0)
-    highWaterBytes = allCommitted
+    const uploadedBytes = allCommitted
       ? totalBytes
-      : Math.min(Math.max(highWaterBytes, committedBytes + inFlightBytes), visibleLimit)
-    const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.2)
+      : Math.min(committedBytes + inFlightBytes, visibleLimit)
+    const now = Date.now()
+    while (samples.length && samples[0].at <= now - 3000) samples.shift()
+    const bytesPerSecond = samples.reduce((sum, sample) => sum + sample.bytes, 0) / 3
     onUpdate({
-      uploadedBytes: highWaterBytes,
-      progress: totalBytes > 0 ? Math.min((highWaterBytes / totalBytes) * 100, 100) : 100,
-      bytesPerSecond: Math.max(highWaterBytes - resumedBytes, 0) / elapsedSeconds,
+      uploadedBytes,
+      progress: totalBytes > 0 ? Math.min((uploadedBytes / totalBytes) * 100, 100) : 100,
+      bytesPerSecond,
     })
+    if (samples.length) schedule()
   }
 
   const schedule = () => {
@@ -50,7 +51,12 @@ export function trackParts(
   }
 
   const update = (partNumber: number, loaded: number) => {
-    if (!committedByPart.has(partNumber)) inFlightByPart.set(partNumber, Math.max(0, loaded))
+    if (!committedByPart.has(partNumber)) {
+      const previous = inFlightByPart.get(partNumber) ?? 0
+      const next = Math.max(0, loaded)
+      if (next > previous) samples.push({ at: Date.now(), bytes: next - previous })
+      inFlightByPart.set(partNumber, next)
+    }
     schedule()
   }
 

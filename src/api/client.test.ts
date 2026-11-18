@@ -4,10 +4,52 @@ import { afterEach, test } from "node:test"
 import { configureAuthClient, requestJson } from "./client"
 
 const originalFetch = globalThis.fetch
+const originalXhr = globalThis.XMLHttpRequest
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  globalThis.XMLHttpRequest = originalXhr
   configureAuthClient({})
+})
+
+test("multipart uploads report progress and refresh expired credentials", async () => {
+  const authorizations: string[] = []
+  const progress: number[] = []
+  let token = "old"
+  class FakeXhr {
+    upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void } = {}
+    headers = new Headers()
+    status = 0
+    statusText = ""
+    responseText = ""
+    withCredentials = false
+    onload?: () => void
+    onerror?: () => void
+    onabort?: () => void
+    open() {}
+    setRequestHeader(name: string, value: string) { this.headers.set(name, value) }
+    getAllResponseHeaders() { return "content-type: application/json\r\n" }
+    abort() { this.onabort?.() }
+    send() {
+      const authorization = this.headers.get("Authorization") ?? ""
+      authorizations.push(authorization)
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 })
+      this.status = authorization === "Bearer old" ? 401 : 200
+      this.responseText = this.status === 401 ? '{"detail":"expired"}' : '{"ok":true}'
+      this.onload?.()
+    }
+  }
+  globalThis.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest
+  configureAuthClient({
+    getAccessToken: () => token,
+    refreshAccessToken: async () => { token = "new"; return token },
+  })
+  const result = await requestJson<{ ok: boolean }>("/upload", {
+    method: "POST", body: new FormData(), token, onUploadProgress: (loaded) => progress.push(loaded),
+  })
+  assert.deepEqual(result, { ok: true })
+  assert.deepEqual(authorizations, ["Bearer old", "Bearer new"])
+  assert.deepEqual(progress, [50, 50])
 })
 
 function jsonResponse(payload: unknown, status = 200) {

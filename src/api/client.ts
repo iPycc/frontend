@@ -22,6 +22,7 @@ type RequestOptions = {
   signal?: AbortSignal
   cache?: RequestCache
   skipAuthRefresh?: boolean
+  onUploadProgress?: (loaded: number, total: number) => void
 }
 
 type AuthRuntime = {
@@ -117,14 +118,18 @@ async function requestResponseInternal(
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const response = await fetch(resolveRequestUrl(path), {
-    method: options.method ?? "GET",
-    headers,
-    body: toRequestBody(options.body),
-    signal: options.signal,
-    cache: options.cache,
-    credentials: "include",
-  })
+  const url = resolveRequestUrl(path)
+  const body = toRequestBody(options.body)
+  const response = options.onUploadProgress && body instanceof FormData
+    ? await uploadResponse(url, options.method ?? "POST", headers, body, options.signal, options.onUploadProgress)
+    : await fetch(url, {
+      method: options.method ?? "GET",
+      headers,
+      body,
+      signal: options.signal,
+      cache: options.cache,
+      credentials: "include",
+    })
 
   if (
     response.status === 401 &&
@@ -161,6 +166,53 @@ async function requestResponseInternal(
   }
 
   return response
+}
+
+function uploadResponse(
+  url: string,
+  method: string,
+  headers: Headers,
+  body: FormData,
+  signal: AbortSignal | undefined,
+  onProgress: (loaded: number, total: number) => void
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    if (signal?.aborted) {
+      reject(new DOMException("aborted", "AbortError"))
+      return
+    }
+    xhr.open(method, url)
+    xhr.withCredentials = true
+    headers.forEach((value, name) => xhr.setRequestHeader(name, value))
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total)
+    }
+    xhr.onload = () => {
+      signal?.removeEventListener("abort", abort)
+      const responseHeaders = new Headers()
+      xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+        const index = line.indexOf(":")
+        if (index > 0) responseHeaders.append(line.slice(0, index), line.slice(index + 1).trim())
+      })
+      resolve(new Response(xhr.status === 204 || xhr.status === 205 || xhr.status === 304 ? null : xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: responseHeaders,
+      }))
+    }
+    xhr.onerror = () => {
+      signal?.removeEventListener("abort", abort)
+      reject(new TypeError("上传时网络连接中断"))
+    }
+    xhr.onabort = () => {
+      signal?.removeEventListener("abort", abort)
+      reject(new DOMException("aborted", "AbortError"))
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+    xhr.send(body)
+  })
 }
 
 function parseRetryAfter(value: string | null) {
