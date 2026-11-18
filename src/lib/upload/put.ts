@@ -67,8 +67,7 @@ export function putPart(
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
         if (opaqueResponse) {
-          onProgress?.(chunk.size)
-          finish(() => resolve(plan.record_etag ?? `part-${plan.part_number}`))
+          finish(() => resolve(`pending:${plan.record_etag ?? `part-${plan.part_number}`}`))
           return
         }
         if (plan.response_mode === "wopan_json") {
@@ -101,11 +100,9 @@ export function putPart(
     }
     request.onerror = () => {
       if (opaqueResponse && !signal.aborted) {
-        // WoPan accepts a simple multipart POST but omits Access-Control-Allow-Origin,
-        // so Chromium reports status 0 after sending the bytes. Completion is
-        // verified against the provider's file list before Cloudrave creates a node.
-        onProgress?.(chunk.size)
-        finish(() => resolve(plan.record_etag ?? `part-${plan.part_number}`))
+        // CORS rejection and a real network failure are indistinguishable here.
+        // Record a candidate, not a confirmed transfer; completion must verify it.
+        finish(() => resolve(`pending:${plan.record_etag ?? `part-${plan.part_number}`}`))
         return
       }
       const error = new Error(
@@ -129,12 +126,6 @@ export function putPart(
         Object.entries(plan.form_fields ?? {}).forEach(([name, value]) => form.set(name, value))
         form.set(plan.file_field || "file", chunk, plan.form_fields?.fileName || "upload.bin")
         request.send(form)
-        if (opaqueResponse) {
-          // Registering an XMLHttpRequest upload listener before send() makes a
-          // cross-origin request non-simple and triggers an OPTIONS preflight.
-          // WoPan rejects that preflight, so attach immediately after send().
-          request.upload.onprogress = trackProgress
-        }
       } else {
         request.send(chunk)
       }

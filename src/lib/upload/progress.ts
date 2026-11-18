@@ -67,10 +67,16 @@ export function trackParts(
     emit()
   }
 
+  const discard = (partNumber: number) => {
+    inFlightByPart.delete(partNumber)
+    if (timer !== null) window.clearTimeout(timer)
+    emit()
+  }
+
   const dispose = () => {
     if (timer !== null) window.clearTimeout(timer)
     timer = null
   }
 
-  return { begin, update, commit, dispose }
+  return { begin, update, commit, discard, dispose }
 }

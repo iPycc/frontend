@@ -321,12 +321,19 @@ export function useUploadRun({
             })
           }
         }
-        const resumedBytes = Array.from(completedParts.values()).reduce((sum, part) => sum + part.size, 0)
+        const isPendingPart = (etag: string) => etag.startsWith("pending:") ||
+          (bucket.driverId === "drive_wo" && etag.startsWith("part:"))
+        const pendingCount = () => Array.from(completedParts.values()).filter((part) => isPendingPart(part.etag)).length
+        const resumedBytes = Array.from(completedParts.values()).reduce(
+          (sum, part) => sum + (isPendingPart(part.etag) ? 0 : part.size), 0
+        )
         updateUploadQueueItem(id, {
           uploadedBytes: resumedBytes,
           progress: saved.file.size > 0 ? (resumedBytes / saved.file.size) * 100 : 0,
           speedBytesPerSecond: 0,
-          speedText: resumedBytes > 0
+          speedText: pendingCount() > 0
+            ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
+            : resumedBytes > 0
             ? `已恢复 ${formatBytes(resumedBytes)}，继续上传剩余分片`
             : "正在上传",
         })
@@ -345,10 +352,12 @@ export function useUploadRun({
               uploadedBytes,
               progress,
               speedBytesPerSecond: bytesPerSecond,
-              speedText: `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
+              speedText: pendingCount() > 0
+                ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
+                : `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
             })
           },
-          Array.from(completedParts.values()).map((part) => ({
+          Array.from(completedParts.values()).filter((part) => !isPendingPart(part.etag)).map((part) => ({
             partNumber: part.part_number,
             size: part.size,
           }))
@@ -502,12 +511,13 @@ export function useUploadRun({
             )
             throwIfAborted()
           }
-          progressTracker.commit(partNumber, chunk.size)
           completedParts.set(partNumber, {
             part_number: partNumber,
             etag: uploaded.etag,
             size: chunk.size,
           })
+          if (isPendingPart(uploaded.etag)) progressTracker.discard(partNumber)
+          else progressTracker.commit(partNumber, chunk.size)
         }
 
         const uploadWorker = async () => {
@@ -540,9 +550,10 @@ export function useUploadRun({
         uploadCommitIdsRef.current.add(id)
         updateUploadQueueItem(id, {
           status: "processing",
-          progress: 100,
+          ...(pendingCount() ? {} : { progress: 100 }),
           progressStage: undefined,
-          speedText: "处理中...",
+          speedBytesPerSecond: 0,
+          speedText: pendingCount() ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片` : "处理中...",
         })
         await retryRateLimited(
           () => uploadApiSchedulerRef.current.run(

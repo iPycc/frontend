@@ -80,7 +80,7 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
   if (item.status === "failed") return { status: "failed", statusLabel: item.errorMessage || "上传失败" }
   if (item.status === "canceled") return { status: "canceled", statusLabel: "已取消" }
   if (item.status === "completed") return { status: "completed", statusLabel: "上传完成" }
-  if (item.status === "processing") return { status: "processing", statusLabel: "正在写入文件" }
+  if (item.status === "processing") return { status: "processing", statusLabel: item.speedText || "正在写入文件" }
   if (item.status === "paused") {
     return {
       status: "paused",
@@ -93,7 +93,7 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
       statusLabel: item.progressStage === "hashing" ? item.speedText || "正在校验文件" : item.speedText || "正在准备",
     }
   }
-  if (item.status === "uploading") return { status: "active", statusLabel: "正在上传" }
+  if (item.status === "uploading") return { status: "active", statusLabel: item.speedText?.startsWith("待云盘确认") ? item.speedText : "正在上传" }
   return { status: "pending", statusLabel: "等待上传" }
 }
 
