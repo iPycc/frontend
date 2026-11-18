@@ -12,8 +12,7 @@ import {
   applyUserMountCors,
   deleteUserMount,
   getUserMountDeletePreview,
-  syncUserMount,
-  syncUserMountPages,
+  startUserMountSyncTask,
   updateUserMount,
   type UserMountDeletePreview,
 } from "@/api/user-storage"
@@ -78,10 +77,7 @@ export function StorageSettingsPage() {
   const [deletePreviewLoading, setDeletePreviewLoading] = React.useState(false)
   const [deletePreviewError, setDeletePreviewError] = React.useState<string | null>(null)
   const [deletingMode, setDeletingMode] = React.useState<MountDeleteMode | null>(null)
-  const syncControllerRef = React.useRef<AbortController | null>(null)
   const deletePreviewRequestRef = React.useRef(0)
-
-  React.useEffect(() => () => syncControllerRef.current?.abort(), [])
 
   const token = authSession?.tokens.accessToken ?? null
   const userSeed = profile.uid || profile.username || "workspace"
@@ -222,6 +218,14 @@ export function StorageSettingsPage() {
         }
       }
 
+      if (tencentDraft.mountMode === "mirror") {
+        try {
+          await startUserMountSyncTask(accessToken, created.mount.id)
+        } catch (error) {
+          toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
+        }
+      }
+
       await reloadWorkspace()
       toast.success("腾讯云 COS 存储策略已创建。")
       setView({ type: "list" })
@@ -250,6 +254,14 @@ export function StorageSettingsPage() {
           await applyUserMountCors(accessToken, created.mount.id)
         } catch (error) {
           toast.warning(error instanceof Error ? error.message : "已创建 OSS 挂载，但跨域配置尚未完成。")
+        }
+      }
+
+      if (aliyunDraft.mountMode === "mirror") {
+        try {
+          await startUserMountSyncTask(accessToken, created.mount.id)
+        } catch (error) {
+          toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
         }
       }
 
@@ -293,15 +305,15 @@ export function StorageSettingsPage() {
         (policyId) => buildRemoteDriveMountInput(remoteDraft, inspection, fallbackSlug, policyId)
       )
 
-      let firstSyncComplete = false
+      let submitted = false
       try {
-        const sync = await syncUserMount(accessToken, created.mount.id)
-        firstSyncComplete = sync.complete
+        await startUserMountSyncTask(accessToken, created.mount.id)
+        submitted = true
       } catch (error) {
-        toast.warning(error instanceof Error ? error.message : "挂载已创建，但首次目录同步尚未完成。")
+        toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
       }
       await reloadWorkspace()
-      toast.success(firstSyncComplete ? "云盘已挂载，目录索引同步完成。" : "云盘已挂载，已导入首批目录索引。")
+      toast.success(submitted ? "云盘已挂载，可在后台任务中查看导入进度。" : "云盘已挂载。")
       setView({ type: "list" })
     })
 
@@ -689,29 +701,16 @@ export function StorageSettingsPage() {
       return
     }
 
-    if (syncingMountId === bucket.backendId) {
-      syncControllerRef.current?.abort()
-      return
-    }
     if (syncingMountId !== null) return
 
-    const controller = new AbortController()
-    syncControllerRef.current = controller
     setSyncingMountId(bucket.backendId)
     try {
-      const result = await syncUserMountPages(accessToken, bucket.backendId, controller.signal)
+      await startUserMountSyncTask(accessToken, bucket.backendId)
       await reloadWorkspace()
-      if (!result.complete) {
-        toast.info(`已同步 ${result.synced_objects} 个对象，可再次继续。`)
-      } else {
-        toast.success(`${bucket.name} 同步完成，共 ${result.synced_objects} 个对象。`)
-      }
+      toast.success("已提交导入任务，可在后台任务中查看进度。")
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        toast.error(error instanceof Error ? error.message : "启动同步失败")
-      }
+      toast.error(error instanceof Error ? error.message : "启动同步失败")
     } finally {
-      syncControllerRef.current = null
       setSyncingMountId(null)
     }
   }, [reloadWorkspace, requireToken, syncingMountId])

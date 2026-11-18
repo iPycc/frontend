@@ -102,6 +102,39 @@ export async function getUserMountSync(token: string, mountId: number, signal?: 
   return requestJson<MountSyncResult>(`/mounts/${mountId}/sync`, { token, signal })
 }
 
+export type MountSyncTask = {
+  id: string
+  mount_id: number
+  owner_id: number
+  status: "pending" | "running" | "paused" | "completed" | "failed" | "canceled"
+  error?: string | null
+  name?: string | null
+  scanned: number
+  created: number
+  updated: number
+  conflicts: number
+  missing: number
+  created_at: string
+  updated_at: string
+}
+
+export function startUserMountSyncTask(token: string, mountId: number) {
+  return requestJson<MountSyncTask>(`/mounts/${mountId}/sync/task`, {
+    method: "POST",
+    token,
+  })
+}
+
+export function controlUserMountSyncTask(mountId: number, taskId: string, action: "pause" | "resume" | "cancel") {
+  return requestJson<MountSyncTask>(`/mounts/${mountId}/sync/task/${encodeURIComponent(taskId)}/${action}`, {
+    method: "POST",
+  })
+}
+
+export function listMountSyncTasks() {
+  return requestJson<MountSyncTask[]>("/explorer/sync-tasks")
+}
+
 export async function syncUserMount(token: string, mountId: number, signal?: AbortSignal) {
   return requestJson<MountSyncResult>(`/mounts/${mountId}/sync`, {
     method: "POST",

@@ -5,7 +5,7 @@ export type SortValue = "updated-desc" | "updated-asc" | "name-asc" | "name-desc
 export type ViewMode = "grid" | "list" | "gallery"
 export type MediaType = "image" | "video" | "audio" | "document" | "archive" | "code" | "other"
 export type MountMode = "managed" | "mirror"
-export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
+export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "paused" | "canceled" | "completed" | "failed"
 
 export type StorageStrategyKey = "tencent" | "local" | "aliyun" | "139" | "189" | "wo"
 export type UserRole = "admin" | "user" | "guest"
