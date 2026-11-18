@@ -11,6 +11,7 @@ export interface TencentStorageDraft {
   prefix: string
   mountMode: "managed" | "mirror"
   readOnly: boolean
+  importDeleteSource: boolean
   legacyPrefixedKeys: boolean
   objectKeyStyle: "readable" | "opaque"
   accessPermission: "private" | "public-read"
@@ -46,6 +47,7 @@ export interface AliyunStorageDraft {
   prefix: string
   mountMode: "managed" | "mirror"
   readOnly: boolean
+  importDeleteSource: boolean
   legacyPrefixedKeys: boolean
   objectKeyStyle: "readable" | "opaque"
   accessKeyId: string

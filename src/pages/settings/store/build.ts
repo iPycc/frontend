@@ -33,6 +33,7 @@ export function createEmptyTencentDraft(): TencentStorageDraft {
     prefix: "",
     mountMode: "managed",
     readOnly: false,
+    importDeleteSource: false,
     legacyPrefixedKeys: false,
     objectKeyStyle: "readable",
     accessPermission: "private",
@@ -61,6 +62,7 @@ export function createEmptyAliyunDraft(): AliyunStorageDraft {
     prefix: "",
     mountMode: "managed",
     readOnly: false,
+    importDeleteSource: false,
     legacyPrefixedKeys: false,
     objectKeyStyle: "readable",
     accessKeyId: "",
@@ -336,6 +338,7 @@ export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: s
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
+      import_delete_source: draft.importDeleteSource,
       object_key_style: draft.objectKeyStyle,
     },
   }
@@ -366,6 +369,7 @@ export function buildTencentMountInput(draft: TencentStorageDraft, fallbackSlug:
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
+      import_delete_source: draft.importDeleteSource,
       object_key_style: draft.objectKeyStyle,
     },
   }

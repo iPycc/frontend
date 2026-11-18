@@ -338,6 +338,7 @@ export function StorageSettingsPage() {
         prefix: bucket.rootPath ?? "",
         mountMode: bucket.mountMode,
         readOnly: bucket.readOnly,
+        importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
         objectKeyStyle: bucket.objectKeyStyle,
         accessPermission: "private" as const,
@@ -370,6 +371,7 @@ export function StorageSettingsPage() {
         prefix: bucket.rootPath ?? "",
         mountMode: bucket.mountMode,
         readOnly: bucket.readOnly,
+        importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
         objectKeyStyle: bucket.objectKeyStyle,
         accessKeyId: "",
@@ -580,6 +582,7 @@ export function StorageSettingsPage() {
             part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
             mount_mode: tencentDraft.mountMode,
             read_only: tencentDraft.readOnly,
+            import_delete_source: tencentDraft.importDeleteSource,
             object_key_style: tencentDraft.objectKeyStyle,
           },
         }
@@ -632,6 +635,7 @@ export function StorageSettingsPage() {
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
             mount_mode: aliyunDraft.mountMode,
             read_only: aliyunDraft.readOnly,
+            import_delete_source: aliyunDraft.importDeleteSource,
             object_key_style: aliyunDraft.objectKeyStyle,
           },
         }
