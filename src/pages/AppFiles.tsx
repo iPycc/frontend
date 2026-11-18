@@ -8,7 +8,7 @@ import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
-import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, prefetchPreviewManifest, recordNodeOpen } from "@/api/files"
+import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, recordNodeOpen } from "@/api/files"
 import { updateUserPreferences } from "@/api/user"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
 import { useFileDownload } from "@/hooks/use-file-download"
@@ -640,13 +640,6 @@ export function AppFiles() {
         openAudio(node, previewableFiles)
         return
       }
-      if (node.backendId) {
-        try {
-          await prefetchPreviewManifest(node.backendId)
-        } catch {
-          // The modal owns the visible retry/error state.
-        }
-      }
       setPreviewFile(node)
     },
     [openAudio, previewableFiles]
@@ -656,7 +649,6 @@ export function AppFiles() {
     if (previewableFiles.length <= 1) return
     const index = (previewIndex - 1 + previewableFiles.length) % previewableFiles.length
     const next = previewableFiles[index]
-    if (next.backendId) await prefetchPreviewManifest(next.backendId).catch(() => undefined)
     setPreviewFile(next)
   }, [previewIndex, previewableFiles])
 
@@ -664,7 +656,6 @@ export function AppFiles() {
     if (previewableFiles.length <= 1) return
     const index = (previewIndex + 1) % previewableFiles.length
     const next = previewableFiles[index]
-    if (next.backendId) await prefetchPreviewManifest(next.backendId).catch(() => undefined)
     setPreviewFile(next)
   }, [previewIndex, previewableFiles])
 

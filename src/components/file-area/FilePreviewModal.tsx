@@ -9,7 +9,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 
-import { getPreviewManifest, peekPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
+import { getPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
 import { PropertiesPanelContent } from "@/components/shared/PropertiesPanel"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import {
@@ -69,9 +69,8 @@ export function FilePreviewModal({
   const canShare = hasCapability(currentUser, "share.manage")
   const { bucketName, formatBytes } = usePropertiesPanel()
   const backendId = file?.backendId
-  const cachedManifest = backendId ? peekPreviewManifest(backendId) : null
-  const [manifest, setManifest] = React.useState<PreviewManifest | null>(cachedManifest)
-  const [loading, setLoading] = React.useState(!cachedManifest)
+  const [manifest, setManifest] = React.useState<PreviewManifest | null>(null)
+  const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshKey, setRefreshKey] = React.useState(0)
   const loadManifest = React.useCallback(async (signal?: AbortSignal) => {
@@ -110,9 +109,8 @@ export function FilePreviewModal({
       }
     }
 
-    const cached = peekPreviewManifest(backendId)
-    setManifest(cached)
-    setLoading(!cached)
+    setManifest(null)
+    setLoading(true)
     setError(null)
     void refresh()
 
