@@ -4,7 +4,7 @@ const GOOGLE_OAUTH_CHANNEL_NAME = "cloudrave-google-oauth"
 const GOOGLE_OAUTH_STORAGE_KEY = "cloudrave-google-oauth-result"
 const GOOGLE_OAUTH_SESSION_KEY = "cloudrave-google-oauth-flow"
 
-export type GoogleOAuthFlow = "login" | "link"
+export type GoogleOAuthFlow = "login" | "link" | "test"
 
 export type GoogleOAuthMessage = {
   type: typeof GOOGLE_OAUTH_MESSAGE_TYPE
@@ -43,7 +43,7 @@ export function isGoogleOAuthPopupWindow() {
   }
   try {
     const flow = window.sessionStorage.getItem(GOOGLE_OAUTH_SESSION_KEY)
-    return flow === "login" || flow === "link"
+    return flow === "login" || flow === "link" || flow === "test"
   } catch {
     return false
   }
@@ -56,7 +56,7 @@ function isGoogleOAuthPayload(data: unknown, flow?: GoogleOAuthFlow): data is Go
       "type" in data &&
       data.type === GOOGLE_OAUTH_MESSAGE_TYPE &&
       "flow" in data &&
-      (data.flow === "login" || data.flow === "link") &&
+      (data.flow === "login" || data.flow === "link" || data.flow === "test") &&
       (!flow || data.flow === flow) &&
       "result" in data &&
       typeof data.result === "string"
@@ -99,7 +99,8 @@ export function readGoogleOAuthPopupResult(
 
     const params = new URLSearchParams(location.search)
     if (location.pathname === "/oauth/google/complete") {
-      const returnedFlow = params.get("flow") === "link" ? "link" : "login"
+      const value = params.get("flow")
+      const returnedFlow = value === "link" || value === "test" ? value : "login"
       return returnedFlow === flow
         ? { type: GOOGLE_OAUTH_MESSAGE_TYPE, flow, result: params.get("result") || "provider_error" }
         : null

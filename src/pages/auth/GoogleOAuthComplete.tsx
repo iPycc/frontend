@@ -10,6 +10,9 @@ import {
 } from "@/lib/google-oauth-popup"
 
 function getFallbackUrl(flow: GoogleOAuthFlow, result: string) {
+  if (flow === "test") {
+    return `/settings/security?google_oauth_test=${encodeURIComponent(result)}`
+  }
   if (flow === "link") {
     return `/settings/security?google_oauth_link=${encodeURIComponent(result)}`
   }
@@ -22,7 +25,7 @@ function getFallbackUrl(flow: GoogleOAuthFlow, result: string) {
   return `/login?google_oauth_error=${encodeURIComponent(result)}`
 }
 
-function readOAuthResult() {
+function readOAuthResult(): { flow: GoogleOAuthFlow; result: string } {
   const params = new URLSearchParams(window.location.search)
 
   if (window.location.pathname === "/app" || window.location.pathname.startsWith("/app/")) {
@@ -38,8 +41,9 @@ function readOAuthResult() {
     return { flow: "link" as const, result: params.get("google_oauth_link") || "provider_error" }
   }
 
+  const requestedFlow = params.get("flow")
   return {
-    flow: params.get("flow") === "link" ? "link" as const : "login" as const,
+    flow: requestedFlow === "link" || requestedFlow === "test" ? requestedFlow : "login" as const,
     result: params.get("result") || "provider_error",
   }
 }

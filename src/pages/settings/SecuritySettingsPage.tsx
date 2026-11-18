@@ -182,6 +182,7 @@ export function SecuritySettingsPage() {
   const [isLinkingGitHub, setIsLinkingGitHub] = React.useState(false)
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = React.useState(false)
   const [googleClientId, setGoogleClientId] = React.useState("")
+  const [savedGoogleClientId, setSavedGoogleClientId] = React.useState("")
   const [googleClientSecret, setGoogleClientSecret] = React.useState("")
   const [googleSecretConfigured, setGoogleSecretConfigured] = React.useState(false)
   const [googleCallbackUrl, setGoogleCallbackUrl] = React.useState("")
@@ -193,7 +194,9 @@ export function SecuritySettingsPage() {
   const [isLoadingGoogleOAuth, setIsLoadingGoogleOAuth] = React.useState(false)
   const [isLoadingGoogleConnection, setIsLoadingGoogleConnection] = React.useState(false)
   const [isUnlinkingGoogle, setIsUnlinkingGoogle] = React.useState(false)
-  const [googleOAuthSavingAction, setGoogleOAuthSavingAction] = React.useState<"enable" | "disable" | null>(null)
+  const [googleOAuthSavingAction, setGoogleOAuthSavingAction] = React.useState<"enable" | "disable" | "save" | null>(null)
+  const [isTestingGoogle, setIsTestingGoogle] = React.useState(false)
+  const [googleTestPassed, setGoogleTestPassed] = React.useState(false)
   const [isLinkingGoogle, setIsLinkingGoogle] = React.useState(false)
   const [qqOAuthEnabled, setQQOAuthEnabled] = React.useState(false)
   const [qqAppId, setQQAppId] = React.useState("")
@@ -216,6 +219,7 @@ export function SecuritySettingsPage() {
   const handledQQOAuthLinkResult = React.useRef<string | null>(null)
   const githubOAuthPopupRef = React.useRef<Window | null>(null)
   const googleOAuthPopupRef = React.useRef<Window | null>(null)
+  const googleTestPopupRef = React.useRef<Window | null>(null)
   const qqOAuthPopupRef = React.useRef<Window | null>(null)
   const isSavingGitHubOAuth = githubOAuthSavingAction !== null
   const isSavingGoogleOAuth = googleOAuthSavingAction !== null
@@ -259,6 +263,7 @@ export function SecuritySettingsPage() {
       .then((response) => {
         setGoogleOAuthEnabled(response.enabled)
         setGoogleClientId(response.client_id)
+        setSavedGoogleClientId(response.client_id)
         setGoogleSecretConfigured(response.client_secret_configured)
         setGoogleCallbackUrl(response.callback_url)
       })
@@ -771,12 +776,12 @@ export function SecuritySettingsPage() {
     }
   }
 
-  const saveGoogleOAuth = async (enabled = true) => {
+  const saveGoogleOAuth = async (enabled = true, saveOnly = false) => {
     if (!token || !isAdmin) {
       return
     }
 
-    setGoogleOAuthSavingAction(enabled ? "enable" : "disable")
+    setGoogleOAuthSavingAction(saveOnly ? "save" : enabled ? "enable" : "disable")
     try {
       const response = await updateGoogleOAuthSettings(token, {
         enabled,
@@ -784,14 +789,16 @@ export function SecuritySettingsPage() {
         clientSecret: googleClientSecret,
       })
       setGoogleOAuthEnabled(response.enabled)
+      setGoogleTestPassed(false)
       setGoogleClientId(response.client_id)
+      setSavedGoogleClientId(response.client_id)
       setGoogleClientSecret("")
       setGoogleSecretConfigured(response.client_secret_configured)
       setGoogleCallbackUrl(response.callback_url)
-      if (!response.enabled) {
+      if (!response.enabled && !saveOnly) {
         setGoogleConfigExpanded(false)
       }
-      toast.success(response.enabled ? "Google OAuth 已开启" : "Google OAuth 已关闭")
+      toast.success(saveOnly ? "Google OAuth 配置已保存" : response.enabled ? "Google OAuth 已开启" : "Google OAuth 已关闭")
     } catch (error) {
       toast.error("保存 Google OAuth 配置失败", {
         description: error instanceof Error ? error.message : "请稍后再试。",
@@ -802,7 +809,7 @@ export function SecuritySettingsPage() {
   }
 
   const linkGoogle = () => {
-    if (isLinkingGoogle) {
+    if (isLinkingGoogle || isTestingGoogle) {
       return
     }
 
@@ -817,6 +824,43 @@ export function SecuritySettingsPage() {
     googleOAuthPopupRef.current = popup
     setIsLinkingGoogle(true)
   }
+
+  const testGoogle = () => {
+    if (isTestingGoogle || isLinkingGoogle) return
+    const popup = openGoogleOAuthPopup("/api/v1/oauth/google/test", "test")
+    if (!popup) {
+      toast.error("无法打开 Google 授权窗口，请允许弹出式窗口后重试。")
+      return
+    }
+    googleTestPopupRef.current = popup
+    setIsTestingGoogle(true)
+  }
+
+  const handleGoogleTestResult = React.useCallback((message: GoogleOAuthMessage) => {
+    if (!googleTestPopupRef.current) return
+    googleTestPopupRef.current = null
+    setIsTestingGoogle(false)
+    if (message.result === "success") {
+      setGoogleTestPassed(true)
+      toast.success("Google 授权测试成功")
+    } else {
+      toast.error("Google 授权测试失败", {
+        description: GOOGLE_LINK_ERROR_DESCRIPTIONS[message.result] ?? "请检查客户端配置和回调地址。",
+      })
+    }
+  }, [])
+
+  React.useEffect(() => subscribeGoogleOAuthResults(
+    "test", () => googleTestPopupRef.current, handleGoogleTestResult,
+  ), [handleGoogleTestResult])
+
+  React.useEffect(() => {
+    if (!isTestingGoogle) return
+    const timeout = window.setTimeout(() => {
+      handleGoogleTestResult({ type: "cloudrave:google-oauth-result", flow: "test", result: "timeout" })
+    }, 10 * 60 * 1000)
+    return () => window.clearTimeout(timeout)
+  }, [handleGoogleTestResult, isTestingGoogle])
 
   const handleGoogleLinkResult = React.useCallback((message: GoogleOAuthMessage) => {
     if (!googleOAuthPopupRef.current) {
@@ -859,7 +903,10 @@ export function SecuritySettingsPage() {
   }, [handleGoogleLinkResult, isLinkingGoogle])
 
   React.useEffect(() => {
-    return () => { googleOAuthPopupRef.current = null }
+    return () => {
+      googleOAuthPopupRef.current = null
+      googleTestPopupRef.current = null
+    }
   }, [])
 
   const unlinkGoogle = async () => {
@@ -1320,7 +1367,7 @@ export function SecuritySettingsPage() {
                     <Input
                       id="google-client-id"
                       value={googleClientId}
-                      onChange={(event) => setGoogleClientId(event.target.value)}
+                      onChange={(event) => { setGoogleClientId(event.target.value); setGoogleTestPassed(false) }}
                       placeholder="Google OAuth Client ID"
                       disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
                       autoComplete="off"
@@ -1332,7 +1379,7 @@ export function SecuritySettingsPage() {
                       id="google-client-secret"
                       type="password"
                       value={googleClientSecret}
-                      onChange={(event) => setGoogleClientSecret(event.target.value)}
+                      onChange={(event) => { setGoogleClientSecret(event.target.value); setGoogleTestPassed(false) }}
                       placeholder={googleSecretConfigured ? "已配置，留空保持不变" : "填写 Client Secret"}
                       disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
                       autoComplete="new-password"
@@ -1353,8 +1400,22 @@ export function SecuritySettingsPage() {
 
                 <div className="flex flex-wrap gap-2">
                   <Button
+                    variant="outline"
+                    onClick={() => void saveGoogleOAuth(googleOAuthEnabled, true)}
+                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle}
+                  >
+                    {googleOAuthSavingAction === "save" ? "保存中..." : "保存配置"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={testGoogle}
+                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle || isLinkingGoogle || !googleCallbackUrl || !googleSecretConfigured || !savedGoogleClientId || googleClientId.trim() !== savedGoogleClientId || Boolean(googleClientSecret.trim())}
+                  >
+                    {isTestingGoogle ? "等待授权..." : "测试登录"}
+                  </Button>
+                  <Button
                     onClick={() => void saveGoogleOAuth(true)}
-                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle || (!googleOAuthEnabled && !googleTestPassed)}
                     aria-busy={googleOAuthSavingAction === "enable"}
                   >
                     {googleOAuthSavingAction === "enable" ? (
@@ -1427,7 +1488,7 @@ export function SecuritySettingsPage() {
               <Button
                 variant="outline"
                 onClick={linkGoogle}
-                disabled={isLinkingGoogle}
+                disabled={isLinkingGoogle || isTestingGoogle}
                 aria-busy={isLinkingGoogle}
               >
                 {isLinkingGoogle ? (
