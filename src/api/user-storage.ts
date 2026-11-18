@@ -113,6 +113,7 @@ export type MountSyncTask = {
   created: number
   updated: number
   conflicts: number
+  skipped: number
   missing: number
   created_at: string
   updated_at: string

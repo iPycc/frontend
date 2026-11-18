@@ -65,7 +65,7 @@ export function Tasks() {
                 <div>
                   <div className="font-medium">{task.name} · 文件导入</div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    已扫描 {task.scanned} 项，新增 {task.created} 项，更新 {task.updated} 项，冲突 {task.conflicts} 项
+                    已扫描 {task.scanned} 项，新增 {task.created} 项，更新 {task.updated} 项，跳过 {task.skipped} 项，冲突 {task.conflicts} 项
                   </div>
                   {task.error ? <div className="mt-1 text-sm text-destructive">{task.error}</div> : null}
                 </div>
