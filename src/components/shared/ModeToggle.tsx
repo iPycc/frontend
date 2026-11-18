@@ -1,5 +1,3 @@
-import { Moon, Sun } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -8,16 +6,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAppState } from "@/state/app"
+import { ThemeToggleGlyph } from "./ThemeToggleButton"
 
 export function ModeToggle() {
-  const { settings, setThemeMode } = useAppState()
+  const { settings, effectiveTheme, setThemeMode } = useAppState()
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
-          <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
-          <span className="sr-only">切换主题</span>
+      <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="group relative overflow-hidden" />}>
+        <ThemeToggleGlyph
+          isDark={effectiveTheme === "dark"}
+          size={19}
+          className="transition-transform duration-300 group-hover:scale-110"
+        />
+        <span className="sr-only">切换主题</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => setThemeMode("light")}>

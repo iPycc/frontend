@@ -123,7 +123,7 @@ export type AppStateValue = {
   shares: ShareRecord[]
   clipboard: AppSnapshot["clipboard"]
   effectiveTheme: Exclude<ThemeMode, "system">
-  setThemeMode: (mode: ThemeMode) => void
+  setThemeMode: (mode: ThemeMode, origin?: { x?: number; y?: number }) => void
   updateSettings: (patch: Partial<UserSettings>) => void
   updateProfile: (patch: Partial<UserProfile>) => void
   login: (email: string, password: string) => Promise<AuthResult>
