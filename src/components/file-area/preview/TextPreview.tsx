@@ -48,6 +48,7 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
   const editable = manifest.capabilities.includes("edit")
   const maxBytes = typeof manifest.metadata.max_bytes === "number" ? manifest.metadata.max_bytes : 5 * 1024 * 1024
   const textEncoding = typeof manifest.metadata.text_encoding === "string" ? manifest.metadata.text_encoding : "utf-8"
+  const readOnlyReason = typeof manifest.metadata.read_only_reason === "string" ? manifest.metadata.read_only_reason : ""
   const truncated = manifest.size > maxBytes
 
   const syncPreviewScroll = React.useCallback((ratio: number) => {
@@ -113,10 +114,10 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="truncate text-xs text-muted-foreground">
-          {language.label} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}{sourceOnly ? " · 检测到扩展语法，使用源码模式" : ""}
+          {language.label} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}{readOnlyReason ? ` · ${readOnlyReason}` : ""}{sourceOnly ? " · 检测到扩展语法，使用源码模式" : ""}
         </span>
         <div className="flex items-center gap-2">
-          {isMarkdown ? <ToggleGroup type="single" value={sourceOnly ? "source" : view} onValueChange={(value) => { if (!sourceOnly && (value === "visual" || value === "source" || value === "split")) setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 编辑模式"><ToggleGroupItem value="visual" disabled={sourceOnly} aria-label="所见即所得编辑"><IconEdit data-icon="inline-start" />编辑</ToggleGroupItem><ToggleGroupItem value="source" aria-label="编辑 Markdown 源码"><IconCode data-icon="inline-start" />源码</ToggleGroupItem><ToggleGroupItem value="split" disabled={sourceOnly} aria-label="左侧源码、右侧预览"><IconColumns3 data-icon="inline-start" />分屏</ToggleGroupItem></ToggleGroup> : null}
+          {isMarkdown ? <ToggleGroup type="single" value={sourceOnly ? "source" : view} onValueChange={(value) => { if (!sourceOnly && (value === "visual" || value === "source" || value === "split")) setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 显示模式"><ToggleGroupItem value="visual" disabled={sourceOnly} aria-label={editable ? "所见即所得编辑" : "预览 Markdown"}><IconEdit data-icon="inline-start" />{editable ? "编辑" : "预览"}</ToggleGroupItem><ToggleGroupItem value="source" aria-label={editable ? "编辑 Markdown 源码" : "查看 Markdown 源码"}><IconCode data-icon="inline-start" />源码</ToggleGroupItem><ToggleGroupItem value="split" disabled={sourceOnly} aria-label="左侧源码、右侧预览"><IconColumns3 data-icon="inline-start" />分屏</ToggleGroupItem></ToggleGroup> : null}
           {editable ? <Button size="sm" variant="outline" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}保存</Button> : null}
         </div>
       </div>
