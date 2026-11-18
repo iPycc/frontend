@@ -4,6 +4,7 @@ import { listBackgroundTasks, type BackgroundTask } from "@/api/files"
 import { controlUserMountSyncTask, listMountSyncTasks, type MountSyncTask } from "@/api/user-storage"
 import { PageShell } from "@/components/shared/PageShell"
 import { Button } from "@/components/ui/button"
+import { SyncConflictDialog } from "@/components/storage/SyncConflictDialog"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { toast } from "sonner"
 
@@ -13,6 +14,7 @@ export function Tasks() {
   const [syncTasks, setSyncTasks] = React.useState<MountSyncTask[]>([])
   const [refresh, setRefresh] = React.useState(0)
   const [pendingTask, setPendingTask] = React.useState<string | null>(null)
+  const [conflictTask, setConflictTask] = React.useState<MountSyncTask | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -73,14 +75,15 @@ export function Tasks() {
                   {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: "已完成", failed: "失败", canceled: "已取消" }[task.status]}
                 </div>
               </div>
-              {["pending", "running", "paused", "failed"].includes(task.status) ? (
+              {task.conflicts > 0 || ["pending", "running", "paused", "failed"].includes(task.status) ? (
                 <div className="mt-3 flex gap-2">
+                  {task.conflicts > 0 ? <Button size="sm" variant="outline" onClick={() => setConflictTask(task)}>查看冲突</Button> : null}
                   {task.status === "pending" || task.status === "running" ? (
                     <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void controlSync(task, "pause")}>暂停</Button>
-                  ) : (
+                  ) : task.status === "paused" || task.status === "failed" ? (
                     <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void controlSync(task, "resume")}>继续</Button>
-                  )}
-                  <Button size="sm" variant="ghost" disabled={pendingTask !== null} onClick={() => void controlSync(task, "cancel")}>取消</Button>
+                  ) : null}
+                  {["pending", "running", "paused", "failed"].includes(task.status) ? <Button size="sm" variant="ghost" disabled={pendingTask !== null} onClick={() => void controlSync(task, "cancel")}>取消</Button> : null}
                 </div>
               ) : null}
             </div>
@@ -103,6 +106,7 @@ export function Tasks() {
           ))}
         </div>
       </div>
+      {conflictTask ? <SyncConflictDialog task={conflictTask} onClose={() => setConflictTask(null)} /> : null}
     </PageShell>
   )
 }

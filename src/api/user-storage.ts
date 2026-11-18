@@ -136,6 +136,24 @@ export function listMountSyncTasks() {
   return requestJson<MountSyncTask[]>("/explorer/sync-tasks")
 }
 
+export type MountSyncConflict = {
+  id: number
+  key: string
+  reason: "invalid_path" | "folder_conflict" | "source_unavailable" | "indexed_elsewhere" | "name_conflict"
+}
+
+export type MountSyncConflictPage = {
+  items: MountSyncConflict[]
+  next_after_id: number | null
+}
+
+export function listMountSyncConflicts(taskId: string, afterId = 0, signal?: AbortSignal) {
+  return requestJson<MountSyncConflictPage>(
+    `/explorer/sync-tasks/${encodeURIComponent(taskId)}/conflicts?after_id=${afterId}&limit=100`,
+    { signal }
+  )
+}
+
 export async function syncUserMount(token: string, mountId: number, signal?: AbortSignal) {
   return requestJson<MountSyncResult>(`/mounts/${mountId}/sync`, {
     method: "POST",
