@@ -346,7 +346,7 @@ export function useUploadRun({
         plan.upload_urls.forEach((item) => uploadPlans.set(item.part_number, Promise.resolve(item)))
         const progressTracker = trackParts(
           saved.file.size,
-          ({ uploadedBytes, progress, bytesPerSecond }) => {
+          ({ uploadedBytes, progress, bytesPerSecond, awaitingConfirmation }) => {
             updateUploadQueueItem(id, {
               status: "uploading",
               progressStage: "uploading",
@@ -355,6 +355,8 @@ export function useUploadRun({
               speedBytesPerSecond: bytesPerSecond,
               speedText: pendingCount() > 0
                 ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
+                : awaitingConfirmation
+                ? "等待服务器确认"
                 : `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
             })
           },
@@ -427,7 +429,7 @@ export function useUploadRun({
           }
 
           const uploaded = await retryPart(async (attempt) => {
-            progressTracker.begin(partNumber)
+            progressTracker.begin(partNumber, chunk.size)
             const uploadPlan = await getPartPlan(partNumber, attempt > 0, partChecksum)
             throwIfAborted()
             if (usesCloudraveTransport(plan)) {
@@ -470,7 +472,7 @@ export function useUploadRun({
               // The direct request has ended. Its in-flight bytes must not be
               // counted again as progress for the new relay request.
               progressTracker.discard(partNumber)
-              progressTracker.begin(partNumber)
+              progressTracker.begin(partNumber, chunk.size)
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(

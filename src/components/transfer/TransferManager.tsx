@@ -94,7 +94,7 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
       statusLabel: item.progressStage === "hashing" ? item.speedText || "正在校验文件" : item.speedText || "正在准备",
     }
   }
-  if (item.status === "uploading") return { status: "active", statusLabel: item.speedText?.startsWith("待云盘确认") ? item.speedText : "正在上传" }
+  if (item.status === "uploading") return { status: "active", statusLabel: item.speedText?.startsWith("待云盘确认") || item.speedText === "等待服务器确认" ? item.speedText : "正在上传" }
   return { status: "pending", statusLabel: "等待上传" }
 }
 

@@ -2,6 +2,7 @@ export type PartProgressSnapshot = {
   uploadedBytes: number
   progress: number
   bytesPerSecond: number
+  awaitingConfirmation: boolean
 }
 
 // Progress events can fire dozens of times per second. Four visual updates per
@@ -17,6 +18,8 @@ export function trackParts(
     initialParts.map((part) => [part.partNumber, Math.max(0, part.size)])
   )
   const inFlightByPart = new Map<number, number>()
+  const sizeByPart = new Map<number, number>()
+  const awaitingByPart = new Set<number>()
   const samples: Array<{ at: number; bytes: number }> = []
   let timer: number | null = null
 
@@ -31,11 +34,15 @@ export function trackParts(
       : Math.min(committedBytes + inFlightBytes, visibleLimit)
     const now = Date.now()
     while (samples.length && samples[0].at <= now - 3000) samples.shift()
-    const bytesPerSecond = samples.reduce((sum, sample) => sum + sample.bytes, 0) / 3
+    const awaitingConfirmation = inFlightByPart.size > 0 && awaitingByPart.size === inFlightByPart.size
+    const bytesPerSecond = inFlightByPart.size && !awaitingConfirmation
+      ? samples.reduce((sum, sample) => sum + sample.bytes, 0) / 3
+      : 0
     onUpdate({
       uploadedBytes,
       progress: totalBytes > 0 ? Math.min((uploadedBytes / totalBytes) * 100, 100) : 100,
       bytesPerSecond,
+      awaitingConfirmation,
     })
     if (samples.length) schedule()
   }
@@ -46,8 +53,12 @@ export function trackParts(
     }
   }
 
-  const begin = (partNumber: number) => {
-    if (!committedByPart.has(partNumber)) inFlightByPart.set(partNumber, 0)
+  const begin = (partNumber: number, size: number) => {
+    if (!committedByPart.has(partNumber)) {
+      inFlightByPart.set(partNumber, 0)
+      sizeByPart.set(partNumber, Math.max(0, size))
+      awaitingByPart.delete(partNumber)
+    }
   }
 
   const update = (partNumber: number, loaded: number) => {
@@ -56,12 +67,17 @@ export function trackParts(
       const next = Math.max(0, loaded)
       if (next > previous) samples.push({ at: Date.now(), bytes: next - previous })
       inFlightByPart.set(partNumber, next)
+      const size = sizeByPart.get(partNumber)
+      if (size !== undefined && size > 0 && next >= size) awaitingByPart.add(partNumber)
+      else awaitingByPart.delete(partNumber)
     }
     schedule()
   }
 
   const commit = (partNumber: number, size: number) => {
     inFlightByPart.delete(partNumber)
+    sizeByPart.delete(partNumber)
+    awaitingByPart.delete(partNumber)
     committedByPart.set(partNumber, Math.max(0, size))
     if (timer !== null) window.clearTimeout(timer)
     emit()
@@ -69,6 +85,8 @@ export function trackParts(
 
   const discard = (partNumber: number) => {
     inFlightByPart.delete(partNumber)
+    sizeByPart.delete(partNumber)
+    awaitingByPart.delete(partNumber)
     if (timer !== null) window.clearTimeout(timer)
     emit()
   }
