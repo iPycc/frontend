@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 const reasons: Record<string, string> = {
   source_missing: "找不到源对象记录", source_changed: "源对象不存在或已变化", source_identity_unavailable: "无法确认源对象身份", target_exists: "目标路径已存在对象",
   external_readonly: "外部导入的对象保持只读", invalid_tree: "文件夹关系无效", invalid_path: "路径不符合存储规则",
+  source_unsupported: "源对象类型或属性暂不支持安全复制",
   duplicate_target: "多个文件映射到同一目标", changed_during_scan: "扫描期间文件或目录发生变化",
 }
 
