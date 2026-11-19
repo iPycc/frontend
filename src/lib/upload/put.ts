@@ -31,8 +31,12 @@ export function putPart(
   onProgress?: (loaded: number) => void
 ) {
   return new Promise<string | null>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("aborted", "AbortError"))
+      return
+    }
     if (plan.response_mode === "skip") {
-      onProgress?.(chunk.size)
+      // The provider already has this part: no bytes crossed the network.
       resolve(plan.record_etag ?? `part-${plan.part_number}`)
       return
     }

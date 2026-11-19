@@ -466,6 +466,10 @@ export function useUploadRun({
             } catch (error) {
               const relayable = error instanceof Error && (error as Error & { relayable?: boolean }).relayable === true
               if (!relayable || !uploadPlan.relay_url) throw error
+              // The direct request has ended. Its in-flight bytes must not be
+              // counted again as progress for the new relay request.
+              progressTracker.discard(partNumber)
+              progressTracker.begin(partNumber)
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
