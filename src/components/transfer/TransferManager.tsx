@@ -1,4 +1,5 @@
 import * as React from "react"
+import { toast } from "sonner"
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -809,6 +810,19 @@ function TransferDetails({
   const progressText = `${formatBytes(item.loaded)}${item.total !== null ? ` / ${formatBytes(item.total)}` : ""}${
     item.progress !== null ? ` · ${Math.round(item.progress)}%` : ""
   }`
+  const requestId = item.status === "failed" ? item.upload?.errorRequestId : undefined
+  const copyRequestId = async () => {
+    if (!requestId || !navigator.clipboard?.writeText) {
+      toast.error("复制不可用，请手动选择错误编号")
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(requestId)
+      toast.success("已复制错误编号")
+    } catch {
+      toast.error("复制失败，请手动选择错误编号")
+    }
+  }
 
   const rows: Array<[string, React.ReactNode]> =
     item.direction === "upload"
@@ -826,6 +840,12 @@ function TransferDetails({
             item.upload?.sessionId ? `会话 ${item.upload.sessionId.slice(0, 8)}… 已保存` : "等待创建会话",
           ],
           ["上传签名", formatExpiry(item.expiresAt)],
+          ...(requestId ? [["错误编号", <button
+            type="button"
+            className="max-w-full truncate text-left text-primary hover:underline"
+            onClick={() => void copyRequestId()}
+            title={requestId}
+          >{requestId} · 复制</button>] as [string, React.ReactNode]] : []),
         ]
       : [
           ["文件名", item.name],

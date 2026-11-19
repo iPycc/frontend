@@ -442,6 +442,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: "已暂停，可继续上传",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     uploadControllersRef.current.get(id)?.abort("pause")
   }, [getUploadQueueItem, updateUploadQueueItem])
@@ -460,6 +461,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: item.sessionId ? "准备查询已上传分片..." : "准备中...",
       errorMessage: undefined,
+      errorRequestId: undefined,
       requiresFileSelection: false,
     })
     if (uploadActiveIdsRef.current.has(id)) {
@@ -495,6 +497,7 @@ export function UploadProvider({
       status: "preparing",
       speedText: "正在校验所选文件...",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     void fingerprintFile(file).then((fingerprint) => {
       const latest = getUploadQueueItem(id)
@@ -580,6 +583,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: "已取消",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     abortSavedUpload(item)
   }, [abortSavedUpload, getUploadQueueItem, mutateUploadQueue, updateUploadQueueItem])

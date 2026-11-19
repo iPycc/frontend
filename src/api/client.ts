@@ -4,13 +4,15 @@ export class ApiError extends Error {
   status: number
   payload: unknown
   retryAfterMs?: number
+  requestId?: string
 
-  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number) {
+  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number, requestId?: string) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.payload = payload
     this.retryAfterMs = retryAfterMs
+    this.requestId = requestId
   }
 }
 
@@ -161,11 +163,20 @@ async function requestResponseInternal(
       response.status,
       pickErrorMessage(payload, response.status),
       payload,
-      parseRetryAfter(response.headers.get("Retry-After"))
+      parseRetryAfter(response.headers.get("Retry-After")),
+      safeRequestId(response.headers.get("X-Request-ID"), payload)
     )
   }
 
   return response
+}
+
+function safeRequestId(header: string | null, payload: unknown) {
+  const fromBody = payload && typeof payload === "object" ? (payload as Record<string, unknown>).request_id : undefined
+  for (const value of [header, fromBody]) {
+    if (typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value)) return value
+  }
+  return undefined
 }
 
 function uploadResponse(

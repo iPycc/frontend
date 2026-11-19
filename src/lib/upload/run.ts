@@ -113,6 +113,7 @@ export function useUploadRun({
               ? "正在验证文件并查询已上传分片..."
               : "正在准备...",
           errorMessage: undefined,
+          errorRequestId: undefined,
           requiresFileSelection: false,
           ...(providerHashAlgorithm ? { progress: 0, uploadedBytes: 0 } : {}),
         })
@@ -594,6 +595,7 @@ export function useUploadRun({
         updateUploadQueueItem(id, {
           status: paused ? "paused" : canceled ? "canceled" : "failed",
           errorMessage: paused || canceled ? undefined : error instanceof Error ? error.message : "上传失败",
+          errorRequestId: !paused && !canceled && error instanceof ApiError ? error.requestId : undefined,
           speedBytesPerSecond: 0,
           progressStage: undefined,
           speedText: paused ? "已暂停，可继续上传" : canceled ? "已取消" : "上传中断，可从已完成分片继续",

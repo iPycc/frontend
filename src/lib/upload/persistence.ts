@@ -35,6 +35,7 @@ export function restoreUploadTasks(userId: string): UploadQueueItem[] {
         progressStage: undefined,
         speedText: interrupted ? "任务已恢复，请重新选择原文件继续" : item.speedText,
         errorMessage: interrupted ? undefined : item.errorMessage,
+        errorRequestId: interrupted ? undefined : item.errorRequestId,
         requiresFileSelection: interrupted || item.status === "failed",
       }
     })

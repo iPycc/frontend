@@ -225,6 +225,7 @@ export interface UploadQueueItem {
   requiresFileSelection?: boolean
   expiresAt?: string
   errorMessage?: string
+  errorRequestId?: string
   createdAt: string
 }
 
