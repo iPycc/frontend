@@ -136,6 +136,39 @@ export function listMountSyncTasks() {
   return requestJson<MountSyncTask[]>("/explorer/sync-tasks")
 }
 
+export type PathPlanTask = {
+  id: string
+  mount_id: number
+  name: string | null
+  template: string
+  status: MountSyncTask["status"]
+  scanned: number
+  ready: number
+  unchanged: number
+  conflicts: number
+  bytes_to_copy: number
+  error: string | null
+}
+
+export type PathPlanConflict = { id: number; node_id: number; source: string | null; target: string | null; reason: string }
+
+export function startPathPlan(mountId: number, template: string) {
+  return requestJson<PathPlanTask>(`/mounts/${mountId}/path-plan`, { method: "POST", body: { template } })
+}
+
+export function controlPathPlan(task: PathPlanTask, action: "pause" | "resume" | "cancel") {
+  return requestJson<PathPlanTask>(`/mounts/${task.mount_id}/path-plan/${encodeURIComponent(task.id)}/${action}`, { method: "POST" })
+}
+
+export function listPathPlans() {
+  return requestJson<PathPlanTask[]>("/explorer/path-plans")
+}
+
+export function listPathPlanConflicts(taskId: string, afterId = 0, signal?: AbortSignal) {
+  return requestJson<{ items: PathPlanConflict[]; next_after_id: number | null }>(
+    `/explorer/path-plans/${encodeURIComponent(taskId)}/conflicts?after_id=${afterId}&limit=100`, { signal })
+}
+
 export type MountSyncConflict = {
   id: number
   key: string
