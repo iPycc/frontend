@@ -1,7 +1,10 @@
 import * as React from "react"
 
 import { listBackgroundTasks, type BackgroundTask } from "@/api/files"
-import { controlPathMigration, controlPathPlan, controlUserMountSyncTask, listMountSyncTasks, listPathPlans, startPathPlan, type MountSyncTask, type PathPlanTask } from "@/api/user-storage"
+import {
+  controlPathMigration, controlPathPlan, controlUserMountSyncTask, listMountSyncTasks, listPathPlans,
+  previewPathTemplate, startPathPlan, type MountSyncTask, type PathPlanTask, type PathTemplatePreview,
+} from "@/api/user-storage"
 import { PageShell } from "@/components/shared/PageShell"
 import { Button } from "@/components/ui/button"
 import { SyncConflictDialog } from "@/components/storage/SyncConflictDialog"
@@ -20,9 +23,32 @@ export function Tasks() {
   const [pathTasks, setPathTasks] = React.useState<PathPlanTask[]>([])
   const [pathConflict, setPathConflict] = React.useState<PathPlanTask | null>(null)
   const [mountId, setMountId] = React.useState("")
-  const [template, setTemplate] = React.useState("{dir}/{filename}")
+  const [pathMode, setPathMode] = React.useState<"original" | "custom">("original")
+  const [customTemplate, setCustomTemplate] = React.useState("blob/{dir}/{blob_id}-{filename}")
+  const [pathExample, setPathExample] = React.useState<PathTemplatePreview | null>(null)
+  const [pathError, setPathError] = React.useState("")
+  const template = pathMode === "original" ? "{dir}/{filename}" : customTemplate
   const { buckets, formatBytes } = useAppState()
   const pathMounts = buckets.filter((bucket) => bucket.canEditConnection && ["tencent_cos", "aliyun_oss"].includes(bucket.driverId))
+
+  React.useEffect(() => {
+    setPathExample(null)
+    setPathError("")
+    if (!mountId || !template) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await previewPathTemplate(Number(mountId), template, controller.signal)
+        if (!controller.signal.aborted) setPathExample(result)
+      } catch (error) {
+        if (!controller.signal.aborted) setPathError(error instanceof Error ? error.message : "无法预览路径")
+      }
+    }, 250)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [mountId, template])
 
   React.useEffect(() => {
     let cancelled = false
@@ -109,10 +135,28 @@ export function Tasks() {
               <select aria-label="选择存储" value={mountId} onChange={(event) => setMountId(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
                 <option value="">选择存储</option>{pathMounts.map((bucket) => <option key={bucket.id} value={bucket.backendId}>{bucket.name}</option>)}
               </select>
-              <input aria-label="对象路径模板" value={template} onChange={(event) => setTemplate(event.target.value)} className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 font-mono text-sm" />
+              <select aria-label="命名规则" value={pathMode} onChange={(event) => setPathMode(event.target.value === "custom" ? "custom" : "original")}
+                className="h-9 rounded-md border bg-background px-3 text-sm">
+                <option value="original">目录和原文件名</option>
+                <option value="custom">自定义模板</option>
+              </select>
               <Button size="sm" disabled={!mountId || !template || pendingTask !== null} onClick={() => void startPath()}>开始检查</Button>
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">变量：{"{dir}"}、{"{filename}"}、{"{stem}"}、{"{ext}"}、{"{blob_id}"}。例如 blob/{"{dir}"}/{"{blob_id}"}-{"{filename}"}</div>
+            {pathMode === "custom" ? (
+              <div className="mt-2 space-y-1">
+                <input aria-label="对象路径模板" maxLength={1024} value={customTemplate} onChange={(event) => setCustomTemplate(event.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-3 font-mono text-sm" />
+                <p className="text-xs text-muted-foreground">可用变量 {"{dir}"}、{"{filename}"}、{"{stem}"}、{"{ext}"}、{"{blob_id}"}</p>
+              </div>
+            ) : null}
+            {pathError ? <p role="alert" className="mt-2 text-sm text-destructive">{pathError}</p> : null}
+            {pathExample ? (
+              <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                <dt className="text-muted-foreground">根目录文件</dt><dd className="break-all font-mono">{pathExample.root_key}</dd>
+                <dt className="text-muted-foreground">子目录文件</dt><dd className="break-all font-mono">{pathExample.nested_key}</dd>
+                <dt className="text-muted-foreground">目录标记</dt><dd className="break-all font-mono">{pathExample.directory_key}</dd>
+              </dl>
+            ) : null}
           </div> : null}
           {pathTasks.map((task) => {
             const migration = task.migration

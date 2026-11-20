@@ -167,6 +167,18 @@ export type PathPlanTask = {
 
 export type PathPlanConflict = { id: number; node_id: number; source: string | null; target: string | null; reason: string }
 
+export type PathTemplatePreview = {
+  root_key: string
+  nested_key: string
+  directory_key: string
+}
+
+export function previewPathTemplate(mountId: number, template: string, signal: AbortSignal) {
+  return requestJson<PathTemplatePreview>(`/mounts/${mountId}/path-plan/preview`, {
+    method: "POST", body: { template }, signal,
+  })
+}
+
 export function startPathPlan(mountId: number, template: string) {
   return requestJson<PathPlanTask>(`/mounts/${mountId}/path-plan`, { method: "POST", body: { template } })
 }
