@@ -1,7 +1,7 @@
 import * as React from "react"
 
 import { listBackgroundTasks, type BackgroundTask } from "@/api/files"
-import { controlPathPlan, controlUserMountSyncTask, listMountSyncTasks, listPathPlans, startPathPlan, type MountSyncTask, type PathPlanTask } from "@/api/user-storage"
+import { controlPathMigration, controlPathPlan, controlUserMountSyncTask, listMountSyncTasks, listPathPlans, startPathPlan, type MountSyncTask, type PathPlanTask } from "@/api/user-storage"
 import { PageShell } from "@/components/shared/PageShell"
 import { Button } from "@/components/ui/button"
 import { SyncConflictDialog } from "@/components/storage/SyncConflictDialog"
@@ -36,7 +36,7 @@ export function Tasks() {
         setPathTasks(paths)
         if (tasks.some((task) => task.status === "pending" || task.status === "running") ||
             syncs.some((task) => task.status === "pending" || task.status === "running") ||
-            paths.some((task) => task.status === "pending" || task.status === "running")) {
+            paths.some((task) => [task.status, task.migration?.status].some((status) => status === "pending" || status === "running"))) {
           timer = window.setTimeout(() => void load(), 1500)
         }
       } catch {
@@ -84,6 +84,16 @@ export function Tasks() {
     } finally { setPendingTask(null) }
   }
 
+  const migratePath = async (task: PathPlanTask, action: "start" | "pause" | "resume" | "cancel") => {
+    setPendingTask(task.id)
+    try {
+      await controlPathMigration(task, action)
+      setRefresh((value) => value + 1)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "操作失败")
+    } finally { setPendingTask(null) }
+  }
+
   return (
     <PageShell
       title="后台任务"
@@ -95,7 +105,6 @@ export function Tasks() {
         <div className="space-y-4 pb-1">
           {pathMounts.length > 0 ? <div className="rounded-xl border border-border/60 bg-background p-4">
             <div className="font-medium">存储路径预检查</div>
-            <div className="mt-1 text-sm text-muted-foreground">仅检查，不会移动文件；迁移功能尚未开放。检查范围为提交时已有的活动文件，结果可能随存储内容变化。</div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <select aria-label="选择存储" value={mountId} onChange={(event) => setMountId(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
                 <option value="">选择存储</option>{pathMounts.map((bucket) => <option key={bucket.id} value={bucket.backendId}>{bucket.name}</option>)}
@@ -105,19 +114,44 @@ export function Tasks() {
             </div>
             <div className="mt-2 text-xs text-muted-foreground">变量：{"{dir}"}、{"{filename}"}、{"{stem}"}、{"{ext}"}、{"{blob_id}"}。例如 blob/{"{dir}"}/{"{blob_id}"}-{"{filename}"}</div>
           </div> : null}
-          {pathTasks.map((task) => <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
-            <div className="flex items-start justify-between gap-3"><div>
-              <div className="font-medium">{task.name} · 路径预检查</div>
-              <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
-              <div className="mt-1 text-sm text-muted-foreground">已检查 {task.scanned} 项，迁移候选 {task.ready} 项，无需迁移 {task.unchanged} 项，冲突 {task.conflicts} 项 · 候选对象大小 {formatBytes(task.bytes_to_copy)}</div>
-              {task.error ? <div className="mt-1 text-sm text-destructive">{task.error}</div> : null}
-            </div><div className="text-sm text-muted-foreground">{{ pending: "等待中", running: "处理中", paused: "已暂停", completed: "已完成", failed: "失败", canceled: "已取消" }[task.status]}</div></div>
-            {task.conflicts > 0 || ["pending", "running", "paused", "failed"].includes(task.status) ? <div className="mt-3 flex gap-2">
-              {task.conflicts > 0 ? <Button size="sm" variant="outline" onClick={() => setPathConflict(task)}>查看冲突</Button> : null}
-              {task.status === "pending" || task.status === "running" ? <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void controlPath(task, "pause")}>暂停</Button> : task.status === "paused" || task.status === "failed" ? <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void controlPath(task, "resume")}>继续</Button> : null}
-              {["pending", "running", "paused", "failed"].includes(task.status) ? <Button size="sm" variant="ghost" disabled={pendingTask !== null} onClick={() => void controlPath(task, "cancel")}>取消</Button> : null}
-            </div> : null}
-          </div>)}
+          {pathTasks.map((task) => {
+            const migration = task.migration
+            const taskStatus = migration?.status ?? task.status
+            const conflicts = migration?.conflicts ?? task.conflicts
+            const canStart = !migration && task.status === "completed" && task.ready > 0
+            const control = (action: "pause" | "resume" | "cancel") =>
+              migration ? migratePath(task, action) : controlPath(task, action)
+            const canPause = taskStatus === "pending" || taskStatus === "running"
+            const canResume = taskStatus === "paused" || taskStatus === "failed"
+            const canCancel = canResume || taskStatus === "pending" || (!migration && taskStatus === "running")
+            return (
+              <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{task.name} · {migration ? "历史路径迁移" : "路径预检查"}</div>
+                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{migration
+                      ? <>已迁移 {migration.migrated} / {task.ready} 项，冲突 {conflicts} 项 · 源对象保留</>
+                      : <>已检查 {task.scanned} 项，待迁移 {task.ready} 项，冲突 {conflicts} 项 · 额外空间 {formatBytes(task.bytes_to_copy)}</>}
+                    </div>
+                    {migration?.error || task.error ? <div className="mt-1 text-sm text-destructive">{migration?.error ?? task.error}</div> : null}
+                  </div>
+                  <div className="shrink-0 text-sm text-muted-foreground">
+                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: "已完成", failed: "失败", canceled: "已取消" }[taskStatus]}
+                  </div>
+                </div>
+                {canStart || conflicts > 0 || canPause || canResume || canCancel ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {canStart ? <Button size="sm" disabled={pendingTask !== null} onClick={() => void migratePath(task, "start")}>复制并迁移</Button> : null}
+                    {conflicts > 0 ? <Button size="sm" variant="outline" onClick={() => setPathConflict(task)}>查看冲突</Button> : null}
+                    {canPause ? <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void control("pause")}>暂停</Button> : null}
+                    {canResume ? <Button size="sm" variant="outline" disabled={pendingTask !== null} onClick={() => void control("resume")}>继续</Button> : null}
+                    {canCancel ? <Button size="sm" variant="ghost" disabled={pendingTask !== null} onClick={() => void control("cancel")}>取消</Button> : null}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
           {syncTasks.map((task) => (
             <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
               <div className="flex items-start justify-between gap-3">

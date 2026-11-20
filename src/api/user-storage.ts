@@ -137,6 +137,13 @@ export function listMountSyncTasks() {
 }
 
 export type PathPlanTask = {
+  migration?: {
+    id: string
+    status: "pending" | "running" | "paused" | "completed" | "failed" | "canceled"
+    migrated: number
+    conflicts: number
+    error: string | null
+  } | null
   id: string
   mount_id: number
   name: string | null
@@ -158,6 +165,12 @@ export function startPathPlan(mountId: number, template: string) {
 
 export function controlPathPlan(task: PathPlanTask, action: "pause" | "resume" | "cancel") {
   return requestJson<PathPlanTask>(`/mounts/${task.mount_id}/path-plan/${encodeURIComponent(task.id)}/${action}`, { method: "POST" })
+}
+
+export function controlPathMigration(task: PathPlanTask, action: "start" | "pause" | "resume" | "cancel") {
+  return requestJson<PathPlanTask["migration"]>(
+    `/mounts/${task.mount_id}/path-plan/${encodeURIComponent(task.id)}/migrate/${action}`, { method: "POST" }
+  )
 }
 
 export function listPathPlans() {
