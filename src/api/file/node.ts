@@ -142,7 +142,7 @@ export async function renameNode(token: string, nodeId: number, body: RenameNode
 }
 
 export async function moveNodes(token: string, body: TransferNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/node/move", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/node/move", {
     method: "POST",
     token,
     body,

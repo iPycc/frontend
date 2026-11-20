@@ -244,6 +244,10 @@ export function useActions({
       node_ids: backendIds,
       target_parent_id: target,
     })
+    if (!Array.isArray(moved)) {
+      toast.info(`已将 ${moved.task_ids.length} 个文件加入后台移动任务`)
+      return
+    }
     const uiParentId = targetParentId && !targetParentId.startsWith("root:") ? targetParentId : bucket.rootNodeId
     const mapped = moved.map((node) => mapNodeToFileNode(node, bucket.id, uiParentId, snapshotRef.current.settings.timezone))
     const mappedById = new Map(mapped.map((node) => [node.id, node]))

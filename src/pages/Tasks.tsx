@@ -118,7 +118,10 @@ export function Tasks() {
             const migration = task.migration
             const taskStatus = migration?.status ?? task.status
             const conflicts = migration?.conflicts ?? task.conflicts
-            const canStart = !task.rename_to && !migration && task.status === "completed" && task.ready > 0
+            const isFileChange = Boolean(task.rename_to) || task.move_to != null
+            const canStart = !isFileChange && !migration && task.status === "completed" && task.ready > 0
+            const title = task.rename_to ? `改名为 ${task.rename_to}` : task.move_to != null
+              ? `移动 ${task.source_name ?? "文件"}` : migration ? "历史路径迁移" : "路径预检查"
             const control = (action: "pause" | "resume" | "cancel") =>
               migration ? migratePath(task, action) : controlPath(task, action)
             const canPause = taskStatus === "pending" || taskStatus === "running"
@@ -129,9 +132,9 @@ export function Tasks() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="break-all font-medium">
-                      {task.name} · {task.rename_to ? `改名为 ${task.rename_to}` : migration ? "历史路径迁移" : "路径预检查"}
+                      {task.name} · {title}
                     </div>
-                    {task.rename_to ? null : (
+                    {isFileChange ? null : (
                       <>
                         <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{migration
@@ -143,7 +146,7 @@ export function Tasks() {
                     {migration?.error || task.error ? <div className="mt-1 text-sm text-destructive">{migration?.error ?? task.error}</div> : null}
                   </div>
                   <div className="shrink-0 text-sm text-muted-foreground">
-                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: task.rename_to && conflicts > 0 ? "有冲突" : "已完成",
+                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: isFileChange && conflicts > 0 ? "有冲突" : "已完成",
                       failed: "失败", canceled: "已取消" }[taskStatus]}
                   </div>
                 </div>

@@ -43,7 +43,7 @@ export function PathPlanConflictDialog({ task, onClose }: { task: PathPlanTask; 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="flex max-h-[min(80dvh,42rem)] flex-col">
-        <DialogHeader><DialogTitle>{task.rename_to ? "改名冲突" : task.migration ? "路径迁移冲突" : "路径检查冲突"}</DialogTitle><DialogDescription>{task.name}</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{task.rename_to ? "改名冲突" : task.move_to != null ? "移动冲突" : task.migration ? "路径迁移冲突" : "路径检查冲突"}</DialogTitle><DialogDescription>{task.name}</DialogDescription></DialogHeader>
         <div className="custom-scrollbar min-h-0 overflow-y-auto">
           {items.map((item) => <div key={item.id} className="border-b py-3 text-sm last:border-b-0">
             <div className="whitespace-pre-wrap break-all">{displayKey(item.source)} → {displayKey(item.target)}</div>
