@@ -13,6 +13,7 @@ import { fingerprintFile } from "@/lib/upload/hash"
 import { persistUploadTasks, restoreUploadTasks } from "@/lib/upload/persistence"
 import { FILE_LIMIT, NETWORK_LIMIT, takeUploads } from "@/lib/upload/pool"
 import { useUploadRun } from "@/lib/upload/run"
+import { notifyStorageReauthorization } from "@/lib/storage-reauthorization"
 import { toast } from "sonner"
 
 export type UploadSelection = {
@@ -207,43 +208,37 @@ export function UploadProvider({
     drainUploadQueue()
   }, [drainUploadQueue])
 
-  const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
-    const session = getSessionRef.current()
+  const resolveUploadBucket = React.useCallback((mountId?: string) => {
     const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    if (!session || !targetMountId) {
+    const bucket = getBucketsRef.current().find((item) => item.id === targetMountId)
+    if (!getSessionRef.current() || !bucket) {
       toast.error("当前没有可用的上传目标")
       return
     }
-    if (getBucketsRef.current().find((bucket) => bucket.id === targetMountId)?.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件")
+    if (bucket.readOnly) {
+      toast.info("当前挂载为只读，无法上传")
       return
     }
-
-    pendingUploadTargetRef.current = {
-      mountId: targetMountId,
-      parentId,
+    if (bucket.extra?.requires_reauthorization === true) {
+      notifyStorageReauthorization(bucket)
+      return
     }
-    fileInputRef.current?.click()
+    return bucket
   }, [])
+
+  const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    pendingUploadTargetRef.current = { mountId: bucket.id, parentId }
+    fileInputRef.current?.click()
+  }, [resolveUploadBucket])
 
   const requestFolderUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
-    const session = getSessionRef.current()
-    const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    if (!session || !targetMountId) {
-      toast.error("当前没有可用的上传目标")
-      return
-    }
-    if (getBucketsRef.current().find((bucket) => bucket.id === targetMountId)?.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件夹")
-      return
-    }
-
-    pendingUploadTargetRef.current = {
-      mountId: targetMountId,
-      parentId,
-    }
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    pendingUploadTargetRef.current = { mountId: bucket.id, parentId }
     folderInputRef.current?.click()
-  }, [])
+  }, [resolveUploadBucket])
 
   const askUploadConflict = React.useCallback((conflict: UploadConflictInfo) => {
     return new Promise<UploadConflictChoice>((resolve) => {
@@ -264,17 +259,9 @@ export function UploadProvider({
     parentId: string | null = null,
     mountId?: string
   ) => {
-    const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    const bucket = getBucketsRef.current().find((item) => item.id === targetMountId)
-    if (!getSessionRef.current() || !targetMountId || !bucket) {
-      toast.error("当前没有可用的上传目标")
-      return
-    }
-    if (bucket.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件")
-      return
-    }
-    const target = { mountId: targetMountId, parentId }
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    const target = { mountId: bucket.id, parentId }
     const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
     const siblings = getNodesRef.current().filter(
       (node) => node.bucketId === bucket.id && node.parentId === uiParentId && !node.deletedAt
@@ -411,7 +398,7 @@ export function UploadProvider({
     mutateUploadQueue((current) => [...nextItems, ...current])
     setUploadQueueOpen(true)
     enqueueUploads(nextItems.map((item) => item.id))
-  }, [askUploadConflict, enqueueUploads, mutateUploadQueue])
+  }, [askUploadConflict, enqueueUploads, mutateUploadQueue, resolveUploadBucket])
 
   const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
     const target = pendingUploadTargetRef.current
