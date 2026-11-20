@@ -721,6 +721,7 @@ export function AppFiles() {
           >
             <FileArea
               items={fileAreaItems}
+              canUpload={!category && Boolean(activeBucket.id) && !activeBucket.readOnly}
               loading={routeLoading || unresolvedFolder || pageState.loading}
               loaded={pageState.loaded}
               metadataLoaded={pageState.metadataLoaded}
