@@ -9,7 +9,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 
-import { getPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
+import { buildPreviewImageUrl, getPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
 import { PropertiesPanelContent } from "@/components/shared/PropertiesPanel"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import {
@@ -121,19 +121,19 @@ export function FilePreviewModal({
     }
   }, [backendId, file, loadManifest, open, refreshKey])
 
+  const manifestNodeId = manifest?.node_id
   React.useEffect(() => {
-    if (!open) return
+    if (!open || !backendId || manifestNodeId !== backendId) return
+    const requested = new Set([backendId])
     for (const candidate of preloadFiles) {
-      if (!candidate.backendId || candidate.backendId === backendId) continue
-      void getPreviewManifest(candidate.backendId).then((next) => {
-        const imageUrl = next.assets.thumbnail_2x?.url ?? next.assets.thumbnail?.url
-        if (imageUrl) {
-          const image = new Image()
-          image.src = imageUrl
-        }
-      }).catch(() => undefined)
+      const nodeId = candidate.backendId
+      if (!nodeId || candidate.mediaType !== "image" || requested.has(nodeId)) continue
+      requested.add(nodeId)
+      const image = new Image()
+      image.fetchPriority = "low"
+      image.src = buildPreviewImageUrl(nodeId, "thumbnail_2x", candidate.updatedAt)
     }
-  }, [backendId, open, preloadFiles])
+  }, [backendId, manifestNodeId, open, preloadFiles])
 
   if (!file) return null
 
