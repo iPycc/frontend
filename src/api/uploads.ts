@@ -52,6 +52,7 @@ export type UploadSession = {
   transport: "cloudrave" | "presigned"
   required_response_headers: string[]
   part_checksum_algorithm?: "md5" | null
+  ready_to_complete?: boolean
   parts: Array<{
     id: number
     part_number: number

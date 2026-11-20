@@ -200,6 +200,15 @@ export function useUploadRun({
             ) {
               throw new Error("原上传会话与所选文件不匹配")
             }
+            if (existing.ready_to_complete) {
+              uploadCommitIdsRef.current.add(id)
+              updateUploadQueueItem(id, { status: "processing", speedText: "正在确认已上传文件" })
+              try {
+                existing = await completeSession(existing.id, [])
+              } finally {
+                uploadCommitIdsRef.current.delete(id)
+              }
+            }
             if (bucket.driverId === "drive_wo" && existing.state === "failed") {
               const pending = existing.parts.filter((part) => isPendingPart(part.etag)).length
               if (pending) {
