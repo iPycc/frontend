@@ -59,6 +59,11 @@ export function FileList({
         {items.map((item) => {
           const selected = selectedIds.includes(item.id)
           const editing = inlineEdit?.itemId === item.id
+          const openItem = (event: MouseEvent) => {
+            if (event.type === "click" && event.detail > 0) return
+            event.stopPropagation()
+            onOpenNode(item)
+          }
 
           if (editing && inlineEdit) {
             return (
@@ -126,10 +131,8 @@ export function FileList({
                     <TableCell className="min-w-0 py-2.5">
                       <button
                         type="button"
-                        onDoubleClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onOpenNode(item)
-                        }}
+                        onClick={openItem}
+                        onDoubleClick={openItem}
                         className="block w-full truncate text-left text-sm text-foreground"
                       >
                         {item.name}
@@ -138,10 +141,8 @@ export function FileList({
                     <TableCell className="w-36 py-2.5">
                       <button
                         type="button"
-                        onDoubleClick={(event: MouseEvent) => {
-                          event.stopPropagation()
-                          onOpenNode(item)
-                        }}
+                        onClick={openItem}
+                        onDoubleClick={openItem}
                         className="block w-full truncate text-left text-sm text-muted-foreground"
                       >
                         {getItemMeta(item)}
