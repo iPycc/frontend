@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
@@ -58,6 +59,7 @@ import {
 } from "./store/build"
 
 export function StorageSettingsPage() {
+  const navigate = useNavigate()
   const { authSession, buckets, currentUser, profile, reloadWorkspace } = useAppState()
   const [view, setView] = React.useState<View>({ type: "list" })
   const [drivers, setDrivers] = React.useState<StorageDriver[] | null>(null)
@@ -199,6 +201,23 @@ export function StorageSettingsPage() {
     setView({ type: "cors-step", strategy: "tencent" })
   }
 
+  const announceImportQueued = React.useCallback(() => {
+    toast.success("已提交导入任务", {
+      action: { label: "查看任务", onClick: () => void navigate("/app/tasks") },
+    })
+  }, [navigate])
+
+  const queueImportAfterMount = async (accessToken: string, mountId: number) => {
+    try {
+      await startUserMountSyncTask(accessToken, mountId)
+    } catch (error) {
+      toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
+      return false
+    }
+    announceImportQueued()
+    return true
+  }
+
   const handleTencentSubmit = (autoConfigure: boolean) =>
     void withSubmit(async () => {
       const accessToken = requireToken()
@@ -218,16 +237,10 @@ export function StorageSettingsPage() {
         }
       }
 
-      if (tencentDraft.mountMode === "mirror") {
-        try {
-          await startUserMountSyncTask(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
-        }
-      }
+      const importQueued = tencentDraft.mountMode === "mirror" && await queueImportAfterMount(accessToken, created.mount.id)
 
       await reloadWorkspace()
-      toast.success("腾讯云 COS 存储策略已创建。")
+      if (!importQueued) toast.success("腾讯云 COS 存储策略已创建。")
       setView({ type: "list" })
     })
 
@@ -257,16 +270,10 @@ export function StorageSettingsPage() {
         }
       }
 
-      if (aliyunDraft.mountMode === "mirror") {
-        try {
-          await startUserMountSyncTask(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
-        }
-      }
+      const importQueued = aliyunDraft.mountMode === "mirror" && await queueImportAfterMount(accessToken, created.mount.id)
 
       await reloadWorkspace()
-      toast.success("阿里云 OSS 存储空间已创建。")
+      if (!importQueued) toast.success("阿里云 OSS 存储空间已创建。")
       setView({ type: "list" })
     })
 
@@ -305,15 +312,9 @@ export function StorageSettingsPage() {
         (policyId) => buildRemoteDriveMountInput(remoteDraft, inspection, fallbackSlug, policyId)
       )
 
-      let submitted = false
-      try {
-        await startUserMountSyncTask(accessToken, created.mount.id)
-        submitted = true
-      } catch (error) {
-        toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
-      }
+      const importQueued = await queueImportAfterMount(accessToken, created.mount.id)
       await reloadWorkspace()
-      toast.success(submitted ? "云盘已挂载，可在后台任务中查看导入进度。" : "云盘已挂载。")
+      if (!importQueued) toast.success("云盘已挂载。")
       setView({ type: "list" })
     })
 
@@ -710,14 +711,14 @@ export function StorageSettingsPage() {
     setSyncingMountId(bucket.backendId)
     try {
       await startUserMountSyncTask(accessToken, bucket.backendId)
+      announceImportQueued()
       await reloadWorkspace()
-      toast.success("已提交导入任务，可在后台任务中查看进度。")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "启动同步失败")
     } finally {
       setSyncingMountId(null)
     }
-  }, [reloadWorkspace, requireToken, syncingMountId])
+  }, [announceImportQueued, reloadWorkspace, requireToken, syncingMountId])
 
   const submitLabel = submitting ? "处理中..." : undefined
   const editSubmitLabel = submitting ? "处理中..." : "保存"
