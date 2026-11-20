@@ -141,6 +141,7 @@ export type PathPlanTask = {
     id: string
     status: "pending" | "running" | "paused" | "completed" | "failed" | "canceled"
     migrated: number
+    prepared?: number
     conflicts: number
     error: string | null
   } | null
@@ -152,6 +153,7 @@ export type PathPlanTask = {
   move_to?: number | null
   copy_to?: number | null
   copy_name?: string | null
+  root_node_id?: number | null
   source_name?: string | null
   status: MountSyncTask["status"]
   scanned: number
