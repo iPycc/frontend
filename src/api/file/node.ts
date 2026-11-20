@@ -150,7 +150,7 @@ export async function moveNodes(token: string, body: TransferNodesInput) {
 }
 
 export async function copyNodes(token: string, body: TransferNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/node/copy", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/node/copy", {
     method: "POST",
     token,
     body,

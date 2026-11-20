@@ -150,6 +150,8 @@ export type PathPlanTask = {
   template: string
   rename_to?: string | null
   move_to?: number | null
+  copy_to?: number | null
+  copy_name?: string | null
   source_name?: string | null
   status: MountSyncTask["status"]
   scanned: number

@@ -118,10 +118,12 @@ export function Tasks() {
             const migration = task.migration
             const taskStatus = migration?.status ?? task.status
             const conflicts = migration?.conflicts ?? task.conflicts
-            const isFileChange = Boolean(task.rename_to) || task.move_to != null
-            const canStart = !isFileChange && !migration && task.status === "completed" && task.ready > 0
-            const title = task.rename_to ? `改名为 ${task.rename_to}` : task.move_to != null
-              ? `移动 ${task.source_name ?? "文件"}` : migration ? "历史路径迁移" : "路径预检查"
+            const isFileOperation = Boolean(task.rename_to) || task.move_to != null || task.copy_to != null
+            const canStart = !isFileOperation && !migration && task.status === "completed" && task.ready > 0
+            const title = task.copy_name ? `复制为 ${task.copy_name}`
+              : task.rename_to ? `改名为 ${task.rename_to}`
+              : task.move_to != null ? `移动 ${task.source_name ?? "文件"}`
+              : migration ? "历史路径迁移" : "路径预检查"
             const control = (action: "pause" | "resume" | "cancel") =>
               migration ? migratePath(task, action) : controlPath(task, action)
             const canPause = taskStatus === "pending" || taskStatus === "running"
@@ -134,7 +136,7 @@ export function Tasks() {
                     <div className="break-all font-medium">
                       {task.name} · {title}
                     </div>
-                    {isFileChange ? null : (
+                    {isFileOperation ? null : (
                       <>
                         <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
                         <div className="mt-1 text-sm text-muted-foreground">{migration
@@ -146,7 +148,7 @@ export function Tasks() {
                     {migration?.error || task.error ? <div className="mt-1 text-sm text-destructive">{migration?.error ?? task.error}</div> : null}
                   </div>
                   <div className="shrink-0 text-sm text-muted-foreground">
-                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: isFileChange && conflicts > 0 ? "有冲突" : "已完成",
+                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: isFileOperation && conflicts > 0 ? "有冲突" : "已完成",
                       failed: "失败", canceled: "已取消" }[taskStatus]}
                   </div>
                 </div>

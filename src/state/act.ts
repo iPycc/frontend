@@ -273,6 +273,10 @@ export function useActions({
       node_ids: backendIds,
       target_parent_id: first.parentId && !first.parentId.startsWith("root:") ? Number(first.parentId) : null,
     })
+    if (!Array.isArray(copied)) {
+      toast.info(`已将 ${copied.task_ids.length} 个文件加入后台复制任务`)
+      return
+    }
     await refreshCachedDirectory(first.parentId, first.bucketId)
     await refreshLoadedCategories(first.bucketId)
     toast.success(`已创建 ${copied.length} 个副本`)

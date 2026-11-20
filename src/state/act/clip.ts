@@ -61,6 +61,10 @@ export function useClipActions({
           node_ids: backendIds,
           target_parent_id: target,
         })
+        if (!Array.isArray(copied)) {
+          toast.info(`已将 ${copied.task_ids.length} 个文件加入后台复制任务`)
+          return
+        }
         const uiParentId = targetParentId && !targetParentId.startsWith("root:") ? targetParentId : bucket.rootNodeId
         await Promise.all([
           refreshCachedDirectory(uiParentId, bucket.id),
