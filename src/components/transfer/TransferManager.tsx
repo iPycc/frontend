@@ -80,7 +80,9 @@ function clampProgress(value: number) {
 function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "statusLabel"> {
   if (item.status === "failed") return { status: "failed", statusLabel: item.errorMessage || "上传失败" }
   if (item.status === "canceled") return { status: "canceled", statusLabel: "已取消" }
-  if (item.status === "completed") return { status: "completed", statusLabel: "上传完成" }
+  if (item.status === "completed") {
+    return { status: "completed", statusLabel: item.speedText === "秒传完成" ? item.speedText : "上传完成" }
+  }
   if (item.status === "processing") return { status: "processing", statusLabel: item.speedText || "正在写入文件" }
   if (item.status === "paused") {
     return {
@@ -161,12 +163,17 @@ function getSummary(items: TransferItem[]) {
   const downloads = items.filter((item) => item.direction === "download").length
   const known = items.filter((item) => item.total !== null)
   const total = known.reduce((sum, item) => sum + (item.total ?? 0), 0)
-  const loaded = known.reduce((sum, item) => sum + Math.min(item.loaded, item.total ?? item.loaded), 0)
+  const loaded = known.reduce(
+    (sum, item) => sum + (item.upload?.progressStage === "hashing" ? 0 : Math.min(item.loaded, item.total ?? item.loaded)),
+    0
+  )
   const fallback = items.length
     ? items.reduce((sum, item) => sum + (item.progress ?? 0), 0) / items.length
     : 0
   const progress = clampProgress(total > 0 ? (loaded / total) * 100 : fallback)
-  const speed = items.filter(isActive).reduce((sum, item) => sum + item.speed, 0)
+  const speed = items
+    .filter((item) => isActive(item) && item.upload?.progressStage !== "hashing")
+    .reduce((sum, item) => sum + item.speed, 0)
   const remainingSeconds = active > 0 && speed > 0 && total > loaded ? (total - loaded) / speed : 0
   return { active, paused, failed, completed, uploads, downloads, progress, speed, total, loaded, remainingSeconds }
 }

@@ -34,6 +34,10 @@ type UploadTarget = {
   parentId: string | null
 }
 
+function isRapidUpload(parts: Array<{ etag?: string | null }>) {
+  return parts.length > 0 && parts.every((part) => part.etag?.startsWith("rapid:"))
+}
+
 type RunDeps = {
   getSessionRef: React.MutableRefObject<() => AuthSession | null>
   getBucketsRef: React.MutableRefObject<() => BucketMount[]>
@@ -229,7 +233,7 @@ export function useUploadRun({
                 uploadedBytes: saved.file.size,
                 speedBytesPerSecond: 0,
                 progressStage: undefined,
-                speedText: "已上传",
+                speedText: isRapidUpload(existing.parts) ? "秒传完成" : "已上传",
               })
               scheduleUploadRefresh(saved.target.parentId, bucket.id)
               return
@@ -595,6 +599,7 @@ export function useUploadRun({
         const completionParts = Array.from(completedParts.values()).sort(
           (left, right) => left.part_number - right.part_number
         )
+        const rapid = isRapidUpload(completionParts)
 
         uploadCommitIdsRef.current.add(id)
         updateUploadQueueItem(id, {
@@ -604,7 +609,7 @@ export function useUploadRun({
           speedBytesPerSecond: 0,
           speedText: pendingCount()
             ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
-            : singlePut ? "正在确认文件" : "正在合并分片",
+            : rapid ? "正在确认秒传" : singlePut ? "正在确认文件" : "正在合并分片",
         })
         await completeSession(activeSessionId, completionParts)
         updateUploadQueueItem(id, {
@@ -613,7 +618,7 @@ export function useUploadRun({
           uploadedBytes: saved.file.size,
           speedBytesPerSecond: 0,
           progressStage: undefined,
-          speedText: "已上传",
+          speedText: rapid ? "秒传完成" : "已上传",
         })
         scheduleUploadRefresh(saved.target.parentId, bucket.id)
       } catch (error) {
