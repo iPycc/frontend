@@ -118,9 +118,10 @@ export function Tasks() {
             const migration = task.migration
             const taskStatus = migration?.status ?? task.status
             const conflicts = migration?.conflicts ?? task.conflicts
-            const isPathOperation = Boolean(task.rename_to) || task.move_to != null || task.copy_to != null
+            const isPathOperation = task.is_restore || Boolean(task.rename_to) || task.move_to != null || task.copy_to != null
             const canStart = !isPathOperation && !migration && task.status === "completed" && task.ready > 0
-            const title = task.copy_name ? `复制为 ${task.copy_name}`
+            const title = task.is_restore ? `恢复 ${task.source_name ?? "条目"}`
+              : task.copy_name ? `复制为 ${task.copy_name}`
               : task.rename_to ? `改名为 ${task.rename_to}`
               : task.move_to != null ? `移动 ${task.source_name ?? "文件"}`
               : migration ? "历史路径迁移" : "路径预检查"

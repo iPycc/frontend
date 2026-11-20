@@ -178,7 +178,7 @@ export async function listRecycle(token: string) {
 }
 
 export async function restoreNodes(token: string, body: RestoreNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/recycle/restore", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/recycle/restore", {
     method: "POST",
     token,
     body,

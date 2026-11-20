@@ -94,7 +94,6 @@ export function Recycle() {
     try {
       await restoreNodes(ids)
       setSelectedIds((current) => current.filter((id) => !ids.includes(id)))
-      toast.success(ids.length === 1 ? "已恢复 1 项" : `已恢复 ${ids.length} 项`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "恢复失败")
     } finally {

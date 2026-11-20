@@ -154,6 +154,7 @@ export type PathPlanTask = {
   copy_to?: number | null
   copy_name?: string | null
   root_node_id?: number | null
+  is_restore?: boolean
   source_name?: string | null
   status: MountSyncTask["status"]
   scanned: number

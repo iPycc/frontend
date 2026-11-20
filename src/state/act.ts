@@ -374,10 +374,16 @@ export function useActions({
     }
     const restoringNodes = nodeIds.map(getNodeById).filter(Boolean) as FileNode[]
 
-    await apiRestoreNodes(session.tokens.accessToken, {
+    const restored = await apiRestoreNodes(session.tokens.accessToken, {
       node_ids: backendIds,
     })
-    setRecycleNodes((current) => current.filter((node) => !nodeIds.includes(node.id)))
+    if (Array.isArray(restored)) {
+      const restoredIds = new Set(restored.map((node) => String(node.id)))
+      setRecycleNodes((current) => current.filter((node) => !restoredIds.has(node.id)))
+      toast.success(`已恢复 ${backendIds.length} 项`)
+    } else {
+      toast.info(`已将 ${restored.task_ids.length} 项加入后台恢复任务`)
+    }
     await Promise.all([
       ...restoringNodes.map((node) => refreshCachedDirectory(node.parentId, node.bucketId)),
       ...Array.from(new Set(restoringNodes.map((node) => node.bucketId))).map(refreshLoadedCategories),
