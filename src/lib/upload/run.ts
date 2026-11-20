@@ -602,7 +602,9 @@ export function useUploadRun({
           ...(pendingCount() ? {} : { progress: 100 }),
           progressStage: undefined,
           speedBytesPerSecond: 0,
-          speedText: pendingCount() ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片` : "处理中...",
+          speedText: pendingCount()
+            ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
+            : singlePut ? "正在确认文件" : "正在合并分片",
         })
         await completeSession(activeSessionId, completionParts)
         updateUploadQueueItem(id, {
