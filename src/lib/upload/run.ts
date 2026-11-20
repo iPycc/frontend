@@ -335,6 +335,7 @@ export function useUploadRun({
         }
 
         const singlePut = plan.upload_mode === "single_put"
+        const cloudraveTransport = usesCloudraveTransport(plan)
         const partSize = singlePut
           ? Math.max(saved.file.size || 1, 1)
           : Math.max(plan.part_size || saved.file.size || 1, 1)
@@ -392,7 +393,7 @@ export function useUploadRun({
         plan.upload_urls.forEach((item) => uploadPlans.set(item.part_number, Promise.resolve(item)))
         const progressTracker = trackParts(
           saved.file.size,
-          ({ uploadedBytes, progress, bytesPerSecond, awaitingConfirmation }) => {
+          ({ uploadedBytes, progress, bytesPerSecond, waitingForAddress, awaitingConfirmation }) => {
             updateUploadQueueItem(id, {
               status: "uploading",
               progressStage: "uploading",
@@ -401,6 +402,8 @@ export function useUploadRun({
               speedBytesPerSecond: bytesPerSecond,
               speedText: pendingCount() > 0
                 ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片`
+                : waitingForAddress
+                ? "正在获取上传地址"
                 : awaitingConfirmation
                 ? "等待服务器确认"
                 : `${formatBytes(bytesPerSecond)}/s 已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(saved.file.size)}`,
@@ -421,7 +424,7 @@ export function useUploadRun({
         const getPartPlan = (partNumber: number, refresh = false, partChecksum?: string) => {
           const cached = refresh ? undefined : uploadPlans.get(partNumber)
           if (cached) return cached
-          if (usesCloudraveTransport(plan)) return Promise.resolve(undefined)
+          if (cloudraveTransport) return Promise.resolve(undefined)
 
           const requested = uploadApiSchedulerRef.current.run(
             () => getUploadPartUrl(
@@ -444,7 +447,7 @@ export function useUploadRun({
           const nextPartNumber = partNumber + partConcurrency
           if (
             singlePut ||
-            usesCloudraveTransport(plan) ||
+            cloudraveTransport ||
             plan.part_checksum_algorithm ||
             nextPartNumber > partCount
           ) return
@@ -475,10 +478,11 @@ export function useUploadRun({
           }
 
           const uploaded = await retryPart(async (attempt) => {
-            progressTracker.begin(partNumber, chunk.size)
+            if (!cloudraveTransport) progressTracker.begin(partNumber, chunk.size, "address")
             const uploadPlan = await getPartPlan(partNumber, attempt > 0, partChecksum)
             throwIfAborted()
-            if (usesCloudraveTransport(plan)) {
+            progressTracker.begin(partNumber, chunk.size)
+            if (cloudraveTransport) {
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
