@@ -7,6 +7,7 @@ export type SharedItem = {
   name: string
   type: "folder" | "file"
   size: number
+  preview_version?: string | null
 }
 
 export type SharedMount = {
@@ -18,6 +19,8 @@ export type SharedMount = {
   owner_avatar: string | null
   available: boolean
   unavailable_reason: string | null
+  expires_at?: string | null
+  max_downloads?: number | null
   roots: SharedItem[]
   detail_url: string
   nodes_url: string

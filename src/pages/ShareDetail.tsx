@@ -436,9 +436,12 @@ export function ShareDetail() {
           </section>
         </>
       ) : requiresPassword && !accessToken ? null : <ShareNotFound />}
-      {slug && selected ? (
+      {canAccess && info.share_id === slug && selected ? (
         <SharedFilePreviewModal
-          source={{ type: "public", shareId: slug, accessToken, ownerName: info.owner_name }}
+          source={{
+            type: "public", shareId: slug, accessToken, ownerName: info.owner_name,
+            expiresAt: info.expires_at, maxDownloads: info.max_downloads,
+          }}
           item={selected}
           formatBytes={formatBytes}
           currentIndex={Math.max(0, previewIndex)}

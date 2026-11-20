@@ -1,4 +1,5 @@
 import { requestJson } from "@/api/client"
+import { requestImageManifest, type ImageManifestRequests } from "@/api/file/image-manifest-cache"
 import type {
   OfficeCardPreviewData,
   ExplorerNode,
@@ -84,15 +85,7 @@ export async function prefetchPreviewManifest(nodeId: number) {
   return getPreviewManifest(nodeId)
 }
 
-type ImagePreviewRequest = {
-  manifest: Promise<PreviewManifest>
-  expiresAt: number
-}
-
-const imagePreviewRequests = new WeakMap<AuthSession, Map<string, ImagePreviewRequest>>()
-const IMAGE_PREVIEW_MAX_AGE_MS = 15_000
-const IMAGE_PREVIEW_MAX_ENTRIES = 16
-const PREVIEW_EXPIRY_MARGIN_MS = 5_000
+const imagePreviewRequests = new WeakMap<AuthSession, ImageManifestRequests>()
 
 export function getImagePreviewManifest(
   nodeId: number,
@@ -105,29 +98,7 @@ export function getImagePreviewManifest(
     requests = new Map()
     imagePreviewRequests.set(session, requests)
   }
-  const key = `${nodeId}:${updatedAt}`
-  const current = requests.get(key)
-  if (!refresh && current && current.expiresAt > Date.now()) return current.manifest
-
-  const entry = { manifest: getPreviewManifest(nodeId), expiresAt: Infinity }
-  requests.delete(key)
-  requests.set(key, entry)
-  if (requests.size > IMAGE_PREVIEW_MAX_ENTRIES) {
-    const oldest = requests.keys().next().value
-    if (oldest !== undefined) requests.delete(oldest)
-  }
-  void entry.manifest.then((manifest) => {
-    if (manifest.kind !== "image" || manifest.status !== "ready") {
-      entry.expiresAt = 0
-      return
-    }
-    const expiry = manifest.assets.source.expires_at
-    const signedExpiry = expiry ? Date.parse(expiry) - PREVIEW_EXPIRY_MARGIN_MS : Infinity
-    entry.expiresAt = Math.min(Date.now() + IMAGE_PREVIEW_MAX_AGE_MS, signedExpiry)
-  }, () => {
-    entry.expiresAt = 0
-  })
-  return entry.manifest
+  return requestImageManifest(requests, `${nodeId}:${updatedAt}`, () => getPreviewManifest(nodeId), { refresh })
 }
 
 export function preparePreview(nodeId: number) {

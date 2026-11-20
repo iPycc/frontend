@@ -40,6 +40,7 @@ function initialViewMode(): SharedViewMode {
 export function SharedWithMe() {
   usePageTitle("与我共享")
   const {
+    authSession,
     formatBytes,
     buckets,
     activeBucket,
@@ -360,9 +361,9 @@ export function SharedWithMe() {
         />
       )}
 
-      {selectedMount && previewItem ? (
+      {authSession && selectedMount?.available && previewItem ? (
         <SharedFilePreviewModal
-          source={{ type: "mounted", mount: selectedMount }}
+          source={{ type: "mounted", mount: selectedMount, session: authSession }}
           item={previewItem}
           formatBytes={formatBytes}
           currentIndex={Math.max(0, previewIndex)}
