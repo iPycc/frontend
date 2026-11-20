@@ -41,6 +41,7 @@ import {
   type MountDeleteMode,
 } from "@/components/storage/MountDeleteDialog"
 import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
+import { StoragePathMigration } from "@/components/storage/StoragePathMigration"
 import { objectPathDraft, objectPathSettings } from "@/components/storage/object-path"
 import {
   buildAliyunMountInput,
@@ -848,6 +849,11 @@ export function StorageSettingsPage() {
           submitLabel={editSubmitLabel}
         />
       )}
+
+      {view.type === "edit" && view.bucket.canEditConnection &&
+        ["tencent", "aliyun"].includes(resolveStorageStrategy(view.bucket)) && (
+          <StoragePathMigration key={view.bucket.id} bucket={view.bucket} />
+        )}
 
       {view.type === "edit" && ["139", "189", "wo"].includes(resolveStorageStrategy(view.bucket)) && (
         <RemoteDriveForm

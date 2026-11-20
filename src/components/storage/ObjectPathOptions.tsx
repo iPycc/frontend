@@ -33,7 +33,7 @@ export function ObjectPathOptions({ draft, readOnly, onMode, onTemplate, onWrite
 
   return (
     <>
-      <FormRow label="存储路径" hint="应用于新写入的文件。已有文件可在后台任务中迁移。">
+      <FormRow label="存储路径" hint="应用于新写入的文件。已有文件可在编辑存储时迁移。">
         <div className="min-w-0 space-y-2">
           <Select value={draft.objectKeyStyle} onValueChange={(value) => onMode(value as ObjectPathMode)} disabled={readOnly}>
             <SelectTrigger className="h-10 w-full text-[15px]" aria-label="存储路径"><SelectValue /></SelectTrigger>
