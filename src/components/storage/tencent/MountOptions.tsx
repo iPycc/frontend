@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FormRow } from "@/components/storage/shared"
+import { FormRow, objectStorageImportHint } from "@/components/storage/shared"
 import type { StorageFormMode, TencentStorageDraft } from "@/components/storage/types"
 
 type Props = {
@@ -43,7 +43,12 @@ export function MountOptions({ draft, mode, onChange }: Props) {
         />
       </FormRow>
 
-      <FormRow label="挂载模式" hint="托管模式只显示 Cloudrave 创建的文件；镜像模式可导入此前缀中的已有对象。">
+      <FormRow
+        label="挂载模式"
+        hint={draft.mountMode === "mirror" && mode === "create"
+          ? <span className="break-words">{objectStorageImportHint(draft)}</span>
+          : "托管模式只显示 Cloudrave 创建的文件；镜像模式可导入此前缀中的已有对象。"}
+      >
         <Select
           value={draft.mountMode}
           onValueChange={(value) => update("mountMode", value as TencentStorageDraft["mountMode"])}

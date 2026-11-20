@@ -82,6 +82,19 @@ export function FormRow({
   )
 }
 
+export function objectStorageImportHint({
+  bucketName,
+  name,
+  prefix,
+}: { bucketName: string; name: string; prefix: string }) {
+  const bucket = bucketName.trim() ? `「${bucketName.trim()}」` : "所选存储桶"
+  const normalizedPrefix = prefix.trim().replace(/\\/g, "/").split("/")
+    .filter((segment) => segment && segment !== ".").join("/")
+  const source = normalizedPrefix ? `${bucket}的「${normalizedPrefix}/」` : `${bucket}根目录`
+  const target = name.trim() ? `「${name.trim()}」根目录` : "新挂载的根目录"
+  return `从${source}导入到 Cloudrave 的${target}。`
+}
+
 export function PathValidator({
   isValid,
   message,

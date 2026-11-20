@@ -193,7 +193,12 @@ export function RemoteDriveForm({
       {inspection ? (
         <FormCard
           title="3. 确认容量并挂载"
-          description="首次挂载会导入远程目录索引；上传、下载和在线预览均直连运营商云盘。"
+          description={mode === "create" ? (
+            <span className="break-words">
+              从{inspection.root_id === config.rootId ? "个人云盘根目录" : `目录 ID「${inspection.root_id}」`}
+              导入到 Cloudrave 的{draft.name.trim() ? `「${draft.name.trim()}」` : "新挂载"}根目录。
+            </span>
+          ) : undefined}
           footer={<Button onClick={() => onSubmit(inspection)} disabled={readonly}>{submitLabel ?? (mode === "create" ? "确认并挂载" : "保存")}</Button>}
         >
           <div className="space-y-4 py-4">

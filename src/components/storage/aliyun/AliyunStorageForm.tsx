@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FormCard, FormRow, StorageFormHeader } from "@/components/storage/shared"
+import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader } from "@/components/storage/shared"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
 import { AliyunDomains } from "./AliyunDomains"
 
@@ -69,7 +69,12 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
         <FormRow label="对象前缀" hint="仅管理此前缀下的对象；留空表示 Bucket 根目录。">
           <Input className="font-mono" value={draft.prefix} onChange={(event) => update("prefix", event.target.value.replace(/^\/+/, ""))} placeholder="users/primary" disabled={readonly} />
         </FormRow>
-        <FormRow label="挂载模式" hint="托管模式只显示 Cloudrave 记录；镜像模式可导入前缀中的已有对象。">
+        <FormRow
+          label="挂载模式"
+          hint={draft.mountMode === "mirror" && mode === "create"
+            ? <span className="break-words">{objectStorageImportHint(draft)}</span>
+            : "托管模式只显示 Cloudrave 记录；镜像模式可导入前缀中的已有对象。"}
+        >
           <Select value={draft.mountMode} onValueChange={(value) => update("mountMode", value as AliyunStorageDraft["mountMode"])} disabled={readonly}>
             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="managed">托管（推荐）</SelectItem><SelectItem value="mirror">镜像并导入已有对象</SelectItem></SelectContent>
           </Select>
