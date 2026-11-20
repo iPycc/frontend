@@ -30,6 +30,7 @@ export type GoogleOAuthAdminSettings = {
   client_id: string
   client_secret_configured: boolean
   callback_url: string
+  configuration_verified: boolean
 }
 
 export type GoogleOAuthConnection = {
