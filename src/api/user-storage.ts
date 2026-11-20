@@ -98,6 +98,13 @@ export async function applyUserMountCors(token: string, mountId: number) {
   })
 }
 
+export type UploadCorsStatus = "ready" | "same_origin" | "read_only" | "blocked" | "missing_etag" | "unavailable"
+
+export async function checkUserMountCors(token: string, mountId: number, origin: string) {
+  const query = new URLSearchParams({ origin })
+  return requestJson<{ status: UploadCorsStatus }>(`/mounts/${mountId}/cors/check?${query}`, { token })
+}
+
 export async function getUserMountSync(token: string, mountId: number, signal?: AbortSignal) {
   return requestJson<MountSyncResult>(`/mounts/${mountId}/sync`, { token, signal })
 }

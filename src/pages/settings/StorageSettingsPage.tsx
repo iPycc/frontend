@@ -11,11 +11,14 @@ import {
 } from "@/api/storage"
 import {
   applyUserMountCors,
+  checkUserMountCors,
   deleteUserMount,
   getUserMountDeletePreview,
   startUserMountSyncTask,
   updateUserMount,
+  type UploadCorsStatus,
   type UserMountDeletePreview,
+  type UserMountResource,
 } from "@/api/user-storage"
 import { useAppState } from "@/state/app"
 import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, validateLocalStoragePath } from "@/lib/models"
@@ -219,6 +222,39 @@ export function StorageSettingsPage() {
     return true
   }
 
+  const finishCloudMount = async (accessToken: string, mount: UserMountResource["mount"], autoConfigure: boolean) => {
+    let autoConfigFailed = false
+    if (autoConfigure) {
+      try {
+        await applyUserMountCors(accessToken, mount.id)
+      } catch {
+        autoConfigFailed = true
+      }
+    }
+
+    const { status } = await checkUserMountCors(accessToken, mount.id, window.location.origin)
+      .catch(() => ({ status: "unavailable" as const }))
+    const descriptions: Record<UploadCorsStatus, string> = {
+      ready: "当前站点的单次和分片直传预检通过。",
+      same_origin: "直传地址与当前站点同源。",
+      read_only: "当前挂载为只读。",
+      blocked: "直传预检未通过。请检查桶的跨域来源、PUT 方法和请求头。",
+      missing_etag: "分片直传缺少可读取的 ETag。请在桶的跨域响应头中暴露 ETag。",
+      unavailable: "暂时无法确认直传跨域配置。",
+    }
+    const description = autoConfigFailed ? `自动配置未完成。${descriptions[status]}` : descriptions[status]
+    const corsReady = status === "ready" || status === "same_origin" || status === "read_only"
+    if (corsReady && !autoConfigFailed) {
+      toast.success("存储已连接", { description })
+    } else {
+      toast.warning("存储已连接", { description })
+    }
+
+    if (mount.mode === "mirror") await queueImportAfterMount(accessToken, mount.id)
+    await reloadWorkspace()
+    setView({ type: "list" })
+  }
+
   const handleTencentSubmit = (autoConfigure: boolean) =>
     void withSubmit(async () => {
       const accessToken = requireToken()
@@ -230,19 +266,7 @@ export function StorageSettingsPage() {
         (policyId) => buildTencentMountInput(tencentDraft, fallbackSlug, policyId)
       )
 
-      if (autoConfigure) {
-        try {
-          await applyUserMountCors(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "已创建 COS 挂载，但跨域配置尚未完成。")
-        }
-      }
-
-      const importQueued = tencentDraft.mountMode === "mirror" && await queueImportAfterMount(accessToken, created.mount.id)
-
-      await reloadWorkspace()
-      if (!importQueued) toast.success("腾讯云 COS 存储策略已创建。")
-      setView({ type: "list" })
+      await finishCloudMount(accessToken, created.mount, autoConfigure)
     })
 
   const handleAliyunNext = () => {
@@ -263,19 +287,7 @@ export function StorageSettingsPage() {
         (policyId) => buildAliyunMountInput(aliyunDraft, fallbackSlug, policyId)
       )
 
-      if (autoConfigure) {
-        try {
-          await applyUserMountCors(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "已创建 OSS 挂载，但跨域配置尚未完成。")
-        }
-      }
-
-      const importQueued = aliyunDraft.mountMode === "mirror" && await queueImportAfterMount(accessToken, created.mount.id)
-
-      await reloadWorkspace()
-      if (!importQueued) toast.success("阿里云 OSS 存储空间已创建。")
-      setView({ type: "list" })
+      await finishCloudMount(accessToken, created.mount, autoConfigure)
     })
 
   const handleLocalSubmit = () =>
