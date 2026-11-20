@@ -47,6 +47,21 @@ function nowString() {
   return new Date().toISOString()
 }
 
+function uploadTargetDirectory(nodes: FileNode[], rootId: string, parentId: string) {
+  if (parentId === rootId) return "/"
+  const folders = new Map(nodes.filter((node) => node.kind === "folder").map((node) => [node.id, node]))
+  const names: string[] = []
+  let folderId: string | null = parentId
+  while (folderId !== rootId) {
+    const folder: FileNode | undefined = folderId ? folders.get(folderId) : undefined
+    if (!folder) return undefined
+    names.push(folder.name)
+    folders.delete(folder.id)
+    folderId = folder.parentId
+  }
+  return `/${names.reverse().join("/")}`
+}
+
 export interface UploadProviderProps {
   children: React.ReactNode
   getSession: () => AuthSession | null
@@ -263,9 +278,9 @@ export function UploadProvider({
     if (!bucket) return
     const target = { mountId: bucket.id, parentId }
     const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
-    const siblings = getNodesRef.current().filter(
-      (node) => node.bucketId === bucket.id && node.parentId === uiParentId && !node.deletedAt
-    )
+    const bucketNodes = getNodesRef.current().filter((node) => node.bucketId === bucket.id && !node.deletedAt)
+    const siblings = bucketNodes.filter((node) => node.parentId === uiParentId)
+    const targetDirectory = uploadTargetDirectory(bucketNodes, bucket.rootNodeId, uiParentId)
     let resolvedSelections = [...selections]
     const topNames = Array.from(new Set(selections.map(({ file, relativePath }) => relativePath?.split("/")[0] || file.name)))
     const reservedNames = new Set(siblings.map((node) => node.name))
@@ -390,6 +405,7 @@ export function UploadProvider({
         id,
         fileName: file.name,
         relativePath,
+        targetDirectory,
         fileSize: file.size,
         mountId: target.mountId,
         parentId: target.parentId,
