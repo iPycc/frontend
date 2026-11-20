@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader } from "@/components/storage/shared"
+import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader, UploadPartSettings } from "@/components/storage/shared"
 import { ObjectPathOptions } from "@/components/storage/ObjectPathOptions"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
 import { AliyunDomains } from "./AliyunDomains"
@@ -92,15 +92,17 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
             <Switch checked={draft.importDeleteSource} onCheckedChange={(value) => update("importDeleteSource", value)} disabled={readonly || draft.readOnly} aria-label="删除导入的源对象" />
           </FormRow>
         ) : null}
-        <FormRow label="分块阈值" hint="超过阈值后自动使用 OSS 分片上传。">
-          <Select value={draft.multipartThreshold} onValueChange={(value) => update("multipartThreshold", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
-        </FormRow>
-        <FormRow label="分块大小" hint="单个分片大小；网络不稳定时建议 10–25 MB。">
-          <Select value={draft.partSize} onValueChange={(value) => update("partSize", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
-        </FormRow>
-        <FormRow label="分块并发数" hint="每个文件同时上传的分片数。">
-          <Select value={String(draft.concurrency)} onValueChange={(value) => update("concurrency", Number(value))} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem><SelectItem value="3">3（推荐）</SelectItem></SelectContent></Select>
-        </FormRow>
+        <UploadPartSettings>
+          <FormRow label="分块阈值" hint="超过阈值后自动使用 OSS 分片上传。">
+            <Select value={draft.multipartThreshold} onValueChange={(value) => update("multipartThreshold", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
+          </FormRow>
+          <FormRow label="分块大小" hint="单个分片大小；网络不稳定时建议 10–25 MB。">
+            <Select value={draft.partSize} onValueChange={(value) => update("partSize", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
+          </FormRow>
+          <FormRow label="分块并发数" hint="每个文件同时上传的分片数。">
+            <Select value={String(draft.concurrency)} onValueChange={(value) => update("concurrency", Number(value))} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem><SelectItem value="3">3（推荐）</SelectItem></SelectContent></Select>
+          </FormRow>
+        </UploadPartSettings>
         <FormRow label="服务端加密" hint="对象落盘时由 OSS 加密；SSE-KMS 需要对应 KMS 权限。">
           <Select value={draft.serverSideEncryption} onValueChange={(value) => update("serverSideEncryption", value as AliyunStorageDraft["serverSideEncryption"])} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">不启用</SelectItem><SelectItem value="SSE-OSS">SSE-OSS（OSS 托管密钥）</SelectItem><SelectItem value="SSE-KMS">SSE-KMS（阿里云 KMS）</SelectItem></SelectContent></Select>
         </FormRow>
