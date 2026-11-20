@@ -86,7 +86,7 @@ export function MountOptions({ draft, mode, onChange }: Props) {
       </FormRow>
 
       {draft.mountMode === "mirror" ? (
-        <FormRow label="删除导入的源对象" hint="开启后，在 Cloudrave 中永久删除导入文件时也会删除存储桶中的源对象。">
+        <FormRow label="删除导入的源对象" hint="允许 Cloudrave 在永久删除导入文件时清理存储桶中的源对象。">
           <Switch
             checked={draft.importDeleteSource}
             onCheckedChange={(checked) => update("importDeleteSource", checked)}

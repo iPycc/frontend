@@ -78,7 +78,7 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
           <div className="flex min-h-10 items-center justify-between"><span className="text-sm text-muted-foreground">{draft.readOnly ? "只允许浏览与下载" : "允许正常读写"}</span><Switch checked={draft.readOnly} onCheckedChange={(value) => update("readOnly", value)} disabled={readonly} /></div>
         </FormRow>
         {draft.mountMode === "mirror" ? (
-          <FormRow label="删除导入的源对象" hint="开启后，在 Cloudrave 中永久删除导入文件时也会删除 OSS 源对象及其历史版本。">
+          <FormRow label="删除导入的源对象" hint="允许 Cloudrave 在永久删除导入文件时清理 OSS 源对象。">
             <Switch checked={draft.importDeleteSource} onCheckedChange={(value) => update("importDeleteSource", value)} disabled={readonly || draft.readOnly} aria-label="删除导入的源对象" />
           </FormRow>
         ) : null}

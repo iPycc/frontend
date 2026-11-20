@@ -218,7 +218,7 @@ export function Recycle() {
           <DialogHeader>
             <DialogTitle>永久删除 {pendingDeleteIds.length} 项？</DialogTitle>
             <DialogDescription>
-              此操作无法撤销，文件内容和记录都会从 Cloudrave 中移除。
+              条目将从 Cloudrave 永久移除。存储桶中无法安全清理的对象会保留。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
