@@ -68,6 +68,12 @@ export function useUploadRun({
       if (!saved || !session) {
         return
       }
+      const getAccessToken = () => {
+        const currentSession = getSessionRef.current()
+        return currentSession?.user.id === session.user.id
+          ? currentSession.tokens.accessToken
+          : session.tokens.accessToken
+      }
 
       const bucket = getBucketsRef.current().find((item) => item.id === saved.target.mountId)
       if (!bucket?.backendId) {
@@ -165,7 +171,7 @@ export function useUploadRun({
           try {
             const existing = await retryRateLimited(
               () => uploadApiSchedulerRef.current.run(
-                () => getUploadSession(session.tokens.accessToken, sessionId!, controller.signal),
+                () => getUploadSession(getAccessToken(), sessionId!, controller.signal),
                 controller.signal
               ),
               controller.signal
@@ -225,7 +231,7 @@ export function useUploadRun({
           })
           plan = await retryRateLimited(
             () => uploadApiSchedulerRef.current.run(
-              () => createUploadSession(session.tokens.accessToken, {
+              () => createUploadSession(getAccessToken(), {
                 mount_id: bucket.backendId,
                 parent_id: apiParentId,
                 file_name: saved.file.name,
@@ -270,7 +276,7 @@ export function useUploadRun({
           void uploadApiSchedulerRef.current
             .run(
               () => heartbeatUpload(
-                session.tokens.accessToken,
+                getAccessToken(),
                 activeSessionId,
                 heartbeatController.signal
               ),
@@ -379,7 +385,7 @@ export function useUploadRun({
 
           const requested = uploadApiSchedulerRef.current.run(
             () => getUploadPartUrl(
-              session.tokens.accessToken,
+              getAccessToken(),
               activeSessionId,
               partNumber,
               partChecksum,
@@ -436,7 +442,7 @@ export function useUploadRun({
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
-                    session.tokens.accessToken,
+                    getAccessToken(),
                     activeSessionId,
                     chunk,
                     partNumber,
@@ -476,7 +482,7 @@ export function useUploadRun({
               const part = await uploadApiSchedulerRef.current.run(
                 () => uploadGateRef.current.run(
                   () => uploadLocalPart(
-                    session.tokens.accessToken,
+                    getAccessToken(),
                     activeSessionId,
                     chunk,
                     partNumber,
@@ -505,7 +511,7 @@ export function useUploadRun({
             await retryPart(
               () => uploadApiSchedulerRef.current.run(
                 () => recordRemotePart(
-                  session.tokens.accessToken,
+                  getAccessToken(),
                   activeSessionId,
                   partNumber,
                   uploaded.etag,
@@ -564,7 +570,7 @@ export function useUploadRun({
         })
         await retryRateLimited(
           () => uploadApiSchedulerRef.current.run(
-            () => completeUpload(session.tokens.accessToken, activeSessionId, completionParts),
+            () => completeUpload(getAccessToken(), activeSessionId, completionParts),
             controller.signal
           ),
           controller.signal
@@ -587,7 +593,7 @@ export function useUploadRun({
           try {
             const cleanupSignal = new AbortController().signal
             await uploadApiSchedulerRef.current.run(
-              () => abortUpload(session.tokens.accessToken, cleanupSessionId, "client_cancel"),
+              () => abortUpload(getAccessToken(), cleanupSessionId, "client_cancel"),
               cleanupSignal
             )
           } catch {
