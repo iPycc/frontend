@@ -15,6 +15,7 @@ import {
 } from "@/api/shared"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "@/components/file-area/PreviewDialog"
+import { previewFailure } from "@/components/file-area/preview/errors"
 import { Button } from "@/components/ui/button"
 import { buildSharedPreviewManifest, sharedAudioExtensions, sharedExtensionOf } from "@/lib/shared-preview"
 
@@ -96,7 +97,7 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
   const [preview, setPreview] = React.useState<{
     key: string
     manifest: PreviewManifest | null
-    error?: string
+    error?: ReturnType<typeof previewFailure>
   } | null>(null)
 
   React.useEffect(() => {
@@ -114,7 +115,7 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
         if (reason instanceof ApiError && reason.status < 500) {
-          setPreview({ key: previewKey, manifest: null, error: reason.message })
+          setPreview({ key: previewKey, manifest: null, error: previewFailure(reason) })
         } else {
           setPreview({ key: previewKey, manifest: fallbackManifest })
         }
@@ -133,12 +134,12 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
       titleIcon={<FileGlyph item={{ kind: item.type, name: item.name }} size={20} />}
       manifest={current?.manifest ?? null}
       loading={!current}
-      error={current?.error}
+      error={current?.error?.message}
       inferredKind={fallbackManifest.kind}
       currentIndex={currentIndex}
       totalCount={totalCount}
       onClose={onClose}
-      onRetry={() => setRefreshKey((value) => value + 1)}
+      onRetry={current?.error?.retryable === false ? undefined : () => setRefreshKey((value) => value + 1)}
       onDownload={() => onDownload(item)}
       onPrev={onPrev}
       onNext={onNext}

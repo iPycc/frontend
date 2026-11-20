@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { useAppState } from "@/state/app"
 import { FileGlyph } from "./FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "./PreviewDialog"
+import { previewFailure } from "./preview/errors"
 import { inferPreviewKind } from "./preview/PreviewSkeleton"
 
 interface FilePreviewModalProps {
@@ -80,7 +81,7 @@ export function FilePreviewModal({
     source: typeof source
     attempt: typeof attempt
     manifest: PreviewManifest | null
-    error?: string
+    error?: ReturnType<typeof previewFailure>
   } | null>(null)
   const current = preview?.source === source && preview.attempt === attempt ? preview : null
   const manifest = current?.manifest ?? null
@@ -115,7 +116,7 @@ export function FilePreviewModal({
         }
       } catch (reason) {
         if (!controller.signal.aborted && !stopped) {
-          setPreview({ source, attempt, manifest: null, error: reason instanceof Error ? reason.message : "预览加载失败" })
+          setPreview({ source, attempt, manifest: null, error: previewFailure(reason) })
         }
       }
     }
@@ -157,12 +158,12 @@ export function FilePreviewModal({
       titleIcon={<FileGlyph item={file} size={20} />}
       manifest={manifest}
       loading={Boolean(backendId) && !current}
-      error={backendId ? current?.error : "文件缺少后端标识"}
+      error={backendId ? current?.error?.message : "文件缺少后端标识"}
       inferredKind={inferPreviewKind(file)}
       currentIndex={currentIndex}
       totalCount={totalCount}
       onClose={onClose}
-      onRetry={backendId ? retry : undefined}
+      onRetry={backendId && current?.error?.retryable !== false ? retry : undefined}
       onDownload={() => onDownload([file.id])}
       onPrev={onPrev}
       onNext={onNext}
