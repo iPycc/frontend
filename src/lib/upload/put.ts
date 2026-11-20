@@ -4,13 +4,15 @@ export class UploadHttpError extends Error {
   readonly status: number
   readonly retryable: boolean
   readonly maxAttempts: number | undefined
+  readonly requestId?: string
 
-  constructor(status: number) {
+  constructor(status: number, requestId?: string) {
     super(`上传分片失败 (${status})`)
     this.name = "UploadHttpError"
     this.status = status
     this.retryable = status === 403 || status === 408 || status === 425 || status === 429 || status >= 500
     this.maxAttempts = status === 403 ? 2 : undefined
+    this.requestId = requestId
   }
 }
 
@@ -100,7 +102,8 @@ export function putPart(
         finish(() => resolve(plan.record_etag ?? request.getResponseHeader("ETag")))
         return
       }
-      finish(() => reject(new UploadHttpError(request.status)))
+      const requestId = request.getResponseHeader("x-oss-request-id") ?? request.getResponseHeader("x-cos-request-id")
+      finish(() => reject(new UploadHttpError(request.status, requestId ?? undefined)))
     }
     request.onerror = () => {
       if (opaqueResponse && !signal.aborted) {

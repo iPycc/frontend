@@ -25,7 +25,7 @@ import { fingerprintFile, hashFile } from "@/lib/upload/hash"
 import { hashBlob, type UploadHashAlgorithm } from "@/lib/upload/incremental-hash"
 import { partLimit } from "@/lib/upload/pool"
 import { trackParts } from "@/lib/upload/progress"
-import { putPart } from "@/lib/upload/put"
+import { putPart, UploadHttpError } from "@/lib/upload/put"
 import { retryPart, retryRateLimited } from "@/lib/upload/retry"
 import { requiresUploadResponseHeader, usesCloudraveTransport } from "@/lib/upload/transport"
 
@@ -640,7 +640,9 @@ export function useUploadRun({
         updateUploadQueueItem(id, {
           status: paused ? "paused" : canceled ? "canceled" : "failed",
           errorMessage: paused || canceled ? undefined : error instanceof Error ? error.message : "上传失败",
-          errorRequestId: !paused && !canceled && error instanceof ApiError ? error.requestId : undefined,
+          errorRequestId: !paused && !canceled && (error instanceof ApiError || error instanceof UploadHttpError)
+            ? error.requestId
+            : undefined,
           speedBytesPerSecond: 0,
           progressStage: undefined,
           speedText: paused ? "已暂停，可继续上传" : canceled ? "已取消" : "上传中断，可从已完成分片继续",
