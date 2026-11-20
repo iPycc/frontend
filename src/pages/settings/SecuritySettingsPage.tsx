@@ -97,7 +97,7 @@ function OAuthGuide({ provider, callbackUrl }: { provider: "GitHub" | "Google" |
   }
   const instructions = {
     GitHub: "创建 OAuth App，将回调地址填入 Authorization callback URL。",
-    Google: "配置应用信息和受众，创建 Web application 客户端，将回调地址填入 Authorized redirect URIs。测试状态下按控制台要求添加测试用户。",
+    Google: "配置应用信息和受众，创建 Web application 客户端，将完整回调地址原样填入 Authorized redirect URIs。测试状态下按控制台要求添加测试用户。",
     QQ: "创建网站应用，按平台要求填写站点资料和回调地址并提交审核。",
   }
   return (
@@ -130,11 +130,15 @@ function OAuthGuide({ provider, callbackUrl }: { provider: "GitHub" | "Google" |
 const GOOGLE_LINK_ERROR_DESCRIPTIONS: Record<string, string> = {
   access_denied: "Google 授权已取消。",
   account_not_found: "Cloudrave 账号不存在或已被禁用。",
+  admin_policy_enforced: "Google Workspace 策略限制了授权，请联系组织管理员。",
   guest_not_supported: "访客账号不能关联 Google。",
   identity_conflict: "该 Google 账号或当前 Cloudrave 账号已存在其他关联。",
+  invalid_client: "请核对 Google Web 应用的 Client ID 和 Client Secret，保存后重新测试。",
   invalid_state: "关联请求已失效，请重新发起。",
   not_configured: "管理员尚未完成 Google OAuth 配置。",
+  org_internal: "请使用组织内的 Google 账号，或检查应用的受众设置。",
   provider_error: "Google 暂时无法完成授权，请稍后再试。",
+  redirect_uri_mismatch: "请将 Cloudrave 的完整回调地址原样填入 Authorized redirect URIs。",
   test_expired: "配置已变更或授权已过期，请重新发起测试。",
   timeout: "Google 授权等待超时，请关闭授权窗口后重试。",
 }
