@@ -20,11 +20,12 @@ type Props = {
   submitLabel?: string
   mountId?: number
   accessToken?: string
+  canConfigureImportWriteback?: boolean
 }
 
 const sizeOptions = ["5 MB", "10 MB", "16 MB", "25 MB", "50 MB", "64 MB", "100 MB"]
 
-export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel, mountId, accessToken }: Props) {
+export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel, mountId, accessToken, canConfigureImportWriteback }: Props) {
   const readonly = mode === "readonly"
   const update = <K extends keyof AliyunStorageDraft>(key: K, value: AliyunStorageDraft[K]) => onChange({ ...draft, [key]: value })
   const dirty = mode === "edit" && Boolean(initialDraft) && JSON.stringify(draft) !== JSON.stringify(initialDraft)
@@ -81,12 +82,13 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
           </Select>
         </FormRow>
         <ObjectPathOptions draft={draft} readOnly={readonly}
-          onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)} />
+          onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)}
+          onWriteback={canConfigureImportWriteback ? (value) => update("importWriteback", value) : undefined} />
         <FormRow label="只读挂载" hint="启用后禁止上传、重命名和删除。">
           <div className="flex min-h-10 items-center justify-between"><span className="text-sm text-muted-foreground">{draft.readOnly ? "只允许浏览与下载" : "允许正常读写"}</span><Switch checked={draft.readOnly} onCheckedChange={(value) => update("readOnly", value)} disabled={readonly} /></div>
         </FormRow>
-        {draft.mountMode === "mirror" ? (
-          <FormRow label="删除导入的源对象" hint="允许 Cloudrave 在永久删除导入文件时清理 OSS 源对象。">
+        {canConfigureImportWriteback && draft.mountMode === "mirror" ? (
+          <FormRow label="删除导入的源对象" hint="永久删除时，仅清理可确认版本的源对象。">
             <Switch checked={draft.importDeleteSource} onCheckedChange={(value) => update("importDeleteSource", value)} disabled={readonly || draft.readOnly} aria-label="删除导入的源对象" />
           </FormRow>
         ) : null}

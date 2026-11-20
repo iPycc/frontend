@@ -744,6 +744,7 @@ export function StorageSettingsPage() {
 
       {view.type === "form" && view.strategy === "tencent" && (
         <TencentStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={tencentDraft}
           onChange={setTencentDraft}
           onBack={() => setView({ type: "select-provider" })}
@@ -764,6 +765,7 @@ export function StorageSettingsPage() {
 
       {view.type === "form" && view.strategy === "aliyun" && (
         <AliyunStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={aliyunDraft}
           onChange={setAliyunDraft}
           onBack={() => setView({ type: "select-provider" })}
@@ -793,6 +795,7 @@ export function StorageSettingsPage() {
 
       {view.type === "edit" && resolveStorageStrategy(view.bucket) === "tencent" && (
         <TencentStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={tencentDraft}
           initialDraft={initialTencentDraft}
           mode={view.bucket.canEditConnection ? "edit" : "readonly"}
@@ -817,6 +820,7 @@ export function StorageSettingsPage() {
 
       {view.type === "edit" && resolveStorageStrategy(view.bucket) === "aliyun" && (
         <AliyunStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={aliyunDraft}
           initialDraft={initialAliyunDraft}
           mountId={view.bucket.backendId}

@@ -15,9 +15,10 @@ type Props = {
   draft: TencentStorageDraft
   mode: StorageFormMode
   onChange: (draft: TencentStorageDraft) => void
+  canConfigureImportWriteback?: boolean
 }
 
-export function MountOptions({ draft, mode, onChange }: Props) {
+export function MountOptions({ draft, mode, onChange, canConfigureImportWriteback }: Props) {
   const readonly = mode === "readonly"
   const update = <K extends keyof TencentStorageDraft>(key: K, value: TencentStorageDraft[K]) =>
     onChange({ ...draft, [key]: value })
@@ -66,7 +67,8 @@ export function MountOptions({ draft, mode, onChange }: Props) {
       </FormRow>
 
       <ObjectPathOptions draft={draft} readOnly={readonly}
-        onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)} />
+        onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)}
+        onWriteback={canConfigureImportWriteback ? (value) => update("importWriteback", value) : undefined} />
 
       <FormRow label="只读挂载" hint="启用后禁止上传、重命名和删除，适合归档桶或共享数据源。">
         <div className="flex min-h-10 items-center justify-between gap-4">
@@ -75,8 +77,8 @@ export function MountOptions({ draft, mode, onChange }: Props) {
         </div>
       </FormRow>
 
-      {draft.mountMode === "mirror" ? (
-        <FormRow label="删除导入的源对象" hint="允许 Cloudrave 在永久删除导入文件时清理存储桶中的源对象。">
+      {canConfigureImportWriteback && draft.mountMode === "mirror" ? (
+        <FormRow label="删除导入的源对象" hint="永久删除时，仅清理可确认版本的源对象。">
           <Switch
             checked={draft.importDeleteSource}
             onCheckedChange={(checked) => update("importDeleteSource", checked)}

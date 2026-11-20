@@ -13,6 +13,7 @@ export interface TencentStorageDraft {
   mountMode: "managed" | "mirror"
   readOnly: boolean
   importDeleteSource: boolean
+  importWriteback?: boolean
   legacyPrefixedKeys: boolean
   objectKeyStyle: ObjectPathMode
   objectKeyTemplate?: string
@@ -50,6 +51,7 @@ export interface AliyunStorageDraft {
   mountMode: "managed" | "mirror"
   readOnly: boolean
   importDeleteSource: boolean
+  importWriteback?: boolean
   legacyPrefixedKeys: boolean
   objectKeyStyle: ObjectPathMode
   objectKeyTemplate?: string
