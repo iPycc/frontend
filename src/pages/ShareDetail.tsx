@@ -436,19 +436,23 @@ export function ShareDetail() {
           </section>
         </>
       ) : requiresPassword && !accessToken ? null : <ShareNotFound />}
-      <SharedFilePreviewModal
-        key={slug && selected ? `${slug}:${selected.id}:${accessToken ?? "public"}` : "public-preview-closed"}
-        source={slug ? { type: "public", shareId: slug, accessToken, ownerName: info.owner_name } : null}
-        item={selected}
-        formatBytes={formatBytes}
-        currentIndex={Math.max(0, previewIndex)}
-        totalCount={previewableNodes.length || 1}
-        onClose={() => setSelected(null)}
-        onDownload={() => selected && void downloadNodes([selected])}
-        detailsFooter={<ShareFacts info={info} requiresPassword={requiresPassword} />}
-        onPrev={() => openAdjacentPreview(-1)}
-        onNext={() => openAdjacentPreview(1)}
-      />
+      {canAccess && info.share_id === slug && selected ? (
+        <SharedFilePreviewModal
+          source={{
+            type: "public", shareId: slug, accessToken, ownerName: info.owner_name,
+            expiresAt: info.expires_at, maxDownloads: info.max_downloads,
+          }}
+          item={selected}
+          formatBytes={formatBytes}
+          currentIndex={Math.max(0, previewIndex)}
+          totalCount={previewableNodes.length || 1}
+          onClose={() => setSelected(null)}
+          onDownload={(item) => void downloadNodes([item])}
+          detailsFooter={<ShareFacts info={info} requiresPassword={requiresPassword} />}
+          onPrev={() => openAdjacentPreview(-1)}
+          onNext={() => openAdjacentPreview(1)}
+        />
+      ) : null}
       <TransferManager
         downloadTask={fileDownload.task}
         onCancelDownload={fileDownload.cancel}

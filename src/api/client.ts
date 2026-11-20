@@ -5,14 +5,16 @@ export class ApiError extends Error {
   payload: unknown
   retryAfterMs?: number
   requestId?: string
+  retryable?: boolean
 
-  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number, requestId?: string) {
+  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number, requestId?: string, retryable?: boolean) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.payload = payload
     this.retryAfterMs = retryAfterMs
     this.requestId = requestId
+    this.retryable = retryable
   }
 }
 
@@ -164,7 +166,8 @@ async function requestResponseInternal(
       pickErrorMessage(payload, response.status),
       payload,
       parseRetryAfter(response.headers.get("Retry-After")),
-      safeRequestId(response.headers.get("X-Request-ID"), payload)
+      safeRequestId(response.headers.get("X-Request-ID"), payload),
+      response.headers.get("X-Upload-Retryable") === "false" ? false : undefined
     )
   }
 

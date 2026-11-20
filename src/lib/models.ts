@@ -197,6 +197,7 @@ export interface UploadQueueItem {
   id: string
   fileName: string
   relativePath?: string
+  targetDirectory?: string
   fileSize: number
   mountId: string
   parentId: string | null

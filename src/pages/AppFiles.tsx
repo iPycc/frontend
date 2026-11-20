@@ -10,7 +10,9 @@ import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, recordNodeOpen } from "@/api/files"
 import { updateUserPreferences } from "@/api/user"
+import { startUserMountSyncTask } from "@/api/user-storage"
 import { useAudioPlayer } from "@/components/audio/AudioPlayerProvider"
+import { Button } from "@/components/ui/button"
 import { useFileDownload } from "@/hooks/use-file-download"
 import { loadFileViewPreferences, saveFileViewPreferences } from "@/lib/file-view-preferences"
 import { EMPTY_PAGE_STATE } from "@/state/core"
@@ -77,6 +79,7 @@ export function AppFiles() {
   const navigate = useNavigate()
   const { openAudio } = useAudioPlayer()
   const fileDownload = useFileDownload()
+  const [startingImport, setStartingImport] = React.useState(false)
   const {
     clipboard,
     activeBucket,
@@ -169,6 +172,27 @@ export function AppFiles() {
   const rawCategory = searchParams.get("type")
   const category = rawCategory && rawCategory in categoryMap ? (rawCategory as keyof typeof categoryMap) : null
   const currentPath = searchParams.get("folder") ?? ""
+  const hasImportTask = ["pending", "running", "paused", "failed"].includes(activeBucket.syncStatus)
+  const canImportHere = !category && !currentPath && activeBucket.mountMode === "mirror"
+    && activeBucket.canEditConnection && Boolean(activeBucket.backendId && authSession)
+  const openImportTask = async () => {
+    if (hasImportTask) {
+      navigate("/app/tasks")
+      return
+    }
+    const token = authSession?.tokens.accessToken
+    const mountId = activeBucket.backendId
+    if (!token || !mountId || startingImport) return
+    setStartingImport(true)
+    try {
+      await startUserMountSyncTask(token, mountId)
+      navigate("/app/tasks")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "无法启动导入任务")
+    } finally {
+      setStartingImport(false)
+    }
+  }
   const knownFolderId = getFolderPathId(currentPath)
   const currentFolderId = resolvedFolder?.path === currentPath ? resolvedFolder.id : knownFolderId
   const unresolvedFolder = Boolean(!category && currentPath && !currentFolderId)
@@ -722,6 +746,11 @@ export function AppFiles() {
             <FileArea
               items={fileAreaItems}
               canUpload={!category && Boolean(activeBucket.id) && !activeBucket.readOnly}
+              emptyAction={canImportHere ? (
+                <Button variant={activeBucket.readOnly ? "default" : "outline"} disabled={startingImport} onClick={() => void openImportTask()}>
+                  {hasImportTask ? "查看导入任务" : startingImport ? "正在加入队列…" : "导入已有文件"}
+                </Button>
+              ) : null}
               loading={routeLoading || unresolvedFolder || pageState.loading}
               loaded={pageState.loaded}
               metadataLoaded={pageState.metadataLoaded}
@@ -787,7 +816,6 @@ export function AppFiles() {
 
         {previewFile ? (
           <FilePreviewModal
-            key={previewFile.id}
             open
             file={previewFile}
             preloadFiles={adjacentPreviewFiles}

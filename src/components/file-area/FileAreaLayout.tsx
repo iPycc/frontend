@@ -48,6 +48,7 @@ interface FileAreaProps {
   showThumbnail?: boolean
   canPaste: boolean
   canUpload: boolean
+  emptyAction?: React.ReactNode
   onSelectNode: (id: string, event: MouseEvent) => void
   onSelectIds: (ids: string[]) => void
   onPrepareContext: (id: string) => void
@@ -98,6 +99,7 @@ export function FileArea({
   showThumbnail = false,
   canPaste,
   canUpload,
+  emptyAction,
   onSelectNode,
   onSelectIds,
   onPrepareContext,
@@ -287,8 +289,11 @@ export function FileArea({
                 <EmptyState
                   title="没有任何内容"
                   description={null}
-                  action={canUpload ? (
-                    <Button onClick={onUploadRequest}><IconUpload />上传文件</Button>
+                  action={canUpload || emptyAction ? (
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {canUpload ? <Button onClick={onUploadRequest}><IconUpload />上传文件</Button> : null}
+                      {emptyAction}
+                    </div>
                   ) : null}
                 />
               </div>

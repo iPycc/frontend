@@ -75,28 +75,25 @@ export function PreviewDialog({
     }
   }, [open])
 
-  React.useEffect(() => {
-    if (!open) return
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      const isEditing = target?.closest("input, textarea, [contenteditable='true'], .monaco-editor")
-      if (!isEditing && event.key === "ArrowLeft" && totalCount > 1) onPrev?.()
-      if (!isEditing && event.key === "ArrowRight" && totalCount > 1) onNext?.()
-      if (event.key === "Escape" && showDetails) setShowDetails(false)
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
-  }, [onNext, onPrev, open, showDetails, totalCount])
-
   const minimized = displayMode === "minimized" && manifest?.kind === "audio"
   const metadata = manifest && imageSize?.manifest === manifest
     ? { ...manifest.metadata, width: imageSize.width, height: imageSize.height }
     : manifest?.metadata
   const detailsContent = details?.(() => setShowDetails(false), metadata)
 
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && showDetails) setShowDetails(false)
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || minimized || totalCount <= 1) return
+    const navigate = event.key === "ArrowLeft" ? onPrev : event.key === "ArrowRight" ? onNext : undefined
+    if (!navigate || (event.target as HTMLElement).closest("input, textarea, select, [contenteditable], .monaco-editor")) return
+    event.preventDefault()
+    navigate()
+  }
+
   return (
     <Dialog open={open} modal={!minimized} onOpenChange={(value) => !value && onClose()}>
       <DialogContent
+        onKeyDown={handleKeyDown}
         showCloseButton={false}
         disableScaleAnimation
         hideOverlay={minimized}

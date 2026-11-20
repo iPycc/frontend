@@ -116,6 +116,12 @@ export function FileCard({
     )
   }
 
+  const openItem = (event: MouseEvent) => {
+    if (event.type === "click" && event.detail > 0) return
+    event.stopPropagation()
+    onOpenNode(item)
+  }
+
   if (!showThumbnail || item.kind === "folder") {
     return (
       <ContextMenu>
@@ -159,10 +165,8 @@ export function FileCard({
             </button>
             <button
               type="button"
-              onDoubleClick={(event: MouseEvent) => {
-                event.stopPropagation()
-                onOpenNode(item)
-              }}
+              onClick={openItem}
+              onDoubleClick={openItem}
               className="min-w-0 flex-1 text-left"
             >
               <div className="truncate text-sm text-foreground" title={item.name}>
@@ -211,10 +215,9 @@ export function FileCard({
         >
           <button
             type="button"
-            onDoubleClick={(event: MouseEvent) => {
-              event.stopPropagation()
-              onOpenNode(item)
-            }}
+            aria-label={`打开 ${item.name}`}
+            onClick={openItem}
+            onDoubleClick={openItem}
             className="relative flex w-full flex-1 items-center justify-center overflow-hidden bg-muted-foreground/5"
           >
             {previewActive && hasPreviewImage && !imageFailed ? (
@@ -310,10 +313,8 @@ export function FileCard({
             ) : (
               <button
                 type="button"
-                onDoubleClick={(event: MouseEvent) => {
-                  event.stopPropagation()
-                  onOpenNode(item)
-                }}
+                onClick={openItem}
+                onDoubleClick={openItem}
                 className="min-w-0 flex-1 text-left"
               >
                 <div className="truncate text-sm font-medium text-foreground" title={item.name}>

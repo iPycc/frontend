@@ -40,6 +40,7 @@ function initialViewMode(): SharedViewMode {
 export function SharedWithMe() {
   usePageTitle("与我共享")
   const {
+    authSession,
     formatBytes,
     buckets,
     activeBucket,
@@ -360,19 +361,20 @@ export function SharedWithMe() {
         />
       )}
 
-      <SharedFilePreviewModal
-        key={selectedMount && previewItem ? `${selectedMount.id}:${previewItem.id}` : "shared-preview-closed"}
-        source={selectedMount ? { type: "mounted", mount: selectedMount } : null}
-        item={previewItem}
-        formatBytes={formatBytes}
-        currentIndex={Math.max(0, previewIndex)}
-        totalCount={previewableItems.length || 1}
-        onClose={() => setPreviewItem(null)}
-        onDownload={(item) => void downloadItem(item)}
-        onSave={beginSave}
-        onPrev={() => openAdjacentPreview(-1)}
-        onNext={() => openAdjacentPreview(1)}
-      />
+      {authSession && selectedMount?.available && previewItem ? (
+        <SharedFilePreviewModal
+          source={{ type: "mounted", mount: selectedMount, session: authSession }}
+          item={previewItem}
+          formatBytes={formatBytes}
+          currentIndex={Math.max(0, previewIndex)}
+          totalCount={previewableItems.length || 1}
+          onClose={() => setPreviewItem(null)}
+          onDownload={(item) => void downloadItem(item)}
+          onSave={beginSave}
+          onPrev={() => openAdjacentPreview(-1)}
+          onNext={() => openAdjacentPreview(1)}
+        />
+      ) : null}
 
       <MoveDialog
         open={Boolean(saveItem)}

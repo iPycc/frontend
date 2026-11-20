@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils"
 import { useAppState } from "@/state/app"
 import { FileGlyph } from "./FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "./PreviewDialog"
+import { previewFailure } from "./preview/errors"
 import { inferPreviewKind } from "./preview/PreviewSkeleton"
 
 interface FilePreviewModalProps {
@@ -69,17 +70,25 @@ export function FilePreviewModal({
   const canShare = hasCapability(currentUser, "share.manage")
   const { bucketName, formatBytes } = usePropertiesPanel()
   const backendId = file?.backendId
-  const imageRevision = file?.mediaType === "image" ? file.updatedAt : undefined
-  const [manifest, setManifest] = React.useState<PreviewManifest | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = React.useState(0)
-  const loadedRefreshKey = React.useRef(refreshKey)
+  const fileId = file?.id
+  const revision = file?.updatedAt
+  const image = file?.mediaType === "image"
+  const source = React.useMemo(() => ({ backendId, fileId, revision, image, authSession }),
+    [backendId, fileId, revision, image, authSession])
+  const [retryRequest, setRetryRequest] = React.useState<{ source: typeof source; prepare: boolean } | null>(null)
+  const attempt = retryRequest?.source === source ? retryRequest : null
+  const [preview, setPreview] = React.useState<{
+    source: typeof source
+    attempt: typeof attempt
+    manifest: PreviewManifest | null
+    error?: ReturnType<typeof previewFailure>
+  } | null>(null)
+  const current = preview?.source === source && preview.attempt === attempt ? preview : null
+  const manifest = current?.manifest ?? null
 
   React.useEffect(() => {
+    const { backendId, authSession, revision, image } = source
     if (!open || !backendId) return
-    const forceRefresh = loadedRefreshKey.current !== refreshKey
-    loadedRefreshKey.current = refreshKey
     const controller = new AbortController()
     let pollTimer: number | undefined
     let pollCount = 0
@@ -87,33 +96,31 @@ export function FilePreviewModal({
 
     const refresh = async (prepare = true) => {
       try {
-        const next = await (prepare && authSession && imageRevision
-          ? getImagePreviewManifest(backendId, imageRevision, authSession, forceRefresh)
+        if (prepare && attempt?.prepare) {
+          await preparePreview(backendId)
+          if (stopped) return
+        }
+        const next = await (prepare && authSession && image && revision
+          ? getImagePreviewManifest(backendId, revision, authSession, Boolean(attempt))
           : getPreviewManifest(backendId, controller.signal))
         if (stopped) return
         const shouldPrepare = next.requires_preparation && next.preparation_available && !next.assets.hls && !next.assets.audio
-        setManifest(prepare && shouldPrepare ? { ...next, status: "processing" } : next)
-        setError(null)
-        setLoading(false)
+        setPreview({ source, attempt, manifest: prepare && shouldPrepare ? { ...next, status: "processing" } : next })
 
-        if (prepare && shouldPrepare && next.status !== "failed") {
+        if (prepare && !attempt?.prepare && shouldPrepare && next.status !== "failed") {
           await preparePreview(backendId)
         }
-        if ((next.status === "processing" || shouldPrepare) && next.status !== "failed" && pollCount < 120) {
+        if (!stopped && (next.status === "processing" || shouldPrepare) && next.status !== "failed" && pollCount < 120) {
           pollCount += 1
           pollTimer = window.setTimeout(() => void refresh(false), 1500)
         }
       } catch (reason) {
         if (!controller.signal.aborted && !stopped) {
-          setLoading(false)
-          setError(reason instanceof Error ? reason.message : "预览加载失败")
+          setPreview({ source, attempt, manifest: null, error: previewFailure(reason) })
         }
       }
     }
 
-    setManifest(null)
-    setLoading(true)
-    setError(null)
     void refresh()
 
     return () => {
@@ -121,7 +128,7 @@ export function FilePreviewModal({
       controller.abort()
       if (pollTimer) window.clearTimeout(pollTimer)
     }
-  }, [authSession, backendId, imageRevision, open, refreshKey])
+  }, [attempt, open, source])
 
   const manifestNodeId = manifest?.node_id
   React.useEffect(() => {
@@ -139,24 +146,10 @@ export function FilePreviewModal({
 
   if (!file) return null
 
-  const retry = async () => {
-    setLoading(true)
-    setError(null)
-    if (!backendId) {
-      setLoading(false)
-      setError("文件缺少后端标识")
-      return
-    }
-    try {
-      if (manifest?.status === "failed" && manifest.requires_preparation && manifest.preparation_available) {
-        await preparePreview(backendId)
-      }
-      setRefreshKey((value) => value + 1)
-    } catch (reason) {
-      setLoading(false)
-      setError(reason instanceof Error ? reason.message : "预览重试失败")
-    }
-  }
+  const retry = () => setRetryRequest({
+    source,
+    prepare: Boolean(manifest?.status === "failed" && manifest.requires_preparation && manifest.preparation_available),
+  })
 
   return (
     <PreviewDialog
@@ -164,13 +157,13 @@ export function FilePreviewModal({
       name={file.name}
       titleIcon={<FileGlyph item={file} size={20} />}
       manifest={manifest}
-      loading={loading}
-      error={error}
+      loading={Boolean(backendId) && !current}
+      error={backendId ? current?.error?.message : "文件缺少后端标识"}
       inferredKind={inferPreviewKind(file)}
       currentIndex={currentIndex}
       totalCount={totalCount}
       onClose={onClose}
-      onRetry={() => void retry()}
+      onRetry={backendId && current?.error?.retryable !== false ? retry : undefined}
       onDownload={() => onDownload([file.id])}
       onPrev={onPrev}
       onNext={onNext}

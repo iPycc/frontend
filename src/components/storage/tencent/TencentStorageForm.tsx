@@ -25,6 +25,7 @@ interface TencentStorageFormProps {
   onBack?: () => void
   onSubmit: () => void
   submitLabel?: string
+  canConfigureImportWriteback?: boolean
 }
 
 export function TencentStorageForm({
@@ -35,6 +36,7 @@ export function TencentStorageForm({
   onBack,
   onSubmit,
   submitLabel,
+  canConfigureImportWriteback,
 }: TencentStorageFormProps) {
   const readonly = mode === "readonly"
 
@@ -206,7 +208,7 @@ export function TencentStorageForm({
           </div>
         </FormRow>
 
-        <MountOptions draft={draft} mode={mode} onChange={onChange} />
+        <MountOptions draft={draft} mode={mode} onChange={onChange} canConfigureImportWriteback={canConfigureImportWriteback} />
         <TransferOptions draft={draft} mode={mode} onChange={onChange} />
         <EncryptionOptions draft={draft} mode={mode} onChange={onChange} />
       </FormCard>

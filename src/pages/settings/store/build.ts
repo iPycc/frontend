@@ -11,6 +11,7 @@ import type {
   TencentStorageDraft,
 } from "@/components/storage"
 import { remoteDriveCredentials } from "@/components/storage/remote/RemoteDriveForm"
+import { objectPathSettings } from "@/components/storage/object-path"
 import {
   buildLocalStoragePath,
   type BucketMount,
@@ -339,7 +340,7 @@ export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: s
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
       import_delete_source: draft.importDeleteSource,
-      object_key_style: draft.objectKeyStyle,
+      ...objectPathSettings(draft),
     },
   }
 }
@@ -370,7 +371,7 @@ export function buildTencentMountInput(draft: TencentStorageDraft, fallbackSlug:
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
       import_delete_source: draft.importDeleteSource,
-      object_key_style: draft.objectKeyStyle,
+      ...objectPathSettings(draft),
     },
   }
 }

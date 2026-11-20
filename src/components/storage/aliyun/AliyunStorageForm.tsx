@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader } from "@/components/storage/shared"
+import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader, UploadPartSettings } from "@/components/storage/shared"
+import { ObjectPathOptions } from "@/components/storage/ObjectPathOptions"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
 import { AliyunDomains } from "./AliyunDomains"
 
@@ -19,11 +20,12 @@ type Props = {
   submitLabel?: string
   mountId?: number
   accessToken?: string
+  canConfigureImportWriteback?: boolean
 }
 
 const sizeOptions = ["5 MB", "10 MB", "16 MB", "25 MB", "50 MB", "64 MB", "100 MB"]
 
-export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel, mountId, accessToken }: Props) {
+export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChange, onBack, onSubmit, submitLabel, mountId, accessToken, canConfigureImportWriteback }: Props) {
   const readonly = mode === "readonly"
   const update = <K extends keyof AliyunStorageDraft>(key: K, value: AliyunStorageDraft[K]) => onChange({ ...draft, [key]: value })
   const dirty = mode === "edit" && Boolean(initialDraft) && JSON.stringify(draft) !== JSON.stringify(initialDraft)
@@ -79,23 +81,28 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="managed">托管（推荐）</SelectItem><SelectItem value="mirror">镜像并导入已有对象</SelectItem></SelectContent>
           </Select>
         </FormRow>
+        <ObjectPathOptions draft={draft} readOnly={readonly}
+          onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)}
+          onWriteback={canConfigureImportWriteback ? (value) => update("importWriteback", value) : undefined} />
         <FormRow label="只读挂载" hint="启用后禁止上传、重命名和删除。">
           <div className="flex min-h-10 items-center justify-between"><span className="text-sm text-muted-foreground">{draft.readOnly ? "只允许浏览与下载" : "允许正常读写"}</span><Switch checked={draft.readOnly} onCheckedChange={(value) => update("readOnly", value)} disabled={readonly} /></div>
         </FormRow>
-        {draft.mountMode === "mirror" ? (
-          <FormRow label="删除导入的源对象" hint="允许 Cloudrave 在永久删除导入文件时清理 OSS 源对象。">
+        {canConfigureImportWriteback && draft.mountMode === "mirror" ? (
+          <FormRow label="删除导入的源对象" hint="永久删除时，仅清理可确认版本的源对象。">
             <Switch checked={draft.importDeleteSource} onCheckedChange={(value) => update("importDeleteSource", value)} disabled={readonly || draft.readOnly} aria-label="删除导入的源对象" />
           </FormRow>
         ) : null}
-        <FormRow label="分块阈值" hint="超过阈值后自动使用 OSS 分片上传。">
-          <Select value={draft.multipartThreshold} onValueChange={(value) => update("multipartThreshold", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
-        </FormRow>
-        <FormRow label="分块大小" hint="单个分片大小；网络不稳定时建议 10–25 MB。">
-          <Select value={draft.partSize} onValueChange={(value) => update("partSize", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
-        </FormRow>
-        <FormRow label="分块并发数" hint="每个文件同时上传的分片数。">
-          <Select value={String(draft.concurrency)} onValueChange={(value) => update("concurrency", Number(value))} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem><SelectItem value="3">3（推荐）</SelectItem></SelectContent></Select>
-        </FormRow>
+        <UploadPartSettings>
+          <FormRow label="分块阈值" hint="超过阈值后自动使用 OSS 分片上传。">
+            <Select value={draft.multipartThreshold} onValueChange={(value) => update("multipartThreshold", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
+          </FormRow>
+          <FormRow label="分块大小" hint="单个分片大小；网络不稳定时建议 10–25 MB。">
+            <Select value={draft.partSize} onValueChange={(value) => update("partSize", value)} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sizeOptions.map((value) => <SelectItem value={value} key={value}>{value}</SelectItem>)}</SelectContent></Select>
+          </FormRow>
+          <FormRow label="分块并发数" hint="每个文件同时上传的分片数。">
+            <Select value={String(draft.concurrency)} onValueChange={(value) => update("concurrency", Number(value))} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem><SelectItem value="3">3（推荐）</SelectItem></SelectContent></Select>
+          </FormRow>
+        </UploadPartSettings>
         <FormRow label="服务端加密" hint="对象落盘时由 OSS 加密；SSE-KMS 需要对应 KMS 权限。">
           <Select value={draft.serverSideEncryption} onValueChange={(value) => update("serverSideEncryption", value as AliyunStorageDraft["serverSideEncryption"])} disabled={readonly}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">不启用</SelectItem><SelectItem value="SSE-OSS">SSE-OSS（OSS 托管密钥）</SelectItem><SelectItem value="SSE-KMS">SSE-KMS（阿里云 KMS）</SelectItem></SelectContent></Select>
         </FormRow>

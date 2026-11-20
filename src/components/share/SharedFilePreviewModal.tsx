@@ -2,6 +2,7 @@ import * as React from "react"
 import { IconDeviceFloppy, IconX } from "@tabler/icons-react"
 
 import { ApiError } from "@/api/client"
+import { requestImageManifest, type ImageManifestRequests } from "@/api/file/image-manifest-cache"
 import type { PreviewManifest } from "@/api/files"
 import {
   buildSharedCoverUrl,
@@ -15,7 +16,10 @@ import {
 } from "@/api/shared"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "@/components/file-area/PreviewDialog"
+import { previewFailure } from "@/components/file-area/preview/errors"
 import { Button } from "@/components/ui/button"
+import { parseDateTime } from "@/lib/datetime"
+import type { AuthSession } from "@/lib/models"
 import { buildSharedPreviewManifest, sharedAudioExtensions, sharedExtensionOf } from "@/lib/shared-preview"
 
 type SharedPreviewItem = {
@@ -23,11 +27,12 @@ type SharedPreviewItem = {
   name: string
   type: "folder" | "file"
   size: number
+  preview_version?: string | null
 }
 
 type SharedPreviewSource =
-  | { type: "mounted"; mount: SharedMount }
-  | { type: "public"; shareId: string; accessToken?: string | null; ownerName: string }
+  | { type: "mounted"; mount: SharedMount; session: AuthSession | null }
+  | { type: "public"; shareId: string; accessToken?: string | null; ownerName: string; expiresAt?: string | null; maxDownloads?: number | null }
 
 type SharedFilePreviewModalProps<T extends SharedPreviewItem> = {
   source: SharedPreviewSource | null
@@ -62,12 +67,26 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
   const mountShareId = mount?.share_id
   const shareId = source?.type === "public" ? source.shareId : null
   const accessToken = source?.type === "public" ? source.accessToken : null
+  const mountedSession = source?.type === "mounted" ? source.session : null
+  const expiresAt = source?.type === "public" ? source.expiresAt : mount?.expires_at
+  const maxDownloads = source?.type === "public" ? source.maxDownloads : mount?.max_downloads
+  const mountAvailable = mount?.available
+  const mountAccess = mount?.access
+  const scope = React.useMemo<{ requests: ImageManifestRequests; validUntil: number }>(() => ({
+    requests: new Map(),
+    validUntil: expiresAt ? parseDateTime(expiresAt)?.getTime() ?? 0 : Infinity,
+  }), [
+    accessToken, expiresAt, maxDownloads, mountAccess, mountAvailable, mountId, mountShareId,
+    mountedSession, shareId, sourceType,
+  ])
   const nodeId = item?.type === "file" ? item.id : undefined
   const nodeName = item?.name
   const nodeSize = item?.size
+  const nodeVersion = item?.preview_version ?? undefined
+  const cacheKey = nodeId !== undefined && nodeVersion ? `${nodeId}:${nodeVersion}` : null
   const [refreshKey, setRefreshKey] = React.useState(0)
   const previewKey = sourceType && nodeId !== undefined
-    ? JSON.stringify([sourceType, mountId, mountShareId, shareId, accessToken, nodeId, nodeName, nodeSize, refreshKey])
+    ? JSON.stringify([nodeId, nodeVersion, nodeName, nodeSize, refreshKey])
     : null
   const ownerName = sourceType === "mounted"
     ? mount?.owner_username ?? "共享用户"
@@ -94,37 +113,52 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
     })
   }, [accessToken, mountId, mountShareId, nodeId, nodeName, nodeSize, shareId, sourceType])
   const [preview, setPreview] = React.useState<{
+    scope: typeof scope
     key: string
     manifest: PreviewManifest | null
-    error?: string
+    error?: ReturnType<typeof previewFailure>
   } | null>(null)
 
   React.useEffect(() => {
     if (nodeId === undefined || !previewKey || !fallbackManifest) return
     const controller = new AbortController()
-    const request = mountId !== undefined
-      ? getSharedMountPreviewManifest(mountId, nodeId, controller.signal)
-      : getSharedPreviewManifest(shareId ?? "", accessToken, nodeId, controller.signal)
+    const load = (signal?: AbortSignal) => mountId !== undefined
+      ? getSharedMountPreviewManifest(mountId, nodeId, signal)
+      : getSharedPreviewManifest(shareId ?? "", accessToken, nodeId, signal)
+    const canReuse = cacheKey && fallbackManifest.kind === "image" && maxDownloads == null
+      && (mountId === undefined || (mountAvailable && mountedSession))
+      && scope.validUntil > Date.now()
+    // A versioned request can be reused after a flip. Cleanup detaches only the current render.
+    const request = canReuse
+      ? requestImageManifest(scope.requests, cacheKey, () => load(), { version: nodeVersion, validUntil: scope.validUntil })
+      : load(controller.signal)
     void request
       .then((manifest) => {
         if (!controller.signal.aborted) {
-          setPreview({ key: previewKey, manifest })
+          setPreview({ scope, key: previewKey, manifest })
         }
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
         if (reason instanceof ApiError && reason.status < 500) {
-          setPreview({ key: previewKey, manifest: null, error: reason.message })
+          setPreview({ scope, key: previewKey, manifest: null, error: previewFailure(reason) })
         } else {
-          setPreview({ key: previewKey, manifest: fallbackManifest })
+          setPreview({ scope, key: previewKey, manifest: fallbackManifest })
         }
       })
     return () => controller.abort()
-  }, [accessToken, fallbackManifest, mountId, nodeId, previewKey, shareId])
+  }, [
+    accessToken, cacheKey, fallbackManifest, maxDownloads, mountAvailable, mountId, mountedSession,
+    nodeId, nodeVersion, previewKey, scope, shareId,
+  ])
 
   if (!source || !item || !fallbackManifest || !previewKey) return null
-  const current = preview?.key === previewKey ? preview : null
+  const current = preview?.scope === scope && preview.key === previewKey ? preview : null
   const extension = sharedExtensionOf(item.name).toUpperCase() || "文件"
+  const retry = () => {
+    if (cacheKey) scope.requests.delete(cacheKey)
+    setRefreshKey((value) => value + 1)
+  }
 
   return (
     <PreviewDialog
@@ -133,12 +167,12 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
       titleIcon={<FileGlyph item={{ kind: item.type, name: item.name }} size={20} />}
       manifest={current?.manifest ?? null}
       loading={!current}
-      error={current?.error}
+      error={current?.error?.message}
       inferredKind={fallbackManifest.kind}
       currentIndex={currentIndex}
       totalCount={totalCount}
       onClose={onClose}
-      onRetry={() => setRefreshKey((value) => value + 1)}
+      onRetry={current?.error?.retryable === false ? undefined : retry}
       onDownload={() => onDownload(item)}
       onPrev={onPrev}
       onNext={onNext}

@@ -111,6 +111,12 @@ function getUploadStatus(item: UploadQueueItem): Pick<TransferItem, "status" | "
 function mapUpload(item: UploadQueueItem, storageLabel?: string): TransferItem {
   const total = Math.max(item.totalBytes || item.fileSize || 0, 0)
   const loaded = item.status === "completed" ? total : Math.min(Math.max(item.uploadedBytes || 0, 0), total)
+  const relativeDirectory = item.relativePath?.split("/").slice(0, -1).join("/")
+  const rootTarget = !item.parentId || item.parentId.startsWith("root:")
+  const baseDirectory = item.targetDirectory ?? (rootTarget ? "/" : undefined)
+  const detail = baseDirectory && relativeDirectory
+    ? `${baseDirectory === "/" ? "" : baseDirectory}/${relativeDirectory}`
+    : baseDirectory ?? relativeDirectory
   return {
     id: `upload:${item.id}`,
     direction: "upload",
@@ -120,7 +126,7 @@ function mapUpload(item: UploadQueueItem, storageLabel?: string): TransferItem {
     total,
     progress: item.status === "completed" ? 100 : clampProgress(item.progress || 0),
     speed: item.speedBytesPerSecond ?? 0,
-    detail: item.relativePath || "当前目录",
+    detail,
     storageLabel,
     expiresAt: item.expiresAt,
     partSize: item.partSizeBytes,
@@ -259,6 +265,7 @@ export function TransferManager({
     uploadQueueOpen,
     setUploadQueueOpen,
     retryUpload,
+    retryFailedUploads,
     pauseUpload,
     resumeUpload,
     removeUpload,
@@ -286,6 +293,7 @@ export function TransferManager({
 
   const summary = React.useMemo(() => getSummary(items), [items])
   const hasTerminal = items.some(isTerminal)
+  const canRetryFailed = uploadQueue.filter((item) => item.status === "failed" && !item.requiresFileSelection).length > 1
 
   // 当外部显式打开队列时，取消关闭和最小化状态
   React.useEffect(() => {
@@ -561,6 +569,18 @@ export function TransferManager({
       {/* 任务列表与展开详情 */}
       {!minimized ? (
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-border/70">
+          {canRetryFailed ? (
+            <div className="flex justify-end px-3 py-1.5">
+              <button
+                type="button"
+                onClick={retryFailedUploads}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <RefreshCcw aria-hidden="true" className="size-3.5" />
+                重试失败上传
+              </button>
+            </div>
+          ) : null}
           {items.length ? (
             items.map((item) => (
               <TransferRow
@@ -846,7 +866,7 @@ function TransferDetails({
           ["任务状态", item.statusLabel],
           ["文件大小", sizeText],
           ["存储策略", item.storageLabel || "当前存储"],
-          ["存放位置", item.detail || "当前目录"],
+          ["存放位置", item.detail || "—"],
           [isHashing ? "校验进度" : "上传进度", progressText],
           [isHashing ? "校验速度" : "当前速率", item.speed > 0 ? `${formatBytes(item.speed)}/s` : "—"],
           ["预计剩余", remaining > 0 ? formatDuration(remaining) : "—"],

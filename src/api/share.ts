@@ -63,6 +63,7 @@ export type SharedNode = {
   name: string
   type: "folder" | "file"
   size: number
+  preview_version?: string | null
 }
 
 export async function createShare(token: string, body: ShareCreateInput) {
