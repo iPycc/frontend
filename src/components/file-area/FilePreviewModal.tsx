@@ -9,7 +9,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 
-import { buildPreviewImageUrl, getPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
+import { buildPreviewImageUrl, getImagePreviewManifest, getPreviewManifest, preparePreview, type PreviewManifest } from "@/api/files"
 import { PropertiesPanelContent } from "@/components/shared/PropertiesPanel"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import {
@@ -64,22 +64,22 @@ export function FilePreviewModal({
   onPrev,
   onNext,
 }: FilePreviewModalProps) {
-  const { currentUser } = useAppState()
+  const { authSession, currentUser } = useAppState()
   const canCopy = hasCapability(currentUser, "file.copy")
   const canShare = hasCapability(currentUser, "share.manage")
   const { bucketName, formatBytes } = usePropertiesPanel()
   const backendId = file?.backendId
+  const imageRevision = file?.mediaType === "image" ? file.updatedAt : undefined
   const [manifest, setManifest] = React.useState<PreviewManifest | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshKey, setRefreshKey] = React.useState(0)
-  const loadManifest = React.useCallback(async (signal?: AbortSignal) => {
-    if (!backendId) throw new Error("文件缺少后端标识")
-    return getPreviewManifest(backendId, signal)
-  }, [backendId])
+  const loadedRefreshKey = React.useRef(refreshKey)
 
   React.useEffect(() => {
-    if (!open || !file || !backendId) return
+    if (!open || !backendId) return
+    const forceRefresh = loadedRefreshKey.current !== refreshKey
+    loadedRefreshKey.current = refreshKey
     const controller = new AbortController()
     let pollTimer: number | undefined
     let pollCount = 0
@@ -87,7 +87,9 @@ export function FilePreviewModal({
 
     const refresh = async (prepare = true) => {
       try {
-        const next = await loadManifest(controller.signal)
+        const next = await (prepare && authSession && imageRevision
+          ? getImagePreviewManifest(backendId, imageRevision, authSession, forceRefresh)
+          : getPreviewManifest(backendId, controller.signal))
         if (stopped) return
         const shouldPrepare = next.requires_preparation && next.preparation_available && !next.assets.hls && !next.assets.audio
         setManifest(prepare && shouldPrepare ? { ...next, status: "processing" } : next)
@@ -119,7 +121,7 @@ export function FilePreviewModal({
       controller.abort()
       if (pollTimer) window.clearTimeout(pollTimer)
     }
-  }, [backendId, file, loadManifest, open, refreshKey])
+  }, [authSession, backendId, imageRevision, open, refreshKey])
 
   const manifestNodeId = manifest?.node_id
   React.useEffect(() => {
