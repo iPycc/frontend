@@ -148,6 +148,7 @@ export type PathPlanTask = {
   mount_id: number
   name: string | null
   template: string
+  rename_to?: string | null
   status: MountSyncTask["status"]
   scanned: number
   ready: number

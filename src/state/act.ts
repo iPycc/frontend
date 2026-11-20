@@ -192,6 +192,10 @@ export function useActions({
 
     const existing = snapshotRef.current.nodes.find((node) => node.id === nodeId)
     const renamed = await apiRenameNode(session.tokens.accessToken, backendId, { name: name.trim() })
+    if ("kind" in renamed) {
+      toast.info("改名已加入后台任务")
+      return
+    }
     if (!existing) {
       return
     }

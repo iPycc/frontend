@@ -134,7 +134,7 @@ export async function createFile(token: string, body: CreateFileInput) {
 }
 
 export async function renameNode(token: string, nodeId: number, body: RenameNodeInput) {
-  return requestJson<ExplorerNode>(`/explorer/node/${nodeId}`, {
+  return requestJson<ExplorerNode | { kind: "path_change"; task_id: string }>(`/explorer/node/${nodeId}`, {
     method: "PATCH",
     token,
     body,

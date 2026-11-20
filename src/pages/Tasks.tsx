@@ -118,7 +118,7 @@ export function Tasks() {
             const migration = task.migration
             const taskStatus = migration?.status ?? task.status
             const conflicts = migration?.conflicts ?? task.conflicts
-            const canStart = !migration && task.status === "completed" && task.ready > 0
+            const canStart = !task.rename_to && !migration && task.status === "completed" && task.ready > 0
             const control = (action: "pause" | "resume" | "cancel") =>
               migration ? migratePath(task, action) : controlPath(task, action)
             const canPause = taskStatus === "pending" || taskStatus === "running"
@@ -128,16 +128,23 @@ export function Tasks() {
               <div key={task.id} className="rounded-xl border border-border/60 bg-background p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-medium">{task.name} · {migration ? "历史路径迁移" : "路径预检查"}</div>
-                    <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">{migration
-                      ? <>已迁移 {migration.migrated} / {task.ready} 项，冲突 {conflicts} 项 · 源对象保留</>
-                      : <>已检查 {task.scanned} 项，待迁移 {task.ready} 项，冲突 {conflicts} 项 · 额外空间 {formatBytes(task.bytes_to_copy)}</>}
+                    <div className="break-all font-medium">
+                      {task.name} · {task.rename_to ? `改名为 ${task.rename_to}` : migration ? "历史路径迁移" : "路径预检查"}
                     </div>
+                    {task.rename_to ? null : (
+                      <>
+                        <div className="mt-1 break-all font-mono text-xs text-muted-foreground">{task.template}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">{migration
+                          ? <>已迁移 {migration.migrated} / {task.ready} 项，冲突 {conflicts} 项 · 源对象保留</>
+                          : <>已检查 {task.scanned} 项，待迁移 {task.ready} 项，冲突 {conflicts} 项 · 额外空间 {formatBytes(task.bytes_to_copy)}</>}
+                        </div>
+                      </>
+                    )}
                     {migration?.error || task.error ? <div className="mt-1 text-sm text-destructive">{migration?.error ?? task.error}</div> : null}
                   </div>
                   <div className="shrink-0 text-sm text-muted-foreground">
-                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: "已完成", failed: "失败", canceled: "已取消" }[taskStatus]}
+                    {{ pending: "等待中", running: "处理中", paused: "已暂停", completed: task.rename_to && conflicts > 0 ? "有冲突" : "已完成",
+                      failed: "失败", canceled: "已取消" }[taskStatus]}
                   </div>
                 </div>
                 {canStart || conflicts > 0 || canPause || canResume || canCancel ? (
