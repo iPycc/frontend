@@ -4,7 +4,7 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { IconArrowRight } from "@tabler/icons-react"
-import { MountStatus } from "@/components/storage/MountStatus"
+import { MountStatus, mountCorsLabels } from "@/components/storage/MountStatus"
 import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
 
 export function Mounts() {
@@ -15,7 +15,6 @@ export function Mounts() {
   return (
     <PageShell
       title="连接与挂载"
-      description="挂载列表、CORS 检测结果和存储策略参数从同一数据源派生。"
       action={
         <Button variant="outline" onClick={() => navigate("/settings/storage")}>
           去管理
@@ -33,7 +32,7 @@ export function Mounts() {
                   {getProviderDisplayName(bucket.driverId, bucket.provider)}
                 </div>
               </div>
-              <span className="text-sm text-muted-foreground">{bucket.corsStatus === "healthy" ? "CORS 正常" : "待处理"}</span>
+              <span className="text-sm text-muted-foreground">{mountCorsLabels[bucket.corsStatus]}</span>
             </div>
             <div className="mt-3 space-y-1 text-sm text-muted-foreground">
               <div>Bucket：{bucket.bucket || "local"}</div>

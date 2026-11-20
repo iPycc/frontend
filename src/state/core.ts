@@ -241,7 +241,7 @@ export const EMPTY_BUCKET: BucketMount = {
   syncStatus: "idle",
   syncedObjects: 0,
   createdAt: "",
-  corsStatus: "healthy",
+  corsStatus: "not-required",
   corsMessage: "",
   advancedMode: false,
   isLocal: true,
@@ -291,7 +291,7 @@ export function createPersistedBucketPreview(bucket: BucketMount): BucketMount {
     mountSlug: bucket.mountSlug,
     createdAt: bucket.createdAt,
     updatedAt: bucket.updatedAt,
-    corsStatus: bucket.corsStatus,
+    corsStatus: mountCorsStatus(bucket.storageType, bucket.corsStatus),
     corsMessage: bucket.corsMessage,
     advancedMode: bucket.advancedMode,
     isLocal: bucket.isLocal,
@@ -384,6 +384,14 @@ function normalizeStorageRoot(value: string) {
   return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`
 }
 
+function mountCorsStatus(storageType: BucketMount["storageType"], status: unknown): BucketMount["corsStatus"] {
+  if (status === "not-required" || storageType === "local") return "not-required"
+  if (status === "provider-managed" || storageType === "139" || storageType === "189" || storageType === "wo") {
+    return "provider-managed"
+  }
+  return status === "healthy" ? "healthy" : "warning"
+}
+
 function resolveMountStorageRoot(mount: ExplorerMount, storageType: ReturnType<typeof normalizeStorageType>) {
   const configuredRoot = typeof mount.extra?.storage_root === "string" ? normalizeStorageRoot(mount.extra.storage_root) : ""
   if (configuredRoot) {
@@ -447,7 +455,7 @@ export function mapMountToBucket(mount: ExplorerMount, user: AppUser | null, _ti
     mountSlug: mount.mount_slug,
     createdAt: normalizeDateTime(mount.created_at),
     updatedAt: normalizeDateTime(mount.updated_at),
-    corsStatus: extra.cors_status === "warning" ? "warning" : "healthy",
+    corsStatus: mountCorsStatus(storageType, extra.cors_status),
     corsMessage: storageRoot ? `已绑定目录：${storageRoot}` : "已连接真实存储",
     advancedMode: Boolean(extra.advanced_mode),
     isLocal: storageType === "local",

@@ -10,7 +10,7 @@ export function PageShell({
   children,
 }: {
   title: string
-  description: string
+  description?: string
   action?: ReactNode
   className?: string
   contentClassName?: string
@@ -21,7 +21,7 @@ export function PageShell({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-base font-semibold">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {action}
       </div>

@@ -7,7 +7,7 @@ import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { MountStatus } from "@/components/storage/MountStatus"
+import { MountStatus, mountCorsLabels } from "@/components/storage/MountStatus"
 import { getProviderDisplayName, ProviderIcon } from "@/components/storage/ProviderIcon"
 
 export function Buckets() {
@@ -18,7 +18,6 @@ export function Buckets() {
   return (
     <PageShell
       title="存储桶"
-      description="统一管理已连接的存储桶、挂载状态与 CORS 检测结果。"
       action={
         <Button onClick={() => navigate("/settings/storage")}>
           管理存储桶
@@ -43,6 +42,7 @@ export function Buckets() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {buckets.map((bucket, index) => {
             const healthy = bucket.corsStatus === "healthy"
+            const warning = bucket.corsStatus === "warning"
 
             return (
               <motion.div
@@ -59,13 +59,14 @@ export function Buckets() {
                   <span
                     className={cn(
                       "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                      healthy
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      healthy && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                      warning && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      !healthy && !warning && "bg-muted text-muted-foreground"
                     )}
                   >
-                    {healthy ? <IconCheck size={12} /> : <IconExclamationCircle size={12} />}
-                    {healthy ? "CORS 正常" : "待处理"}
+                    {healthy && <IconCheck size={12} />}
+                    {warning && <IconExclamationCircle size={12} />}
+                    {mountCorsLabels[bucket.corsStatus]}
                   </span>
                 </div>
 

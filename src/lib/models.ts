@@ -139,7 +139,7 @@ export interface BucketMount {
   mountSlug?: string
   createdAt: string
   updatedAt?: string
-  corsStatus: "healthy" | "warning"
+  corsStatus: "healthy" | "warning" | "provider-managed" | "not-required"
   corsMessage: string
   advancedMode: boolean
   isLocal: boolean
