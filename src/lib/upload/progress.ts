@@ -39,9 +39,7 @@ export function trackParts(
     const activeParts = inFlightByPart.size - addressByPart.size - awaitingByPart.size
     const waitingForAddress = activeParts === 0 && addressByPart.size > 0
     const awaitingConfirmation = activeParts === 0 && awaitingByPart.size > 0
-    const bytesPerSecond = activeParts > 0
-      ? samples.reduce((sum, sample) => sum + sample.bytes, 0) / 3
-      : 0
+    const bytesPerSecond = samples.reduce((sum, sample) => sum + sample.bytes, 0) / 3
     onUpdate({
       uploadedBytes,
       progress: totalBytes > 0 ? Math.min((uploadedBytes / totalBytes) * 100, 100) : 100,

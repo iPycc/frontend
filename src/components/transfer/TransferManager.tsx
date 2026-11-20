@@ -369,10 +369,10 @@ export function TransferManager({
     })
   }
 
-  const overallStatus: "active" | "failed" | "paused" | "completed" = summary.failed
-    ? "failed"
-    : summary.active
-      ? "active"
+  const overallStatus: "active" | "failed" | "paused" | "completed" = summary.active
+    ? "active"
+    : summary.failed
+      ? "failed"
       : summary.paused
         ? "paused"
         : "completed"
@@ -442,8 +442,7 @@ export function TransferManager({
         <div
           className={cn(
             "pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-300 ease-out",
-            getProgressFillClass(overallStatus, true),
-            summary.progress > 0 && summary.progress < 100 && "border-r border-primary/30"
+            getProgressFillClass(overallStatus, true)
           )}
           style={{ width: `${items.length ? summary.progress : 0}%` }}
           aria-hidden="true"
@@ -481,7 +480,7 @@ export function TransferManager({
               <span
                 className={cn(
                   "inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                  summary.failed
+                  overallStatus === "failed"
                     ? "bg-destructive/15 text-destructive"
                     : summary.paused && !summary.active
                       ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
@@ -687,25 +686,23 @@ function TransferRow({
         className="relative z-10 cursor-pointer px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
       >
         <div className="flex items-center gap-3">
-          {/* 文件图标与方向角标 */}
+          {/* 文件图标与下载方向角标 */}
           <span className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/90 ring-1 ring-border/70">
             <FileGlyph item={buildQueueFile(item.name)} size={19} />
-            <span
-              className={cn(
-                "absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-card ring-1 ring-border",
-                item.status === "failed"
-                  ? "text-destructive"
-                  : item.status === "completed"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-primary"
-              )}
-            >
-              {item.direction === "upload" ? (
-                <ArrowUpToLine className="size-2.5" />
-              ) : (
+            {item.direction === "download" ? (
+              <span
+                className={cn(
+                  "absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full bg-card ring-1 ring-border",
+                  item.status === "failed"
+                    ? "text-destructive"
+                    : item.status === "completed"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-primary"
+                )}
+              >
                 <ArrowDownToLine className="size-2.5" />
-              )}
-            </span>
+              </span>
+            ) : null}
           </span>
 
           {/* 文件名、状态、大小、速率、剩余时间汇总 */}
@@ -714,11 +711,6 @@ function TransferRow({
               <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={item.name}>
                 {item.name}
               </p>
-              {item.storageLabel || item.sourceLabel ? (
-                <span className="hidden shrink-0 rounded bg-background/80 px-1.5 py-0.5 text-[11px] text-muted-foreground ring-1 ring-border/60 sm:inline-block">
-                  {item.storageLabel || item.sourceLabel}
-                </span>
-              ) : null}
               <span
                 className={cn(
                   "shrink-0 text-right text-xs font-semibold tabular-nums",
