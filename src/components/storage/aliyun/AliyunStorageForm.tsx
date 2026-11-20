@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { FormCard, FormRow, objectStorageImportHint, StorageFormHeader } from "@/components/storage/shared"
+import { ObjectPathOptions } from "@/components/storage/ObjectPathOptions"
 import type { AliyunStorageDraft, StorageFormMode } from "@/components/storage/types"
 import { AliyunDomains } from "./AliyunDomains"
 
@@ -79,6 +80,8 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="managed">托管（推荐）</SelectItem><SelectItem value="mirror">镜像并导入已有对象</SelectItem></SelectContent>
           </Select>
         </FormRow>
+        <ObjectPathOptions draft={draft} readOnly={readonly}
+          onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)} />
         <FormRow label="只读挂载" hint="启用后禁止上传、重命名和删除。">
           <div className="flex min-h-10 items-center justify-between"><span className="text-sm text-muted-foreground">{draft.readOnly ? "只允许浏览与下载" : "允许正常读写"}</span><Switch checked={draft.readOnly} onCheckedChange={(value) => update("readOnly", value)} disabled={readonly} /></div>
         </FormRow>

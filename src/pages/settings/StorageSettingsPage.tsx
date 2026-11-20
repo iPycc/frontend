@@ -38,6 +38,7 @@ import {
   type MountDeleteMode,
 } from "@/components/storage/MountDeleteDialog"
 import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
+import { objectPathDraft, objectPathSettings } from "@/components/storage/object-path"
 import {
   buildAliyunMountInput,
   buildAliyunPolicyInput,
@@ -341,7 +342,7 @@ export function StorageSettingsPage() {
         readOnly: bucket.readOnly,
         importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
-        objectKeyStyle: bucket.objectKeyStyle,
+        ...objectPathDraft(bucket),
         accessPermission: "private" as const,
         accessDomain: bucket.endpoint ?? "",
         downloadDomainType: bucket.extra?.download_domain_type === "origin" || bucket.extra?.download_domain_type === "cdn" ? bucket.extra.download_domain_type : "default",
@@ -374,7 +375,7 @@ export function StorageSettingsPage() {
         readOnly: bucket.readOnly,
         importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
-        objectKeyStyle: bucket.objectKeyStyle,
+        ...objectPathDraft(bucket),
         accessKeyId: "",
         accessKeySecret: "",
         securityToken: "",
@@ -584,7 +585,7 @@ export function StorageSettingsPage() {
             mount_mode: tencentDraft.mountMode,
             read_only: tencentDraft.readOnly,
             import_delete_source: tencentDraft.importDeleteSource,
-            object_key_style: tencentDraft.objectKeyStyle,
+            ...objectPathSettings(tencentDraft),
           },
         }
 
@@ -637,7 +638,7 @@ export function StorageSettingsPage() {
             mount_mode: aliyunDraft.mountMode,
             read_only: aliyunDraft.readOnly,
             import_delete_source: aliyunDraft.importDeleteSource,
-            object_key_style: aliyunDraft.objectKeyStyle,
+            ...objectPathSettings(aliyunDraft),
           },
         }
         await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)

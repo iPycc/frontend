@@ -3,6 +3,7 @@
 export type DriveStrategyKey = "139" | "189" | "wo"
 export type StorageStrategyKey = "tencent" | "local" | "aliyun" | DriveStrategyKey
 export type StorageFormMode = "create" | "edit" | "readonly"
+export type ObjectPathMode = "readable" | "opaque" | "original" | "custom"
 
 export interface TencentStorageDraft {
   name: string
@@ -13,7 +14,8 @@ export interface TencentStorageDraft {
   readOnly: boolean
   importDeleteSource: boolean
   legacyPrefixedKeys: boolean
-  objectKeyStyle: "readable" | "opaque"
+  objectKeyStyle: ObjectPathMode
+  objectKeyTemplate?: string
   accessPermission: "private" | "public-read"
   downloadDomainType: "default" | "origin" | "cdn"
   downloadDomain: string
@@ -49,7 +51,8 @@ export interface AliyunStorageDraft {
   readOnly: boolean
   importDeleteSource: boolean
   legacyPrefixedKeys: boolean
-  objectKeyStyle: "readable" | "opaque"
+  objectKeyStyle: ObjectPathMode
+  objectKeyTemplate?: string
   accessKeyId: string
   accessKeySecret: string
   securityToken: string
