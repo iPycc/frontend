@@ -147,7 +147,7 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
           <IconDeviceFloppy />
         </Button>
       ) : null}
-      details={(close) => (
+      details={(close, metadata) => (
         <div className="flex h-full min-h-0 flex-col">
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
             <h2 className="text-sm font-semibold">文件属性</h2>
@@ -174,6 +174,14 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
                 <dd className="text-foreground">{formatBytes(item.size)}</dd>
               </div>
             </div>
+            {current?.manifest?.kind === "image"
+              && typeof metadata?.width === "number" && typeof metadata.height === "number"
+              && metadata.width > 0 && metadata.height > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">图片尺寸</dt>
+                  <dd className="text-foreground">{metadata.width} × {metadata.height}</dd>
+                </div>
+              ) : null}
           </dl>
           {detailsFooter ? <div className="shrink-0 border-t border-border p-5">{detailsFooter}</div> : null}
         </div>

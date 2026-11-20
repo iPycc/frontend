@@ -21,17 +21,18 @@ import { PreviewSkeleton } from "./PreviewSkeleton"
 type ImagePreviewProps = {
   manifest: PreviewManifest
   toolbarTarget?: HTMLElement | null
+  onImageSize?: (width: number, height: number) => void
 }
 
 const controlClass = "size-8 sm:size-9 text-foreground hover:bg-accent"
 
-export function ImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
+export function ImagePreview({ manifest, toolbarTarget, onImageSize }: ImagePreviewProps) {
   return manifest.assets.dzi
     ? <TiledImagePreview manifest={manifest} toolbarTarget={toolbarTarget} />
-    : <StandardImagePreview manifest={manifest} toolbarTarget={toolbarTarget} />
+    : <StandardImagePreview manifest={manifest} toolbarTarget={toolbarTarget} onImageSize={onImageSize} />
 }
 
-function StandardImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
+function StandardImagePreview({ manifest, toolbarTarget, onImageSize }: ImagePreviewProps) {
   const transformRef = React.useRef<ReactZoomPanPinchContentRef>(null)
   const imageRef = React.useRef<HTMLImageElement>(null)
   const [rotation, setRotation] = React.useState(0)
@@ -114,7 +115,12 @@ function StandardImagePreview({ manifest, toolbarTarget }: ImagePreviewProps) {
                 decoding="async"
                 fetchPriority="high"
                 onLoad={(event) => {
-                  if (event.currentTarget.naturalWidth > 0) setLoaded(true)
+                  const { naturalWidth, naturalHeight } = event.currentTarget
+                  if (naturalWidth <= 0) return
+                  setLoaded(true)
+                  if (naturalHeight > 0 && (imageWidth === undefined || imageHeight === undefined)) {
+                    onImageSize?.(imageWidth ?? naturalWidth, imageHeight ?? naturalHeight)
+                  }
                 }}
                 onError={() => {
                   if (sourceIndex + 1 < sources.length) {

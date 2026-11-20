@@ -37,7 +37,7 @@ export type PreviewDialogProps = {
   onNext?: () => void
   leadingActions?: React.ReactNode
   moreActions?: React.ReactNode
-  details?: (close: () => void) => React.ReactNode
+  details?: (close: () => void, metadata?: PreviewManifest["metadata"]) => React.ReactNode
 }
 
 export const previewIconButtonClass = "size-8 text-muted-foreground hover:bg-accent hover:text-foreground sm:size-9"
@@ -65,11 +65,13 @@ export function PreviewDialog({
   const [imageToolbarTarget, setImageToolbarTarget] = React.useState<HTMLDivElement | null>(null)
   const [showDetails, setShowDetails] = React.useState(false)
   const [displayMode, setDisplayMode] = React.useState<"window" | "fullscreen" | "minimized">("window")
+  const [imageSize, setImageSize] = React.useState<{ manifest: PreviewManifest; width: number; height: number } | null>(null)
 
   React.useEffect(() => {
     if (!open) {
       setShowDetails(false)
       setDisplayMode("window")
+      setImageSize(null)
     }
   }, [open])
 
@@ -87,7 +89,10 @@ export function PreviewDialog({
   }, [onNext, onPrev, open, showDetails, totalCount])
 
   const minimized = displayMode === "minimized" && manifest?.kind === "audio"
-  const detailsContent = details?.(() => setShowDetails(false))
+  const metadata = manifest && imageSize?.manifest === manifest
+    ? { ...manifest.metadata, width: imageSize.width, height: imageSize.height }
+    : manifest?.metadata
+  const detailsContent = details?.(() => setShowDetails(false), metadata)
 
   return (
     <Dialog open={open} modal={!minimized} onOpenChange={(value) => !value && onClose()}>
@@ -192,7 +197,13 @@ export function PreviewDialog({
                 ) : null}
               </div>
             ) : manifest ? (
-              <PreviewRenderer manifest={manifest} onRetry={onRetry} compactAudio={minimized} imageToolbarTarget={imageToolbarTarget} />
+              <PreviewRenderer
+                manifest={manifest}
+                onRetry={onRetry}
+                compactAudio={minimized}
+                imageToolbarTarget={imageToolbarTarget}
+                onImageSize={(width, height) => setImageSize({ manifest, width, height })}
+              />
             ) : null}
           </main>
         </div>

@@ -174,12 +174,12 @@ export function FilePreviewModal({
       onDownload={() => onDownload([file.id])}
       onPrev={onPrev}
       onNext={onNext}
-      details={(close) => (
+      details={(close, metadata) => (
         <PropertiesPanelContent
           node={file}
           bucketName={bucketName}
           formatBytes={formatBytes}
-          previewMetadata={manifest?.metadata}
+          previewMetadata={metadata}
           onClose={close}
           embedded
         />
