@@ -816,7 +816,6 @@ export function AppFiles() {
 
         {previewFile ? (
           <FilePreviewModal
-            key={previewFile.id}
             open
             file={previewFile}
             preloadFiles={adjacentPreviewFiles}
