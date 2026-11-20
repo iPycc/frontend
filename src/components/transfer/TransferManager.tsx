@@ -259,6 +259,7 @@ export function TransferManager({
     uploadQueueOpen,
     setUploadQueueOpen,
     retryUpload,
+    retryFailedUploads,
     pauseUpload,
     resumeUpload,
     removeUpload,
@@ -286,6 +287,7 @@ export function TransferManager({
 
   const summary = React.useMemo(() => getSummary(items), [items])
   const hasTerminal = items.some(isTerminal)
+  const canRetryFailed = uploadQueue.filter((item) => item.status === "failed" && !item.requiresFileSelection).length > 1
 
   // 当外部显式打开队列时，取消关闭和最小化状态
   React.useEffect(() => {
@@ -561,6 +563,18 @@ export function TransferManager({
       {/* 任务列表与展开详情 */}
       {!minimized ? (
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto divide-y divide-border/70">
+          {canRetryFailed ? (
+            <div className="flex justify-end px-3 py-1.5">
+              <button
+                type="button"
+                onClick={retryFailedUploads}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <RefreshCcw aria-hidden="true" className="size-3.5" />
+                重试失败上传
+              </button>
+            </div>
+          ) : null}
           {items.length ? (
             items.map((item) => (
               <TransferRow

@@ -30,6 +30,7 @@ export type UploadStateValue = {
   uploadQueueOpen: boolean
   setUploadQueueOpen: (open: boolean) => void
   retryUpload: (id: string) => void
+  retryFailedUploads: () => void
   pauseUpload: (id: string) => void
   resumeUpload: (id: string) => void
   removeUpload: (id: string) => void
@@ -472,6 +473,14 @@ export function UploadProvider({
 
   const retryUpload = resumeUpload
 
+  const retryFailedUploads = React.useCallback(() => {
+    for (const item of uploadQueueRef.current) {
+      if (item.status === "failed" && uploadFilesRef.current.has(item.id)) {
+        resumeUpload(item.id)
+      }
+    }
+  }, [resumeUpload])
+
   const handleResumeInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const id = pendingResumeIdRef.current
     const file = event.target.files?.[0]
@@ -602,6 +611,7 @@ export function UploadProvider({
       uploadQueueOpen,
       setUploadQueueOpen,
       retryUpload,
+      retryFailedUploads,
       pauseUpload,
       resumeUpload,
       removeUpload,
@@ -616,6 +626,7 @@ export function UploadProvider({
       requestFolderUpload,
       requestUpload,
       retryUpload,
+      retryFailedUploads,
       pauseUpload,
       resumeUpload,
       queueUploadFiles,
