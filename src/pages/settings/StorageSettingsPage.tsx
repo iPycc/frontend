@@ -223,6 +223,7 @@ export function StorageSettingsPage() {
   }
 
   const finishCloudMount = async (accessToken: string, mount: UserMountResource["mount"], autoConfigure: boolean) => {
+    const importTask = mount.mode === "mirror" ? queueImportAfterMount(accessToken, mount.id) : undefined
     let autoConfigFailed = false
     if (autoConfigure) {
       try {
@@ -232,25 +233,28 @@ export function StorageSettingsPage() {
       }
     }
 
-    const { status } = await checkUserMountCors(accessToken, mount.id, window.location.origin)
+    void checkUserMountCors(accessToken, mount.id, window.location.origin)
       .catch(() => ({ status: "unavailable" as const }))
-    const descriptions: Record<UploadCorsStatus, string> = {
-      ready: "当前站点的单次和分片直传预检通过。",
-      same_origin: "直传地址与当前站点同源。",
-      read_only: "当前挂载为只读。",
-      blocked: "直传预检未通过。请检查桶的跨域来源、PUT 方法和请求头。",
-      missing_etag: "分片直传缺少可读取的 ETag。请在桶的跨域响应头中暴露 ETag。",
-      unavailable: "暂时无法确认直传跨域配置。",
-    }
-    const description = autoConfigFailed ? `自动配置未完成。${descriptions[status]}` : descriptions[status]
-    const corsReady = status === "ready" || status === "same_origin" || status === "read_only"
-    if (corsReady && !autoConfigFailed) {
-      toast.success("存储已连接", { description })
-    } else {
-      toast.warning("存储已连接", { description })
-    }
+      .then(({ status }) => {
+        const descriptions: Record<UploadCorsStatus, string> = {
+          ready: "当前站点的单次和分片直传预检通过。",
+          same_origin: "直传地址与当前站点同源。",
+          read_only: "当前挂载为只读。",
+          blocked: "直传预检未通过。请检查桶的跨域来源、PUT 方法和请求头。",
+          missing_etag: "分片直传缺少可读取的 ETag。请在桶的跨域响应头中暴露 ETag。",
+          unavailable: "暂时无法确认直传跨域配置。",
+        }
+        const description = autoConfigFailed ? `自动配置未完成。${descriptions[status]}` : descriptions[status]
+        const corsReady = status === "ready" || status === "same_origin" || status === "read_only"
+        const title = `「${mount.name}」已连接`
+        if (corsReady && !autoConfigFailed) {
+          toast.success(title, { description })
+        } else {
+          toast.warning(title, { description })
+        }
+      })
 
-    if (mount.mode === "mirror") await queueImportAfterMount(accessToken, mount.id)
+    await importTask
     await reloadWorkspace()
     setView({ type: "list" })
   }
