@@ -193,15 +193,6 @@ export interface ShareRecord {
   itemCount?: number
 }
 
-export interface OfflineTask {
-  id: string
-  name: string
-  url: string
-  status: string
-  progress: number
-  updatedAt: string
-}
-
 export interface UploadQueueItem {
   id: string
   fileName: string
@@ -244,7 +235,6 @@ export interface AppSnapshot {
   activeBucketId: string
   nodes: FileNode[]
   shares: ShareRecord[]
-  offlineTasks: OfflineTask[]
   clipboard: ClipboardState | null
   fileContents: Record<string, string>
 }
@@ -286,7 +276,6 @@ export const defaultAppSnapshot: AppSnapshot = {
   activeBucketId: "",
   nodes: [],
   shares: [],
-  offlineTasks: [],
   clipboard: null,
   fileContents: {},
 }

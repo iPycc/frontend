@@ -6,7 +6,7 @@ import {
   type UploadConflictInfo,
 } from "@/components/file-area/UploadConflictDialog"
 import { abortUpload } from "@/api/uploads"
-import { createId, type AuthSession, type BucketMount, type FileNode, type OfflineTask, type UploadQueueItem } from "@/lib/models"
+import { createId, type AuthSession, type BucketMount, type FileNode, type UploadQueueItem } from "@/lib/models"
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
 import { fingerprintFile } from "@/lib/upload/hash"
@@ -26,7 +26,6 @@ type UploadTarget = {
 }
 
 export type UploadStateValue = {
-  offlineTasks: OfflineTask[]
   uploadQueue: UploadQueueItem[]
   uploadQueueOpen: boolean
   setUploadQueueOpen: (open: boolean) => void
@@ -597,33 +596,8 @@ export function UploadProvider({
     )
   }, [abortSavedUpload, mutateUploadQueue])
 
-  const offlineTasks = React.useMemo<OfflineTask[]>(
-    () =>
-      uploadQueue.map((item) => ({
-        id: item.id,
-        name: item.fileName,
-        url: "",
-        status:
-          item.status === "completed"
-            ? "已完成"
-            : item.status === "failed"
-              ? "失败"
-              : item.status === "paused"
-                ? "已暂停"
-              : item.status === "canceled"
-                ? "已取消"
-                : item.status === "processing"
-                  ? "处理中"
-                  : "上传中",
-        progress: Math.round(item.progress),
-        updatedAt: item.createdAt,
-      })),
-    [uploadQueue]
-  )
-
   const value = React.useMemo<UploadStateValue>(
     () => ({
-      offlineTasks,
       uploadQueue,
       uploadQueueOpen,
       setUploadQueueOpen,
@@ -638,7 +612,6 @@ export function UploadProvider({
     }),
     [
       clearCompletedUploads,
-      offlineTasks,
       removeUpload,
       requestFolderUpload,
       requestUpload,

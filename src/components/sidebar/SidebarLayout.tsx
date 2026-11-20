@@ -5,7 +5,6 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconCloudDownload,
   IconFileText,
   IconHome,
   IconLink,
@@ -44,7 +43,6 @@ const utilityPaths = [
   "/app/shares",
   "/app/mounts",
   "/app/tasks",
-  "/app/offline",
 ]
 
 export function SidebarLayout() {
@@ -302,13 +300,6 @@ export function SidebarLayout() {
             >
               <IconLink size={17} />
               <span>存储桶</span>
-            </SidebarNavItem>
-            <SidebarNavItem
-              to="/app/offline"
-              active={location.pathname === "/app/offline"}
-            >
-              <IconCloudDownload size={17} />
-              <span>离线下载</span>
             </SidebarNavItem>
           </section>
           </> : null}
