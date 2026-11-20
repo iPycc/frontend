@@ -707,25 +707,9 @@ function TransferRow({
 
           {/* 文件名、状态、大小、速率、剩余时间汇总 */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={item.name}>
-                {item.name}
-              </p>
-              <span
-                className={cn(
-                  "shrink-0 text-right text-xs font-semibold tabular-nums",
-                  item.status === "failed"
-                    ? "text-destructive"
-                    : item.status === "completed"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : item.status === "paused"
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-foreground/85"
-                )}
-              >
-                {item.progress === null ? "—" : `${Math.round(item.progress)}%`}
-              </span>
-            </div>
+            <p className="truncate text-sm font-medium text-foreground" title={item.name}>
+              {item.name}
+            </p>
 
             <div
               className={cn(
@@ -753,6 +737,21 @@ function TransferRow({
               ) : null}
             </div>
           </div>
+
+          <span
+            className={cn(
+              "shrink-0 text-right text-xs font-semibold tabular-nums",
+              item.status === "failed"
+                ? "text-destructive"
+                : item.status === "completed"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : item.status === "paused"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-foreground/85"
+            )}
+          >
+            {item.progress === null ? "—" : `${Math.round(item.progress)}%`}
+          </span>
 
           {/* 右侧控制按钮与详情展开指示 */}
           <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
