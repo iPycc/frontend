@@ -97,6 +97,17 @@ export function useUploadRun({
       const throwIfAborted = () => {
         if (controller.signal.aborted) throw new DOMException("aborted", "AbortError")
       }
+      const completeSession = (sessionId: string, parts: Parameters<typeof completeUpload>[2]) =>
+        retryRateLimited(
+          () => uploadApiSchedulerRef.current.run(
+            () => completeUpload(getAccessToken(), sessionId, parts),
+            controller.signal
+          ),
+          controller.signal
+        )
+      const isPendingPart = (etag?: string | null) => Boolean(
+        etag?.startsWith("pending:") || (bucket.driverId === "drive_wo" && etag?.startsWith("part:"))
+      )
 
       let sessionId = getUploadQueueItem(id)?.sessionId
       let stopHeartbeat: (() => void) | undefined
@@ -169,7 +180,7 @@ export function useUploadRun({
         let serverParts: Array<{ part_number: number; etag?: string | null; size: number }> = []
         if (sessionId) {
           try {
-            const existing = await retryRateLimited(
+            let existing = await retryRateLimited(
               () => uploadApiSchedulerRef.current.run(
                 () => getUploadSession(getAccessToken(), sessionId!, controller.signal),
                 controller.signal
@@ -184,6 +195,32 @@ export function useUploadRun({
               (existing.provider_checksum && providerChecksum && existing.provider_checksum !== providerChecksum)
             ) {
               throw new Error("原上传会话与所选文件不匹配")
+            }
+            if (bucket.driverId === "drive_wo" && existing.state === "failed") {
+              const pending = existing.parts.filter((part) => isPendingPart(part.etag)).length
+              if (pending) {
+                const oldSessionId = existing.id
+                uploadCommitIdsRef.current.add(id)
+                updateUploadQueueItem(id, {
+                  status: "processing",
+                  speedText: `待云盘确认 ${pending} 个分片`,
+                })
+                try {
+                  existing = await completeSession(oldSessionId, [])
+                } catch (error) {
+                  if (!(error instanceof ApiError) || error.status !== 409 ||
+                      !error.payload || typeof error.payload !== "object" ||
+                      !("code" in error.payload) || error.payload.code !== "wo_upload_unconfirmed") {
+                    throw error
+                  }
+                  existing = await uploadApiSchedulerRef.current.run(
+                    () => abortUpload(getAccessToken(), oldSessionId, "wo_upload_unconfirmed"),
+                    controller.signal
+                  )
+                } finally {
+                  uploadCommitIdsRef.current.delete(id)
+                }
+              }
             }
             if (existing.state === "completed") {
               updateUploadQueueItem(id, {
@@ -224,6 +261,7 @@ export function useUploadRun({
           sessionId = undefined
           updateUploadQueueItem(id, {
             sessionId: undefined,
+            status: "preparing",
             progress: 0,
             uploadedBytes: 0,
             progressStage: undefined,
@@ -328,8 +366,6 @@ export function useUploadRun({
             })
           }
         }
-        const isPendingPart = (etag: string) => etag.startsWith("pending:") ||
-          (bucket.driverId === "drive_wo" && etag.startsWith("part:"))
         const pendingCount = () => Array.from(completedParts.values()).filter((part) => isPendingPart(part.etag)).length
         const resumedBytes = Array.from(completedParts.values()).reduce(
           (sum, part) => sum + (isPendingPart(part.etag) ? 0 : part.size), 0
@@ -568,13 +604,7 @@ export function useUploadRun({
           speedBytesPerSecond: 0,
           speedText: pendingCount() ? `待云盘确认 ${pendingCount()} / ${partCount} 个分片` : "处理中...",
         })
-        await retryRateLimited(
-          () => uploadApiSchedulerRef.current.run(
-            () => completeUpload(getAccessToken(), activeSessionId, completionParts),
-            controller.signal
-          ),
-          controller.signal
-        )
+        await completeSession(activeSessionId, completionParts)
         updateUploadQueueItem(id, {
           status: "completed",
           progress: 100,
