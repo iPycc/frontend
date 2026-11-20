@@ -26,10 +26,10 @@ interface FileCardProps extends ItemHandlers {
 }
 
 function canShowThumbnail(item: FileNode) {
-  if (item.kind === "folder") return false
+  const ext = item.ext?.toLowerCase() ?? ""
+  if (item.kind === "folder" || ext === "svg") return false
   const mt = item.mediaType
   if (mt === "image" || mt === "video" || mt === "audio" || mt === "document" || mt === "code") return true
-  const ext = item.ext?.toLowerCase() ?? ""
   return ["txt", "md", "log", "csv", "json", "xml", "yaml", "yml", "ini", "conf"].includes(ext)
 }
 

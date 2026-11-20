@@ -129,7 +129,7 @@ export function FilePreviewModal({
     const requested = new Set([backendId])
     for (const candidate of preloadFiles) {
       const nodeId = candidate.backendId
-      if (!nodeId || candidate.mediaType !== "image" || requested.has(nodeId)) continue
+      if (!nodeId || candidate.mediaType !== "image" || candidate.ext?.toLowerCase() === "svg" || requested.has(nodeId)) continue
       requested.add(nodeId)
       const image = new Image()
       image.fetchPriority = "low"
