@@ -6,7 +6,7 @@ import {
   type UploadConflictInfo,
 } from "@/components/file-area/UploadConflictDialog"
 import { abortUpload } from "@/api/uploads"
-import { createId, type AuthSession, type BucketMount, type FileNode, type UploadQueueItem } from "@/lib/models"
+import { createId, formatBytes, type AuthSession, type BucketMount, type FileNode, type UploadQueueItem } from "@/lib/models"
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
 import { fingerprintFile } from "@/lib/upload/hash"
@@ -372,6 +372,16 @@ export function UploadProvider({
       uniqueSelections.push(renamedSelection)
     }
     resolvedSelections = uniqueSelections
+
+    if (bucket.quota && resolvedSelections.length) {
+      const remaining = Math.max(0, bucket.quota.total - bucket.quota.used)
+      const selectedBytes = resolvedSelections.reduce((total, { file }) => total + file.size, 0)
+      if (selectedBytes > remaining) {
+        toast.warning(`所选文件超过「${bucket.name}」最近记录的剩余空间`, {
+          description: `当前估计可用 ${remaining ? formatBytes(remaining) : "0 B"}，上传时以服务器校验为准。`,
+        })
+      }
+    }
 
     const nextItems = resolvedSelections.map<UploadQueueItem>(({ file, relativePath }) => {
       const id = createId("upload")
