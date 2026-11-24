@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { IconSearch, IconFolder, IconFile } from "@tabler/icons-react"
+import { IconSearch, IconFolder, IconFile, IconShare, IconUpload } from "@tabler/icons-react"
 import { useAppState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,6 +11,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { searchNodes, type ExplorerNodeSearchResult } from "@/api/files"
+import { useUploadState } from "@/lib/upload/provider"
 
 export function SearchBar() {
   const [open, setOpen] = React.useState(false)
@@ -22,12 +23,17 @@ export function SearchBar() {
   const searchInput = React.useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const { authSession, activeBucket } = useAppState()
+  const { requestUpload } = useUploadState()
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         setOpen((o) => !o)
+      } else if (e.key === "/" && !e.altKey && !e.ctrlKey && !e.metaKey &&
+        !(e.target instanceof HTMLElement && (e.target.isContentEditable || e.target.closest("input, textarea, [role='dialog']")))) {
+        e.preventDefault()
+        setOpen(true)
       }
     }
     document.addEventListener("keydown", down)
@@ -91,7 +97,7 @@ export function SearchBar() {
           size={20}
         />
         <span className="flex h-full min-w-0 flex-1 items-center justify-start px-3 text-left text-sm text-muted-foreground">
-          按下 Ctrl K 进行检索...
+          搜索文件或文件夹
         </span>
         <div className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
           <span className="rounded-md border border-border bg-muted px-1.5 py-0.5">
@@ -101,6 +107,14 @@ export function SearchBar() {
             K
           </span>
         </div>
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="搜索文件"
+        className="flex size-10 shrink-0 items-center justify-center rounded-lg text-foreground md:hidden"
+      >
+        <IconSearch size={20} />
       </button>
 
       <CommandDialog
@@ -121,6 +135,14 @@ export function SearchBar() {
           onValueChange={setQuery}
         />
         <CommandList className="max-h-[360px]">
+          {!query.trim() ? (
+            <CommandGroup heading="操作">
+              <CommandItem onSelect={() => { setOpen(false); navigate("/app") }}><IconFolder />我的文件</CommandItem>
+              <CommandItem onSelect={() => { setOpen(false); navigate("/share") }}><IconShare />我的分享</CommandItem>
+              <CommandItem onSelect={() => { setOpen(false); navigate("/app/mounts") }}><IconFolder />存储桶</CommandItem>
+              <CommandItem onSelect={() => { setOpen(false); requestUpload() }}><IconUpload />上传文件</CommandItem>
+            </CommandGroup>
+          ) : null}
           {results.length > 0 && (
             <CommandGroup heading="搜索结果">
               {results.map((result) => {

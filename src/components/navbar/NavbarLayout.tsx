@@ -1,4 +1,4 @@
-import { IconSearch, IconSettings } from "@tabler/icons-react"
+import { IconSettings } from "@tabler/icons-react"
 import { Menu } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
@@ -34,12 +34,6 @@ export function NavbarLayout() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        <button
-          className="flex h-9 w-9 items-center justify-center rounded-full text-[#666666] transition-colors hover:bg-white hover:text-[#2b2b2b] md:hidden dark:text-[#b7b7b7] dark:hover:bg-[#1d1d1d] dark:hover:text-[#f1f1f1]"
-          aria-label="search"
-        >
-          <IconSearch size={20} />
-        </button>
         <ThemeToggleButton iconSize={23} />
         <button
           onClick={() => navigate("/settings/profile")}
