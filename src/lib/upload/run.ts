@@ -14,6 +14,7 @@ import {
 } from "@/api/uploads"
 import { ApiError } from "@/api/client"
 import {
+  createId,
   formatBytes,
   type AuthSession,
   type BucketMount,
@@ -181,6 +182,7 @@ export function useUploadRun({
         })
 
         let plan: UploadSessionPlan | undefined
+        let createKey = queueItem?.createKey ?? id
         let serverParts: Array<{ part_number: number; etag?: string | null; size: number }> = []
         if (sessionId) {
           try {
@@ -250,6 +252,10 @@ export function useUploadRun({
             if (existing.state === "aborting" || existing.state === "completing") {
               throw new Error(existing.state === "aborting" ? "上传任务正在取消" : "上传任务正在服务端完成，请稍后再试")
             }
+            if (existing.state === "aborted" || existing.state === "expired") {
+              createKey = createId("upload")
+              updateUploadQueueItem(id, { createKey })
+            }
             if (existing.state !== "aborted" && existing.state !== "expired") {
               plan = {
                 session_id: existing.id,
@@ -267,6 +273,8 @@ export function useUploadRun({
             }
           } catch (error) {
             if (!(error instanceof ApiError) || error.status !== 404) throw error
+            createKey = createId("upload")
+            updateUploadQueueItem(id, { createKey })
           }
         }
 
@@ -292,6 +300,7 @@ export function useUploadRun({
                 size: saved.file.size,
                 content_type: saved.file.type || "application/octet-stream",
                 mode: "auto",
+                idempotency_key: createKey,
               }),
               controller.signal
             ),
