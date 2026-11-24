@@ -165,11 +165,12 @@ export function listNodeActivity(nodeId: number) {
   return requestJson<NodeActivity[]>(`/explorer/node/${nodeId}/activity`)
 }
 
-export async function deleteNodes(token: string, body: DeleteNodesInput) {
+export async function deleteNodes(token: string, body: DeleteNodesInput, idempotencyKey?: string) {
   return requestJson<Record<string, unknown>>("/explorer/node", {
     method: "DELETE",
     token,
     body,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   })
 }
 

@@ -73,6 +73,7 @@ export type DeleteNodesInput = {
 export type TransferNodesInput = {
   node_ids: number[]
   target_parent_id?: number | null
+  on_conflict?: "error" | "rename" | "replace" | "skip"
 }
 
 export type RestoreNodesInput = {
