@@ -1,6 +1,6 @@
 # Cloudrave Frontend
 
-Cloudrave Web 前端（v1.0.0-beta.4），提供文件管理、在线预览、分享、账号安全和系统设置界面。
+Cloudrave Web 前端（v1.0.0-beta.5），提供文件管理、在线预览、分享、账号安全和系统设置界面。
 
 ## 支持功能
 
