@@ -28,9 +28,13 @@ function formatBytes(size = 0) {
 export function UploadConflictDialog({
   conflict,
   onResolve,
+  action = "upload",
+  replaceAllowed = true,
 }: {
   conflict: UploadConflictInfo | null
   onResolve: (choice: UploadConflictChoice) => void
+  action?: "upload" | "move"
+  replaceAllowed?: boolean
 }) {
   const { settings } = useSettingsState()
   return (
@@ -42,7 +46,7 @@ export function UploadConflictDialog({
             <DialogTitle>目标位置已有同名{conflict?.kind === "folder" ? "文件夹" : "文件"}</DialogTitle>
           </div>
           <DialogDescription>
-            选择如何处理“{conflict?.name}”。保留两者会自动为新项目添加序号；替换会永久删除当前项目。
+            选择如何处理“{conflict?.name}”。保留两者会自动添加序号{replaceAllowed ? "；替换会永久删除当前项目" : ""}。
           </DialogDescription>
         </DialogHeader>
 
@@ -56,7 +60,7 @@ export function UploadConflictDialog({
               </span>
               <span className="flex min-w-0 items-center gap-2">
                 {conflict.kind === "folder" ? <Folder className="shrink-0 text-primary" /> : <File className="shrink-0" />}
-                <span className="truncate">即将上传</span>
+                <span className="truncate">即将{action === "move" ? "移动" : "上传"}</span>
               </span>
             </div>
             <Separator />
@@ -83,7 +87,7 @@ export function UploadConflictDialog({
         <DialogFooter className="sm:justify-between">
           <Button variant="ghost" onClick={() => onResolve("skip")}>跳过</Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button variant="destructive" onClick={() => onResolve("replace")}>永久替换</Button>
+            {replaceAllowed ? <Button variant="destructive" onClick={() => onResolve("replace")}>永久替换</Button> : null}
             <Button onClick={() => onResolve("rename")}>保留两者</Button>
           </div>
         </DialogFooter>

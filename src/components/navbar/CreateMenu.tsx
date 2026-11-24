@@ -8,6 +8,7 @@ import { requestInlineFolderCreate } from "@/lib/file-area-events"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
 import { useIsMobile } from "@/hooks/use-mobile"
+import type { MountHealth } from "@/api/storage"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -23,7 +24,8 @@ export function CreateMenu() {
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
-  const { createFile, getFolderPathId } = useAppState()
+  const { createFile, getFolderPathId, activeBucket } = useAppState()
+  const canUpload = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.upload !== false
   const { requestUpload, requestFolderUpload } = useUploadState()
   const [createFileType, setCreateFileType] = useState<NewTextFileType | null>(null)
 
@@ -54,7 +56,7 @@ export function CreateMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="inline-flex h-11 shrink-0 items-center gap-3 rounded-lg bg-primary px-4 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
+        <DropdownMenuTrigger aria-label="新建或上传" className="inline-flex h-11 shrink-0 items-center gap-3 rounded-lg bg-primary px-4 text-sm text-primary-foreground shadow-[0_10px_20px_rgba(30,167,255,0.18)] transition-colors hover:bg-primary/90">
           <IconPlus size={18} />
           {!isMobile ? "新建" : null}
         </DropdownMenuTrigger>
@@ -72,11 +74,11 @@ export function CreateMenu() {
             新建 Markdown 文档
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => requestUpload(currentFolderId)}>
+          <DropdownMenuItem disabled={!canUpload} onClick={() => requestUpload(currentFolderId)}>
             <IconUpload />
             上传文件
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => requestFolderUpload(currentFolderId)}>
+          <DropdownMenuItem disabled={!canUpload} onClick={() => requestFolderUpload(currentFolderId)}>
             <IconFolderUp />
             上传文件夹
           </DropdownMenuItem>

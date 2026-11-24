@@ -14,6 +14,7 @@ import {
 } from "@/api/uploads"
 import { ApiError } from "@/api/client"
 import {
+  createId,
   formatBytes,
   type AuthSession,
   type BucketMount,
@@ -144,7 +145,7 @@ export function useUploadRun({
             : undefined
 
         const [checksum, fileFingerprint, providerChecksum] = await Promise.all([
-          hashFile(saved.file),
+          hashFile(saved.file, controller.signal),
           fingerprintFile(saved.file),
           providerHashAlgorithm
             ? hashBlob(saved.file, providerHashAlgorithm, controller.signal, ({
@@ -181,6 +182,7 @@ export function useUploadRun({
         })
 
         let plan: UploadSessionPlan | undefined
+        let createKey = queueItem?.createKey ?? id
         let serverParts: Array<{ part_number: number; etag?: string | null; size: number }> = []
         if (sessionId) {
           try {
@@ -250,23 +252,38 @@ export function useUploadRun({
             if (existing.state === "aborting" || existing.state === "completing") {
               throw new Error(existing.state === "aborting" ? "上传任务正在取消" : "上传任务正在服务端完成，请稍后再试")
             }
+            if (existing.state === "aborted" || existing.state === "expired") {
+              createKey = createId("upload")
+              updateUploadQueueItem(id, { createKey })
+            }
             if (existing.state !== "aborted" && existing.state !== "expired") {
-              plan = {
-                session_id: existing.id,
-                upload_mode: existing.mode,
-                upload_id: existing.upload_id,
-                object_key: existing.path,
-                part_size: existing.part_size,
-                part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
-                upload_urls: [],
-                transport: existing.transport,
-                required_response_headers: existing.required_response_headers,
-                part_checksum_algorithm: existing.part_checksum_algorithm,
+              if (!queueItem?.checksum && !providerChecksum) {
+                await uploadApiSchedulerRef.current.run(
+                  () => abortUpload(getAccessToken(), existing.id, "unverified_resume"),
+                  controller.signal
+                )
+                createKey = createId("upload")
+                updateUploadQueueItem(id, { createKey })
+              } else {
+                plan = {
+                  session_id: existing.id,
+                  upload_mode: existing.mode,
+                  upload_id: existing.upload_id,
+                  object_key: existing.path,
+                  part_size: existing.part_size,
+                  part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
+                  upload_urls: [],
+                  transport: existing.transport,
+                  required_response_headers: existing.required_response_headers,
+                  part_checksum_algorithm: existing.part_checksum_algorithm,
+                }
+                serverParts = existing.parts
               }
-              serverParts = existing.parts
             }
           } catch (error) {
             if (!(error instanceof ApiError) || error.status !== 404) throw error
+            createKey = createId("upload")
+            updateUploadQueueItem(id, { createKey })
           }
         }
 
@@ -292,6 +309,7 @@ export function useUploadRun({
                 size: saved.file.size,
                 content_type: saved.file.type || "application/octet-stream",
                 mode: "auto",
+                idempotency_key: createKey,
               }),
               controller.signal
             ),

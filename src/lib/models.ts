@@ -211,6 +211,7 @@ export interface UploadQueueItem {
   partCount?: number
   speedText: string
   sessionId?: string
+  createKey?: string
   checksum?: string
   fileFingerprint?: string
   fileLastModified?: number

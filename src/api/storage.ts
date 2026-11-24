@@ -118,6 +118,13 @@ export type MountDeleteResult = {
   deleted_objects: number
 }
 
+export type MountHealth = {
+  status: "healthy" | "reauthorization_required" | "failed"
+  detail: string
+  checked_at: string
+  capabilities: Record<"download" | "upload" | "multipart" | "direct_upload" | "batch", boolean>
+}
+
 export type CreateStoragePolicyInput = {
   name: string
   provider: StorageDriverId
@@ -228,6 +235,13 @@ export async function deleteMount(token: string, mountId: number, deleteObjects 
 
 export async function applyMountCors(token: string, mountId: number) {
   return requestJson<Record<string, unknown>>(`/admin/mount/${mountId}/cors/apply`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function checkMountHealth(token: string, mountId: number) {
+  return requestJson<MountHealth>(`/mounts/${mountId}/health`, {
     method: "POST",
     token,
   })

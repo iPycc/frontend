@@ -57,6 +57,7 @@ export function useActions({
   loadRecycle,
   getNodeById,
 }: ActionDeps) {
+  const deleteKeys = React.useRef(new Map<string, string>())
   const createFolder = React.useCallback(
     async (parentId: string | null, name: string, bucketId = defaultBucketId) => {
       const session = snapshotRef.current.auth.session
@@ -229,7 +230,8 @@ export function useActions({
   const moveNodes = React.useCallback(async (
     nodeIds: string[],
     targetParentId: string | null,
-    bucketId = defaultBucketId
+    bucketId = defaultBucketId,
+    onConflict: "error" | "rename" | "replace" | "skip" = "rename"
   ) => {
     const session = snapshotRef.current.auth.session
     const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
@@ -243,6 +245,7 @@ export function useActions({
     const moved = await apiMoveNodes(session.tokens.accessToken, {
       node_ids: backendIds,
       target_parent_id: target,
+      on_conflict: onConflict,
     })
     if (!Array.isArray(moved)) {
       toast.info(`已将 ${moved.task_ids.length} 项加入后台移动任务`)
@@ -325,11 +328,15 @@ export function useActions({
       }))
     }
 
+    const requestKey = JSON.stringify({ node_ids: backendIds, hard_delete: hardDelete })
+    const idempotencyKey = deleteKeys.current.get(requestKey) ?? crypto.randomUUID()
+    deleteKeys.current.set(requestKey, idempotencyKey)
     try {
       await apiDeleteNodes(session.tokens.accessToken, {
         node_ids: backendIds,
         hard_delete: hardDelete,
-      })
+      }, idempotencyKey)
+      deleteKeys.current.delete(requestKey)
       if (deletingFolder) {
         setCategoryNodesByKey({})
         const nextPageStates = Object.fromEntries(
