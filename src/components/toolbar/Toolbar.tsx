@@ -8,6 +8,7 @@ import {
   IconDots,
   IconDownload,
   IconEdit,
+  IconFolder,
   IconHome2,
   IconInfoCircle,
   IconLayoutGrid,
@@ -39,6 +40,7 @@ import { hasCapability, type SortValue, type ViewMode } from "@/lib/models"
 import { useAppState } from "@/state/app"
 import { ViewSettingsPopover } from "./ViewSettingsPopover"
 import { BucketSwitcher } from "@/components/sidebar/BucketSwitcher"
+import type { MountHealth } from "@/api/storage"
 
 interface ToolbarProps {
   pathParts?: string[]
@@ -58,6 +60,7 @@ interface ToolbarProps {
   canPaste: boolean
   onCopy: () => void
   onCut: () => void
+  onMove: () => void
   onDelete: () => void
   onRename: () => void
   onShare: () => void
@@ -92,6 +95,7 @@ export function Toolbar({
   canPaste,
   onCopy,
   onCut,
+  onMove,
   onDelete,
   onRename,
   onShare,
@@ -99,8 +103,9 @@ export function Toolbar({
   onProperties,
   currentLabel,
 }: ToolbarProps) {
-  const { currentUser } = useAppState()
-  const canCopy = hasCapability(currentUser, "file.copy")
+  const { currentUser, activeBucket } = useAppState()
+  const canBatch = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.batch !== false
+  const canCopy = canBatch && hasCapability(currentUser, "file.copy")
   const canShare = hasCapability(currentUser, "share.manage")
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
@@ -118,7 +123,8 @@ export function Toolbar({
               <button
                 type="button"
                 onClick={onClearSelection}
-                className="rounded-full p-1.5 text-primary transition-colors hover:bg-primary/10"
+                className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10"
+                aria-label="清除选择"
               >
                 <IconX size={18} />
               </button>
@@ -128,20 +134,22 @@ export function Toolbar({
             </div>
             <div className="hidden items-center gap-2 md:flex">
               {canCopy ? <ActionButton icon={<IconCopy size={18} />} label="复制" onClick={onCopy} /> : null}
-              <ActionButton icon={<IconCut size={18} />} label="剪切" onClick={onCut} />
+              {canBatch ? <ActionButton icon={<IconCut size={18} />} label="剪切" onClick={onCut} /> : null}
+              {canBatch ? <ActionButton icon={<IconFolder size={18} />} label="移动" onClick={onMove} /> : null}
               <ActionButton icon={<IconEdit size={18} />} label="重命名" onClick={onRename} />
               <ActionButton icon={<IconDownload size={18} />} label="下载" onClick={onDownload} />
               {canShare ? <ActionButton icon={<IconShare3 size={18} />} label="分享" onClick={onShare} /> : null}
-              <ActionButton icon={<IconX size={18} />} label="删除" onClick={onDelete} />
+              {canBatch ? <ActionButton icon={<IconX size={18} />} label="删除" onClick={onDelete} /> : null}
             </div>
             <div className="md:hidden">
               <DropdownMenu>
-                <DropdownMenuTrigger className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                <DropdownMenuTrigger aria-label="批量操作" className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {canCopy ? <DropdownMenuItem onClick={onCopy}>复制</DropdownMenuItem> : null}
-                  <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem>
+                  {canBatch ? <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem> : null}
+                  {canBatch ? <DropdownMenuItem onClick={onMove}>移动</DropdownMenuItem> : null}
                   <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
                   <DropdownMenuItem onClick={onDownload}>下载</DropdownMenuItem>
                   {canShare ? <DropdownMenuItem onClick={onShare}>分享</DropdownMenuItem> : null}
@@ -149,7 +157,7 @@ export function Toolbar({
                     <IconInfoCircle size={16} className="mr-2" /> 属性
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem>
+                  {canBatch ? <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem> : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

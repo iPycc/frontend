@@ -3,9 +3,12 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Toolbar } from "@/components/toolbar/Toolbar"
+import { ApiError } from "@/api/client"
+import { UploadConflictDialog, type UploadConflictInfo } from "@/components/file-area/UploadConflictDialog"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useAppState } from "@/state/app"
 import { useUploadState } from "@/lib/upload/provider"
+import type { MountHealth } from "@/api/storage"
 import { usePropertiesPanel } from "@/components/shared/PropertiesPanelContext"
 import { type FileNode, type SortValue, type ViewMode } from "@/lib/models"
 import { buildArchiveDownloadUrl, buildDownloadUrl, buildFolderDownloadUrl, listNodesForDownload, recordNodeOpen } from "@/api/files"
@@ -131,6 +134,7 @@ export function AppFiles() {
   const [inlineEdit, setInlineEdit] = React.useState<InlineEditState | null>(null)
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
+  const [moveConflict, setMoveConflict] = React.useState<(UploadConflictInfo & { replaceAllowed: boolean }) | null>(null)
   const [shareDialogNodes, setShareDialogNodes] = React.useState<FileNode[]>([])
   const [downloadDialogNodes, setDownloadDialogNodes] = React.useState<FileNode[]>([])
   const [deleteIds, setDeleteIds] = React.useState<string[]>([])
@@ -642,10 +646,34 @@ export function AppFiles() {
     await pasteNodes(currentFolderId)
   }
 
-  const submitMove = async (targetId: string) => {
+  const submitMove = async (targetId: string, onConflict: "error" | "rename" | "replace" | "skip" = "error") => {
     if (!moveIds.length) return
-    await moveNodes(moveIds, targetId)
-    setMoveIds([])
+    try {
+      await moveNodes(moveIds, targetId, activeBucket.id, onConflict)
+      setMoveIds([])
+    } catch (error) {
+      const detail = error instanceof ApiError && error.payload && typeof error.payload === "object"
+        ? (error.payload as { detail?: unknown }).detail : null
+      if (detail && typeof detail === "object" && (detail as { kind?: string }).kind === "move_conflict") {
+        const conflict = detail as {
+          source: { name: string; type: "file" | "folder"; size: number; updated_at: string }
+          existing: { size: number; updated_at: string }
+          replace_allowed: boolean
+        }
+        setMoveConflict({
+          name: conflict.source.name,
+          kind: conflict.source.type,
+          existingSize: conflict.existing.size,
+          existingModified: conflict.existing.updated_at,
+          incomingSize: conflict.source.size,
+          incomingModified: Date.parse(conflict.source.updated_at),
+          incomingCount: 0,
+          replaceAllowed: conflict.replace_allowed,
+        })
+        return
+      }
+      toast.error(error instanceof Error ? error.message : "移动失败")
+    }
   }
 
   const submitDelete = async () => {
@@ -668,6 +696,34 @@ export function AppFiles() {
     },
     [openAudio, previewableFiles]
   )
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+      const target = event.target
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [role='dialog'], [role='menu']"))) return
+      if (event.key === "Enter" && selectedNodes.length === 1) {
+        if (target instanceof HTMLElement && target.closest("button, a")) return
+        event.preventDefault()
+        const node = selectedNodes[0]
+        if (node.kind === "folder") {
+          const path = `${currentPath}/${node.name}`.replace(/^\/+/, "")
+          navigate(`/app?folder=${encodeURIComponent(path)}`)
+        } else {
+          void handleOpenFile(node)
+        }
+      } else if (event.key === "Backspace" && currentPath) {
+        event.preventDefault()
+        const parent = currentPath.split("/").filter(Boolean).slice(0, -1).join("/")
+        navigate(parent ? `/app?folder=${encodeURIComponent(parent)}` : "/app")
+      } else if (event.key === "Delete" && selectedIds.length) {
+        event.preventDefault()
+        setDeleteIds(selectedIds)
+      }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [currentPath, handleOpenFile, navigate, selectedIds, selectedNodes])
 
   const handlePreviewPrev = React.useCallback(async () => {
     if (previewableFiles.length <= 1) return
@@ -717,6 +773,7 @@ export function AppFiles() {
         canPaste={Boolean(clipboard)}
         onCopy={handleCopy}
         onCut={handleCut}
+        onMove={() => handleMoveRequest(selectedIds)}
         onDelete={() => handleDeleteRequest(selectedIds)}
         onRename={() => handleRenameRequest(selectedIds)}
         onShare={() => void handleShareRequest(selectedIds)}
@@ -745,7 +802,8 @@ export function AppFiles() {
           >
             <FileArea
               items={fileAreaItems}
-              canUpload={!category && Boolean(activeBucket.id) && !activeBucket.readOnly}
+              canUpload={!category && Boolean(activeBucket.id) && !activeBucket.readOnly &&
+                (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.upload !== false}
               emptyAction={canImportHere ? (
                 <Button variant={activeBucket.readOnly ? "default" : "outline"} disabled={startingImport} onClick={() => void openImportTask()}>
                   {hasImportTask ? "查看导入任务" : startingImport ? "正在加入队列…" : "导入已有文件"}
@@ -835,7 +893,7 @@ export function AppFiles() {
           />
         ) : null}
 
-        {moveIds.length > 0 ? (
+        {moveIds.length > 0 && !moveConflict ? (
           <MoveDialog
             open
             folders={folderOptions}
@@ -854,6 +912,16 @@ export function AppFiles() {
             onSubmit={(value) => void submitMove(value)}
           />
         ) : null}
+
+        <UploadConflictDialog
+          conflict={moveConflict}
+          action="move"
+          replaceAllowed={moveConflict?.replaceAllowed}
+          onResolve={(choice) => {
+            setMoveConflict(null)
+            void submitMove(moveTargetId, choice)
+          }}
+        />
 
         {shareDialogNodes.length > 0 ? (
           <CreateShareDialog
