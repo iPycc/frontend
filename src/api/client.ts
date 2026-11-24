@@ -2,6 +2,7 @@ const DEFAULT_API_BASE = "/api/v1"
 
 export class ApiError extends Error {
   status: number
+  code?: string
   payload: unknown
   retryAfterMs?: number
   requestId?: string
@@ -11,6 +12,8 @@ export class ApiError extends Error {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).code === "string"
+      ? (payload as Record<string, string>).code : undefined
     this.payload = payload
     this.retryAfterMs = retryAfterMs
     this.requestId = requestId
@@ -72,6 +75,13 @@ function toRequestBody(body: unknown) {
 function pickErrorMessage(payload: unknown, status: number) {
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>
+    const advice: Record<string, string> = {
+      quota_exceeded: "存储空间不足，请释放空间或调整配额后重试",
+      storage_reauthorization_required: "存储授权已失效，请重新授权后重试",
+      storage_unavailable: "存储连接失败，请检查挂载状态后重试",
+      rate_limited: "请求过于频繁，请稍后重试",
+    }
+    if (typeof record.code === "string" && advice[record.code]) return advice[record.code]
     const validationMessage = pickValidationMessage(record.detail)
     if (validationMessage) {
       return validationMessage
@@ -116,6 +126,7 @@ async function requestResponseInternal(
     headers.set("Accept", accept)
   }
   headers.set("X-Device-Fingerprint", getDeviceFingerprint())
+  headers.set("X-Request-ID", globalThis.crypto?.randomUUID?.() ?? `web-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   const token = options.token ?? authRuntime.getAccessToken?.() ?? null
   if (token) {
