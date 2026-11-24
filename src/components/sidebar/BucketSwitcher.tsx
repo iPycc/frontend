@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom"
-import { IconCheck, IconChevronDown, IconPlus } from "@tabler/icons-react"
+import { IconAlertCircle, IconCheck, IconChevronDown, IconPlus } from "@tabler/icons-react"
 
 import { useAppState } from "@/state/app"
 import { cn } from "@/lib/utils"
 import { getProviderDisplayName, ProviderIcon as DriveIcon } from "@/components/storage/ProviderIcon"
+import type { MountHealth } from "@/api/storage"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,14 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
   const navigate = useNavigate()
   const { buckets, activeBucket, setActiveBucket } = useAppState()
 
+  const health = (bucket: (typeof buckets)[number]) => {
+    const checked = bucket.extra?._health as MountHealth | undefined
+    if (bucket.extra?.requires_reauthorization === true || checked?.status === "reauthorization_required") return { label: "需要重新授权", failed: true }
+    if (checked?.status === "failed") return { label: "连接失败", failed: true }
+    if (bucket.syncStatus === "failed") return { label: "连接失败", failed: true }
+    return { label: "正常", failed: false }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -38,6 +47,11 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
           <>
             <ProviderIcon provider={activeBucket.provider} driverId={activeBucket.driverId} size="compact" />
             <span className="truncate">{activeBucket.name}</span>
+            <span
+              aria-label={`挂载状态：${health(activeBucket).label}`}
+              title={health(activeBucket).label}
+              className={cn("size-1.5 shrink-0 rounded-full", health(activeBucket).failed ? "bg-destructive" : "bg-emerald-500")}
+            />
           </>
         ) : <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="shrink-0">
@@ -62,6 +76,10 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
             <DropdownMenuItem
               key={bucket.id}
               onClick={() => {
+                if (health(bucket).failed) {
+                  navigate(`/app/mounts?mount=${bucket.backendId}`)
+                  return
+                }
                 if (bucket.id === activeBucket.id) return
                 setActiveBucket(bucket.id)
                 if (compact) navigate("/app")
@@ -77,6 +95,10 @@ export function BucketSwitcher({ className, compact = false }: { className?: str
                   {getProviderDisplayName(bucket.driverId, bucket.provider)} · {bucket.region || "本机"}
                 </span>
               </div>
+              <span className={cn("inline-flex shrink-0 items-center gap-1 text-xs", health(bucket).failed ? "text-destructive" : "text-emerald-600 dark:text-emerald-400")}>
+                {health(bucket).failed ? <IconAlertCircle size={14} /> : <IconCheck size={14} />}
+                {health(bucket).label}
+              </span>
               {activeBucket.id === bucket.id ? <IconCheck size={16} className="shrink-0 text-primary" /> : null}
             </DropdownMenuItem>
           ))}

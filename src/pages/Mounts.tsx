@@ -1,16 +1,46 @@
-import { useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
+import { useLocation, useNavigate } from "react-router-dom"
 import { PageShell } from "@/components/shared/PageShell"
 import { usePageTitle } from "@/hooks/use-page-title"
-import { useAppState } from "@/state/app"
+import { useAppState, useAuthState } from "@/state/app"
 import { Button } from "@/components/ui/button"
 import { IconArrowRight } from "@tabler/icons-react"
 import { MountStatus, mountCorsLabels } from "@/components/storage/MountStatus"
 import { getProviderDisplayName, ProviderIcon } from "@/components/storage/ProviderIcon"
+import { checkMountHealth, type MountHealth } from "@/api/storage"
 
 export function Mounts() {
   usePageTitle("存储桶")
   const navigate = useNavigate()
+  const location = useLocation()
   const { buckets } = useAppState()
+  const { authSession } = useAuthState()
+  const [checkingId, setCheckingId] = useState<number | null>(null)
+  const [health, setHealth] = useState<Record<number, MountHealth>>({})
+  const selectedMountId = Number(new URLSearchParams(location.search).get("mount"))
+
+  const handleHealthCheck = async (mountId: number) => {
+    if (!authSession || checkingId !== null) return
+    setCheckingId(mountId)
+    try {
+      const result = await checkMountHealth(authSession.tokens.accessToken, mountId)
+      setHealth((current) => ({ ...current, [mountId]: result }))
+      if (result.status === "healthy") toast.success(result.detail)
+      else toast.error(result.detail)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "连接检查失败")
+    } finally {
+      setCheckingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedMountId && authSession && buckets.some((bucket) => bucket.backendId === selectedMountId)) {
+      void handleHealthCheck(selectedMountId)
+    }
+    // A deep link checks once; manual refresh stays available on each mount.
+  }, [selectedMountId, authSession?.tokens.accessToken])
 
   return (
     <PageShell
@@ -25,8 +55,9 @@ export function Mounts() {
       }
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {buckets.map((bucket) => (
-          <div key={bucket.id} className="min-w-0 rounded-xl border border-border/60 bg-background p-3">
+        {buckets.map((bucket) => {
+          const status = health[bucket.backendId] ?? bucket.extra?._health as MountHealth | undefined
+          return <div key={bucket.id} className="min-w-0 rounded-xl border border-border/60 bg-background p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <ProviderIcon driverId={bucket.driverId} provider={bucket.provider} size={28} />
@@ -45,9 +76,29 @@ export function Mounts() {
               <div>策略：{bucket.strategy.multipartThreshold} / {bucket.strategy.partSize}</div>
               <div className="break-all">前缀：{bucket.rootPath || "存储桶根目录"}</div>
             </div>
-            <div className="mt-2 border-t border-border/50 pt-2"><MountStatus bucket={bucket} /></div>
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+              <MountStatus bucket={bucket} />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 shrink-0 px-2 text-xs"
+                disabled={checkingId !== null}
+                onClick={() => void handleHealthCheck(bucket.backendId)}
+              >
+                {checkingId === bucket.backendId ? "检查中" : "检查连接"}
+              </Button>
+            </div>
+            {status && status.status !== "healthy" ? (
+              <div className="mt-2 flex items-start justify-between gap-2 text-xs text-destructive" role="status">
+                <span>{status.detail}</span>
+                {(bucket.extra?.requires_reauthorization === true ||
+                  status.status === "reauthorization_required") && bucket.canEditConnection ? (
+                  <Button size="sm" variant="outline" className="h-7 shrink-0" onClick={() => navigate("/settings/storage")}>重新授权</Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        ))}
+        })}
       </div>
     </PageShell>
   )
