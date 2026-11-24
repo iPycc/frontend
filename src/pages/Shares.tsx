@@ -22,6 +22,10 @@ import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getSiteUrl } from "@/components/shared/useWebsiteSettings"
 import { formatDate, parseDateTime } from "@/lib/datetime"
+import { updateShare } from "@/api/share"
+import { useAuthState } from "@/state/app"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 
 type SortOption = "newest" | "oldest" | "views"
 
@@ -45,11 +49,13 @@ export function Shares() {
   usePageTitle("我的分享")
   const navigate = useNavigate()
   const { getShareRecords, deleteShares, loadShares, sharesLoading, isAuthenticated, settings } = useAppState()
+  const { authSession } = useAuthState()
   const shares = getShareRecords()
   const [sortBy, setSortBy] = useState<SortOption>("newest")
   const [sortOpen, setSortOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [editingShare, setEditingShare] = useState<(typeof shares)[number] | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const sortRef = useRef<HTMLDivElement>(null)
 
@@ -121,6 +127,17 @@ export function Shares() {
     e.preventDefault()
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setContextMenu({ id, x: rect.left, y: rect.bottom + 4 })
+  }
+
+  const handleUpdate = async (shareId: string, expiresInHours: number | null, maxDownloads: number | null) => {
+    if (!authSession) return
+    await updateShare(authSession.tokens.accessToken, shareId, {
+      expires_in_hours: expiresInHours,
+      max_downloads: maxDownloads,
+    })
+    await loadShares()
+    setEditingShare(null)
+    toast.success("分享设置已更新")
   }
 
   const sortLabels: Record<SortOption, string> = {
@@ -294,7 +311,11 @@ export function Shares() {
             </button>
             <button
               type="button"
-              onClick={() => setContextMenu(null)}
+              onClick={() => {
+                const share = shares.find((item) => item.id === contextMenu.id)
+                if (share) setEditingShare(share)
+                setContextMenu(null)
+              }}
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-muted"
             >
               <IconEdit size={16} className="text-muted-foreground" />
@@ -312,6 +333,88 @@ export function Shares() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {editingShare ? (
+        <ShareEditDialog
+          share={editingShare}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditingShare(null)
+          }}
+          onSave={handleUpdate}
+        />
+      ) : null}
     </div>
   )
+}
+
+function ShareEditDialog({
+  share,
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  share: { id: string; expiresAt: string; maxDownloads?: number | null }
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSave: (shareId: string, expiresInHours: number | null, maxDownloads: number | null) => Promise<void>
+}) {
+  const [expires, setExpires] = useState("")
+  const [limit, setLimit] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const expiry = parseDateTime(share.expiresAt)
+    const hours = expiry ? Math.max(1, Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60))) : ""
+    setExpires(String(hours))
+    setLimit(share.maxDownloads ? String(share.maxDownloads) : "")
+  }, [share])
+
+  const save = async () => {
+    const expiresInHours = parsePositiveInteger(expires)
+    const maxDownloads = parsePositiveInteger(limit)
+    if ((expires.trim() && expiresInHours === null) || (limit.trim() && maxDownloads === null)) {
+      toast.error("请输入大于 0 的整数")
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(
+        share.id,
+        expiresInHours,
+        maxDownloads,
+      )
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "分享设置更新失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[24rem]">
+        <h2 className="text-lg font-semibold">编辑分享</h2>
+        <div className="space-y-4 py-3">
+          <label className="block space-y-1.5 text-sm">
+            <span>有效期小时数</span>
+            <Input value={expires} onChange={(event) => setExpires(event.target.value)} inputMode="numeric" placeholder="留空表示不过期" />
+          </label>
+          <label className="block space-y-1.5 text-sm">
+            <span>最大下载次数</span>
+            <Input value={limit} onChange={(event) => setLimit(event.target.value)} inputMode="numeric" placeholder="留空表示不限次数" />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button disabled={saving} onClick={() => void save()}>{saving ? "保存中" : "保存"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function parsePositiveInteger(value: string) {
+  if (!value.trim()) return null
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
