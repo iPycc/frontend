@@ -1,3 +1,5 @@
+import { publishPopupResult, subscribePopupResults } from "./oauth-popup-channel"
+
 export const GOOGLE_OAUTH_POPUP_NAME = "cloudrave-google-oauth"
 export const GOOGLE_OAUTH_MESSAGE_TYPE = "cloudrave:google-oauth-result"
 const GOOGLE_OAUTH_CHANNEL_NAME = "cloudrave-google-oauth"
@@ -64,27 +66,7 @@ function isGoogleOAuthPayload(data: unknown, flow?: GoogleOAuthFlow): data is Go
 }
 
 export function publishGoogleOAuthResult(message: GoogleOAuthMessage) {
-  try {
-    window.opener?.postMessage(message, window.location.origin)
-  } catch {
-    // COOP can sever the opener; same-origin channels still deliver the result.
-  }
-
-  if (typeof window.BroadcastChannel !== "undefined") {
-    const channel = new window.BroadcastChannel(GOOGLE_OAUTH_CHANNEL_NAME)
-    channel.postMessage(message)
-    channel.close()
-  }
-
-  try {
-    window.localStorage.setItem(
-      GOOGLE_OAUTH_STORAGE_KEY,
-      JSON.stringify({ ...message, timestamp: Date.now() })
-    )
-    window.localStorage.removeItem(GOOGLE_OAUTH_STORAGE_KEY)
-  } catch {
-    // BroadcastChannel and window.opener remain available when storage is blocked.
-  }
+  publishPopupResult(message, GOOGLE_OAUTH_CHANNEL_NAME, GOOGLE_OAUTH_STORAGE_KEY)
 }
 
 export function readGoogleOAuthPopupResult(
@@ -139,40 +121,8 @@ export function subscribeGoogleOAuthResults(
   getPopup: () => Window | null,
   handler: (message: GoogleOAuthMessage) => void
 ) {
-  const deliver = (data: unknown) => {
-    if (getPopup() && isGoogleOAuthPayload(data, flow)) {
-      handler(data)
-    }
-  }
-
-  const handleWindowMessage = (event: MessageEvent<unknown>) => {
-    if (event.origin === window.location.origin && event.source === getPopup()) {
-      deliver(event.data)
-    }
-  }
-
-  const channel = typeof window.BroadcastChannel !== "undefined"
-    ? new window.BroadcastChannel(GOOGLE_OAUTH_CHANNEL_NAME)
-    : null
-  const handleChannelMessage = (event: MessageEvent<unknown>) => deliver(event.data)
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key !== GOOGLE_OAUTH_STORAGE_KEY || !event.newValue) {
-      return
-    }
-    try {
-      deliver(JSON.parse(event.newValue))
-    } catch {
-      // Ignore malformed cross-window data.
-    }
-  }
-
-  window.addEventListener("message", handleWindowMessage)
-  window.addEventListener("storage", handleStorage)
-  channel?.addEventListener("message", handleChannelMessage)
-
-  return () => {
-    window.removeEventListener("message", handleWindowMessage)
-    window.removeEventListener("storage", handleStorage)
-    channel?.close()
-  }
+  return subscribePopupResults(
+    GOOGLE_OAUTH_CHANNEL_NAME, GOOGLE_OAUTH_STORAGE_KEY, getPopup,
+    (data): data is GoogleOAuthMessage => isGoogleOAuthPayload(data, flow), handler
+  )
 }

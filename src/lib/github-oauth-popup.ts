@@ -1,3 +1,5 @@
+import { publishPopupResult, subscribePopupResults } from "./oauth-popup-channel"
+
 export const GITHUB_OAUTH_POPUP_NAME = "cloudrave-github-oauth"
 export const GITHUB_OAUTH_MESSAGE_TYPE = "cloudrave:github-oauth-result"
 const GITHUB_OAUTH_CHANNEL_NAME = "cloudrave-github-oauth"
@@ -64,25 +66,7 @@ function isGitHubOAuthPayload(data: unknown, flow?: GitHubOAuthFlow): data is Gi
 }
 
 export function publishGitHubOAuthResult(message: GitHubOAuthMessage) {
-  if (window.opener && !window.opener.closed) {
-    window.opener.postMessage(message, window.location.origin)
-  }
-
-  if (typeof window.BroadcastChannel !== "undefined") {
-    const channel = new window.BroadcastChannel(GITHUB_OAUTH_CHANNEL_NAME)
-    channel.postMessage(message)
-    channel.close()
-  }
-
-  try {
-    window.localStorage.setItem(
-      GITHUB_OAUTH_STORAGE_KEY,
-      JSON.stringify({ ...message, timestamp: Date.now() })
-    )
-    window.localStorage.removeItem(GITHUB_OAUTH_STORAGE_KEY)
-  } catch {
-    // BroadcastChannel and window.opener remain available when storage is blocked.
-  }
+  publishPopupResult(message, GITHUB_OAUTH_CHANNEL_NAME, GITHUB_OAUTH_STORAGE_KEY)
 }
 
 export function readGitHubOAuthPopupResult(
@@ -130,40 +114,8 @@ export function subscribeGitHubOAuthResults(
   getPopup: () => Window | null,
   handler: (message: GitHubOAuthMessage) => void
 ) {
-  const deliver = (data: unknown) => {
-    if (getPopup() && isGitHubOAuthPayload(data, flow)) {
-      handler(data)
-    }
-  }
-
-  const handleWindowMessage = (event: MessageEvent<unknown>) => {
-    if (event.origin === window.location.origin && event.source === getPopup()) {
-      deliver(event.data)
-    }
-  }
-
-  const channel = typeof window.BroadcastChannel !== "undefined"
-    ? new window.BroadcastChannel(GITHUB_OAUTH_CHANNEL_NAME)
-    : null
-  const handleChannelMessage = (event: MessageEvent<unknown>) => deliver(event.data)
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key !== GITHUB_OAUTH_STORAGE_KEY || !event.newValue) {
-      return
-    }
-    try {
-      deliver(JSON.parse(event.newValue))
-    } catch {
-      // Ignore malformed cross-window data.
-    }
-  }
-
-  window.addEventListener("message", handleWindowMessage)
-  window.addEventListener("storage", handleStorage)
-  channel?.addEventListener("message", handleChannelMessage)
-
-  return () => {
-    window.removeEventListener("message", handleWindowMessage)
-    window.removeEventListener("storage", handleStorage)
-    channel?.close()
-  }
+  return subscribePopupResults(
+    GITHUB_OAUTH_CHANNEL_NAME, GITHUB_OAUTH_STORAGE_KEY, getPopup,
+    (data): data is GitHubOAuthMessage => isGitHubOAuthPayload(data, flow), handler
+  )
 }
