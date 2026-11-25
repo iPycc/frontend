@@ -63,7 +63,7 @@ export function StoragePathMigration({ bucket }: { bucket: BucketMount }) {
           timer = window.setTimeout(() => void load(), 1500)
         }
       } catch (error) {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "加载迁移记录失败")
+        if (!cancelled) { setLoadError(error instanceof Error ? error.message : "加载迁移记录失败"); timer = window.setTimeout(() => void load(), 5000) }
       }
     }
     void load()
@@ -85,7 +85,7 @@ export function StoragePathMigration({ bucket }: { bucket: BucketMount }) {
     <FormCard title="迁移已有文件" className="mt-4">
       <div className="space-y-4 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={mode} onValueChange={(value) => { if (value !== mode) setExample(null); setMode(value as "original" | "custom") }}>
+          <Select value={mode} onValueChange={(value) => { setMode(value as "original" | "custom") }}>
             <SelectTrigger className="w-48" aria-label="迁移路径规则"><SelectValue /></SelectTrigger>
             <SelectContent><SelectGroup>
               <SelectItem value="original">目录和原文件名</SelectItem>
@@ -113,7 +113,7 @@ export function StoragePathMigration({ bucket }: { bucket: BucketMount }) {
         {tasks.map((task) => {
           const migration = task.migration
           const status = migration?.status ?? task.status
-          const conflicts = migration?.conflicts ?? task.conflicts
+          const conflicts = task.conflicts + (migration?.conflicts ?? 0)
           const canStart = !migration && task.status === "completed" && task.ready > 0
           const canPause = status === "pending" || status === "running"
           const canResume = status === "paused" || status === "failed"
@@ -136,7 +136,7 @@ export function StoragePathMigration({ bucket }: { bucket: BucketMount }) {
               {canStart ? <Button size="sm" disabled={pending || bucket.readOnly} onClick={() => void run(() => controlPathMigration(task, "start"))}>复制并迁移</Button> : null}
               {conflicts > 0 ? <Button size="sm" variant="outline" onClick={() => setConflict(task)}>查看冲突</Button> : null}
               {canPause ? <Button size="sm" variant="outline" disabled={pending} onClick={() => void control("pause")}>暂停</Button> : null}
-              {canResume ? <Button size="sm" variant="outline" disabled={pending} onClick={() => void control("resume")}>继续</Button> : null}
+              {canResume ? <Button size="sm" variant="outline" disabled={pending || bucket.readOnly} onClick={() => void control("resume")}>继续</Button> : null}
               {canCancel ? <Button size="sm" variant="ghost" disabled={pending} onClick={() => void control("cancel")}>取消</Button> : null}
             </div> : null}
           </div>

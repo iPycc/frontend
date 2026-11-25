@@ -1,17 +1,20 @@
 import * as React from "react"
+import { parseDownloadDomain } from "@/components/storage/download-domain"
 import { toast } from "sonner"
 
 import { manageOssDomains, type OssDomainResult } from "@/api/user-storage"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-export function AliyunDomains({ mountId, accessToken, domain, onUseDomain }: {
+export function AliyunDomains({ mountId, accessToken, domain, activeDomain, onUseDomain }: {
   mountId: number
   accessToken: string
   domain: string
+  activeDomain: string
   onUseDomain: (domain: string) => void
 }) {
-  const [name, setName] = React.useState(domain)
+  const [name, setName] = React.useState(() => parseDownloadDomain(domain)?.hostname ?? "")
+  React.useEffect(() => setName(parseDownloadDomain(domain)?.hostname ?? ""), [domain])
   const [listing, setListing] = React.useState<OssDomainResult | null>(null)
   const [verification, setVerification] = React.useState<OssDomainResult | null>(null)
   const [check, setCheck] = React.useState<OssDomainResult | null>(null)
@@ -22,6 +25,7 @@ export function AliyunDomains({ mountId, accessToken, domain, onUseDomain }: {
     setBusy(true)
     setError("")
     setCheck(null)
+    if (action === "token") setVerification(null)
     try {
       const result = await manageOssDomains(accessToken, mountId, action, target)
       if (action === "list") setListing(result)
@@ -74,7 +78,7 @@ export function AliyunDomains({ mountId, accessToken, domain, onUseDomain }: {
         <span className="min-w-0 flex-1 break-all">{item.domain}</span>
         <span className="text-muted-foreground">{item.status}</span>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => { setName(item.domain); setVerification(null); setCheck(null); onUseDomain(item.domain) }}>用于下载</Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => { if (window.confirm(`解绑 ${item.domain}？此 Bucket 下使用该域名的链接将无法访问。`)) void run("unbind", item.domain) }}>解绑</Button>
+        <Button size="sm" variant="ghost" disabled={busy || parseDownloadDomain(activeDomain)?.hostname === item.domain} title="先更换并保存下载域名，再解绑当前域名" onClick={() => { if (window.confirm(`解绑 ${item.domain}？此 Bucket 下使用该域名的链接将无法访问。`)) void run("unbind", item.domain) }}>解绑</Button>
       </div>) : <p className="text-sm text-muted-foreground">此 Bucket 尚未绑定域名。</p>}
     </div> : null}
   </section>

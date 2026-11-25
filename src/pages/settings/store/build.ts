@@ -339,7 +339,7 @@ export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: s
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
-      import_delete_source: draft.importDeleteSource,
+
       ...objectPathSettings(draft),
     },
   }
@@ -370,7 +370,7 @@ export function buildTencentMountInput(draft: TencentStorageDraft, fallbackSlug:
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
-      import_delete_source: draft.importDeleteSource,
+
       ...objectPathSettings(draft),
     },
   }

@@ -16,13 +16,14 @@ export function objectPathDraft(bucket: BucketMount): ObjectPathDraft {
   }
 }
 
-export function objectPathSettings(draft: ObjectPathDraft & Pick<TencentStorageDraft, "mountMode">) {
+export function objectPathSettings(draft: ObjectPathDraft & Pick<TencentStorageDraft, "mountMode" | "readOnly" | "importDeleteSource">) {
   let template: string | null = null
   if (draft.objectKeyStyle === "original") template = ORIGINAL_OBJECT_PATH
   if (draft.objectKeyStyle === "custom") template = draft.objectKeyTemplate ?? DEFAULT_OBJECT_PATH_TEMPLATE
   return {
     object_key_style: draft.objectKeyStyle === "opaque" ? "opaque" : "readable",
     object_key_template: template,
-    import_writeback: template !== null && draft.mountMode === "mirror" && draft.importWriteback === true,
+    import_writeback: Boolean(template?.trim()) && draft.mountMode === "mirror" && !draft.readOnly && draft.importWriteback === true,
+    import_delete_source: draft.mountMode === "mirror" && !draft.readOnly && draft.importDeleteSource === true,
   }
 }

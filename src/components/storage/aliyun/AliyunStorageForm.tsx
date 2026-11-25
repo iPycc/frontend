@@ -1,3 +1,4 @@
+import { parseDownloadDomain } from "@/components/storage/download-domain"
 import * as React from "react"
 import { IconExternalLink } from "@tabler/icons-react"
 
@@ -29,8 +30,9 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
   const readonly = mode === "readonly"
   const update = <K extends keyof AliyunStorageDraft>(key: K, value: AliyunStorageDraft[K]) => onChange({ ...draft, [key]: value })
   const dirty = mode === "edit" && Boolean(initialDraft) && JSON.stringify(draft) !== JSON.stringify(initialDraft)
+  const templateReady = draft.objectKeyStyle !== "custom" || Boolean(draft.objectKeyTemplate?.trim())
   const credentialsReady = mode === "edit" || (draft.accessKeyId.trim().length > 0 && draft.accessKeySecret.trim().length > 0)
-  const canSubmit = !readonly && draft.name.trim().length > 0 && draft.bucketName.trim().length > 0 && draft.region.trim().length > 0 && credentialsReady && (draft.downloadDomainType === "default" || draft.downloadDomain.trim().length > 0)
+  const canSubmit = !readonly && templateReady && draft.name.trim().length > 0 && draft.bucketName.trim().length > 0 && draft.region.trim().length > 0 && credentialsReady && (draft.downloadDomainType === "default" || parseDownloadDomain(draft.downloadDomain) !== null)
 
   return (
     <div className="flex flex-col gap-3">
@@ -109,7 +111,7 @@ export function AliyunStorageForm({ draft, initialDraft, mode = "create", onChan
         {draft.serverSideEncryption === "SSE-KMS" ? <FormRow label="KMS Key ID" hint="填写有权限使用的 KMS Key ID。"><Input value={draft.kmsKeyId} onChange={(event) => update("kmsKeyId", event.target.value)} placeholder="KMS Key ID" disabled={readonly} /></FormRow> : null}
       </FormCard>
 
-      {mode === "edit" && mountId && accessToken ? <AliyunDomains key={mountId} mountId={mountId} accessToken={accessToken} domain={draft.downloadDomain} onUseDomain={(domain) => onChange({ ...draft, downloadDomainType: "origin", downloadDomain: `https://${domain}` })} /> : null}
+      {mode === "edit" && mountId && accessToken && draft.bucketName === initialDraft?.bucketName && draft.region === initialDraft?.region && draft.endpoint === initialDraft?.endpoint && !draft.accessKeyId && !draft.accessKeySecret && !draft.securityToken ? <AliyunDomains key={mountId} mountId={mountId} accessToken={accessToken} domain={draft.downloadDomain} activeDomain={initialDraft?.downloadDomainType === "origin" ? initialDraft.downloadDomain : ""} onUseDomain={(domain) => onChange({ ...draft, downloadDomainType: "origin", downloadDomain: `https://${domain}` })} /> : null}
 
       {dirty ? (
         <div className="fixed bottom-6 left-6 z-50 flex items-center gap-3 rounded-xl border bg-background p-3 shadow-lg">

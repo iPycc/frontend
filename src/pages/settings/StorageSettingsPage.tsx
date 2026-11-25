@@ -601,7 +601,7 @@ export function StorageSettingsPage() {
             part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
             mount_mode: tencentDraft.mountMode,
             read_only: tencentDraft.readOnly,
-            import_delete_source: tencentDraft.importDeleteSource,
+
             ...objectPathSettings(tencentDraft),
           },
         }
@@ -620,6 +620,7 @@ export function StorageSettingsPage() {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            endpoint: aliyunDraft.endpoint.trim() || null,
             download_domain_type: aliyunDraft.downloadDomainType,
             download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
@@ -647,6 +648,7 @@ export function StorageSettingsPage() {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            endpoint: aliyunDraft.endpoint.trim() || null,
             download_domain_type: aliyunDraft.downloadDomainType,
             download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
@@ -654,7 +656,7 @@ export function StorageSettingsPage() {
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
             mount_mode: aliyunDraft.mountMode,
             read_only: aliyunDraft.readOnly,
-            import_delete_source: aliyunDraft.importDeleteSource,
+
             ...objectPathSettings(aliyunDraft),
           },
         }

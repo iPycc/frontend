@@ -1,3 +1,4 @@
+import { parseDownloadDomain } from "@/components/storage/download-domain"
 import * as React from "react"
 import { IconExternalLink } from "@tabler/icons-react"
 
@@ -54,13 +55,14 @@ export function TencentStorageForm({
     }
   }
 
+  const templateReady = draft.objectKeyStyle !== "custom" || Boolean(draft.objectKeyTemplate?.trim())
   const credentialsReady = mode === "edit" || (draft.secretId.trim().length > 0 && draft.secretKey.trim().length > 0)
   const canSubmit =
-    !readonly &&
+    !readonly && templateReady &&
     draft.name.trim().length > 0 &&
     draft.bucketName.trim().length > 0 &&
     draft.region.trim().length > 0 &&
-    (draft.downloadDomainType === "default" || draft.downloadDomain.trim().length > 0) &&
+    (draft.downloadDomainType === "default" || parseDownloadDomain(draft.downloadDomain) !== null) &&
     credentialsReady
 
   const title = mode === "edit" ? `编辑 ${initialDraft?.name || "腾讯云 COS"}` : "添加 腾讯云 COS"

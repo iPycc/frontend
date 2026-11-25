@@ -40,8 +40,11 @@ export function PathPlanConflictDialog({ task, onClose }: { task: PathPlanTask; 
     }
   }, [task.id])
   React.useEffect(() => { void load(0, true); return () => controller.current?.abort() }, [load])
-  const title = task.is_restore ? "恢复冲突" : task.copy_to != null ? "复制冲突" : task.rename_to ? "改名冲突"
-    : task.move_to != null ? "移动冲突" : task.migration ? "路径迁移冲突" : "路径检查冲突"
+  let title = task.migration ? "路径迁移冲突" : "路径检查冲突"
+  if (task.is_restore) title = "恢复冲突"
+  else if (typeof task.copy_to === "number") title = "复制冲突"
+  else if (task.rename_to) title = "改名冲突"
+  else if (typeof task.move_to === "number") title = "移动冲突"
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="flex max-h-[min(80dvh,42rem)] flex-col">

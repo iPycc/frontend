@@ -14,7 +14,7 @@ const EXAMPLE_VALUES = {
 }
 
 type Props = {
-  draft: Pick<TencentStorageDraft, "objectKeyStyle" | "objectKeyTemplate" | "prefix" | "legacyPrefixedKeys" | "mountMode" | "importWriteback">
+  draft: Pick<TencentStorageDraft, "objectKeyStyle" | "objectKeyTemplate" | "prefix" | "legacyPrefixedKeys" | "mountMode" | "importWriteback" | "readOnly" | "importDeleteSource">
   readOnly: boolean
   onMode: (mode: ObjectPathMode) => void
   onTemplate: (template: string) => void
@@ -23,8 +23,10 @@ type Props = {
 
 export function ObjectPathOptions({ draft, readOnly, onMode, onTemplate, onWriteback }: Props) {
   const { object_key_template: template } = objectPathSettings(draft)
+  const suffix = draft.objectKeyStyle === "opaque" ? ".pdf" : "-合同.pdf"
+  const invalidTemplate = draft.objectKeyStyle === "custom" && !draft.objectKeyTemplate?.trim()
   const name = template === null
-    ? `blob/${EXAMPLE_VALUES.blob_id}${draft.objectKeyStyle === "opaque" ? ".pdf" : "-合同.pdf"}`
+    ? `blob/${EXAMPLE_VALUES.blob_id}${suffix}`
     : template.replace(/\{\{|\}\}|\{(dir|filename|stem|ext|blob_id)\}/g, (match, field?: keyof typeof EXAMPLE_VALUES) => (
         field ? EXAMPLE_VALUES[field] : match[0]
       ))
@@ -45,11 +47,11 @@ export function ObjectPathOptions({ draft, readOnly, onMode, onTemplate, onWrite
             </SelectContent>
           </Select>
           {draft.objectKeyStyle === "custom" ? (
-            <Input aria-label="对象路径模板" className="font-mono" value={draft.objectKeyTemplate ?? DEFAULT_OBJECT_PATH_TEMPLATE}
+            <Input aria-invalid={invalidTemplate} aria-label="对象路径模板" className="font-mono" value={draft.objectKeyTemplate ?? DEFAULT_OBJECT_PATH_TEMPLATE}
               onChange={(event) => onTemplate(event.target.value)} maxLength={1024} disabled={readOnly} />
           ) : null}
           {draft.objectKeyStyle === "custom" ? (
-            <p className="break-words text-sm text-muted-foreground">变量 {"{dir} {filename} {stem} {ext} {blob_id}"}</p>
+            <p className="break-words text-sm text-muted-foreground">{invalidTemplate ? "请输入对象路径模板。" : "变量 "} {"{dir} {filename} {stem} {ext} {blob_id}"}</p>
           ) : null}
           <output aria-label="存储路径示例" className="block break-all font-mono text-sm text-muted-foreground">{example}</output>
         </div>
@@ -57,7 +59,7 @@ export function ObjectPathOptions({ draft, readOnly, onMode, onTemplate, onWrite
       {onWriteback && draft.mountMode === "mirror" && template !== null ? (
         <FormRow label="允许导入文件改名和移动" hint="在桶内创建目标对象后更新网盘路径。无法安全清理的原对象会保留。">
           <Switch aria-label="允许导入文件改名和移动" checked={draft.importWriteback === true}
-            onCheckedChange={onWriteback} disabled={readOnly} />
+            onCheckedChange={onWriteback} disabled={readOnly || draft.readOnly} />
         </FormRow>
       ) : null}
     </>
