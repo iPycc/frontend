@@ -59,3 +59,17 @@ test("aliyun icon contains the supplied 1024 SVG paths", () => {
   assert.match(source, /M512 64a448 448 0 1 1 0 896A448 448 0 0 1 512 64z/)
   assert.match(source, /M324\.8 602\.624a26\.752/)
 })
+
+
+test("hidden destructive import options are disabled in create payloads", () => {
+  for (const readOnly of [false, true]) {
+    for (const mountMode of ["managed", "mirror"] as const) {
+      const tencent = { ...createEmptyTencentDraft(), readOnly, mountMode, objectKeyStyle: "original" as const, importWriteback: true, importDeleteSource: true }
+      const aliyun = { ...createEmptyAliyunDraft(), readOnly, mountMode, objectKeyStyle: "original" as const, importWriteback: true, importDeleteSource: true }
+      for (const mount of [buildTencentMountInput(tencent, "cos", 1), buildAliyunMountInput(aliyun, "oss", 2)]) {
+        assert.equal(mount.extra?.import_delete_source, mountMode === "mirror" && !readOnly)
+        assert.equal(mount.extra?.import_writeback, mountMode === "mirror" && !readOnly)
+      }
+    }
+  }
+})

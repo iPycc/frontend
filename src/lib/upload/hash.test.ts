@@ -14,3 +14,10 @@ test("large files use a complete checksum for safe upload resume", async () => {
   assert.equal(await hashFile(file), createHash("sha256").update(original).digest("hex"))
   assert.notEqual(await hashFile(file), await hashFile(replacement))
 })
+
+
+test("small-file hashing honors an already canceled upload", async () => {
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(hashFile(new File(["content"], "a.txt"), controller.signal), { name: "AbortError" })
+})
