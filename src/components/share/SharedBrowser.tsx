@@ -1,3 +1,4 @@
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
 import * as React from "react"
 import {
   IconChevronRight,
@@ -44,19 +45,9 @@ export function SharedBrowser({
   const ownerName = mount.owner_username ?? `用户 #${mount.owner_id ?? "-"}`
   const folders = items.filter((item) => item.type === "folder")
   const files = items.filter((item) => item.type === "file")
-  const breadcrumbRef = React.useRef<HTMLElement>(null)
   const pathSignature = path.map((item) => item.id).join("/")
 
-  React.useLayoutEffect(() => {
-    const container = breadcrumbRef.current
-    if (!container) return
-    const alignRight = () => {
-      container.scrollLeft = container.scrollWidth
-    }
-    alignRight()
-    const frame = window.requestAnimationFrame(alignRight)
-    return () => window.cancelAnimationFrame(frame)
-  }, [mount.id, pathSignature])
+  const breadcrumbRef = useBreadcrumbAlignment(`${mount.id}:${pathSignature}`)
 
   return (
     <div className="space-y-5">

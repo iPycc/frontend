@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -80,19 +81,9 @@ export function ShareDetail() {
   const [verifyingPassword, setVerifyingPassword] = useState(false)
   const [mounting, setMounting] = useState(false)
   const [mountedId, setMountedId] = useState<number | null>(null)
-  const breadcrumbRef = useRef<HTMLElement>(null)
   const breadcrumbSignature = breadcrumbs.map((crumb) => crumb.id).join("/")
 
-  useLayoutEffect(() => {
-    const container = breadcrumbRef.current
-    if (!container) return
-    const alignRight = () => {
-      container.scrollLeft = container.scrollWidth
-    }
-    alignRight()
-    const frame = window.requestAnimationFrame(alignRight)
-    return () => window.cancelAnimationFrame(frame)
-  }, [breadcrumbSignature, slug])
+  const breadcrumbRef = useBreadcrumbAlignment(`${slug}:${breadcrumbSignature}`)
 
   usePageTitle(info ? `${info.owner_name} 的分享` : "分享详情")
 

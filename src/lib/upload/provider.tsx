@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 
 import {
   UploadConflictDialog,
@@ -81,6 +82,7 @@ export function UploadProvider({
   deleteNodes,
   onUploadComplete,
 }: UploadProviderProps) {
+  const navigate = useNavigate()
   const getSessionRef = React.useRef(getSession)
   const getBucketsRef = React.useRef(getBuckets)
   const getActiveBucketIdRef = React.useRef(getActiveBucketId)
@@ -235,11 +237,11 @@ export function UploadProvider({
       return
     }
     if (bucket.extra?.requires_reauthorization === true) {
-      notifyStorageReauthorization(bucket)
+      notifyStorageReauthorization(bucket, navigate)
       return
     }
     return bucket
-  }, [])
+  }, [navigate])
 
   const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
     const bucket = resolveUploadBucket(mountId)

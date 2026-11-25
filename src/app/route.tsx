@@ -1,5 +1,5 @@
 import * as React from "react"
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { Navigate, Route, Routes } from "react-router-dom"
 
 import { ShareGuard } from "@/app/guard"
 import { AudioPlayerProvider } from "@/components/audio/AudioPlayerProvider"
@@ -52,7 +52,7 @@ export default function App() {
     : <Deferred>{element}</Deferred>
 
   return (
-    <BrowserRouter>
+    <>
       <AudioPlayerProvider>
         <Toaster position="bottom-center" richColors />
         <Routes>
@@ -92,6 +92,6 @@ export default function App() {
             </Route>
           </Routes>
       </AudioPlayerProvider>
-    </BrowserRouter>
+    </>
   )
 }

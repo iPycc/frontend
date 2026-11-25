@@ -1,3 +1,4 @@
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
 ﻿import * as React from "react"
 import { type ReactNode } from "react"
 import { Link } from "react-router-dom"
@@ -105,22 +106,12 @@ export function Toolbar({
   currentLabel,
 }: ToolbarProps) {
   const { currentUser, activeBucket } = useAppState()
-  const canBatch = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.batch !== false
+  const canBatch = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities?.batch !== false
   const canCopy = canBatch && hasCapability(currentUser, "file.copy")
   const canShare = hasCapability(currentUser, "share.manage")
-  const breadcrumbScrollRef = React.useRef<HTMLDivElement>(null)
   const pathSignature = currentLabel ?? pathParts.join("/")
 
-  React.useLayoutEffect(() => {
-    const container = breadcrumbScrollRef.current
-    if (!container) return
-    const alignRight = () => {
-      container.scrollLeft = container.scrollWidth
-    }
-    alignRight()
-    const frame = window.requestAnimationFrame(alignRight)
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeBucket.id, pathSignature, selectedCount])
+  const breadcrumbScrollRef = useBreadcrumbAlignment(`${activeBucket.id}:${pathSignature}:${selectedCount}`)
 
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">

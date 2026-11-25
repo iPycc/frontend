@@ -1,3 +1,4 @@
+import { BrowserRouter } from "react-router-dom"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import App from "./App"
@@ -74,9 +75,9 @@ const rootContent = isGitHubOAuthReturn() ? (
 ) : isQQOAuthReturn() ? (
   <QQOAuthComplete />
 ) : (
-  <AppStateProvider>
-    <App />
-  </AppStateProvider>
+  <BrowserRouter>
+    <AppStateProvider><App /></AppStateProvider>
+  </BrowserRouter>
 )
 
 createRoot(document.getElementById("root")!).render(

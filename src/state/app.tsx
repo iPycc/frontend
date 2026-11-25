@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 
 import { checkBackendHealth } from "@/api/system"
 import { getPreviewManifest, listUserMounts, saveTextPreview } from "@/api/files"
@@ -33,6 +34,7 @@ import {
 } from "@/state/core"
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate()
   const [initialState] = React.useState(() => loadInitialFileRouteState(loadSnapshot()))
   const [snapshot, setSnapshot] = React.useState<AppSnapshot>(initialState.snapshot)
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light")
@@ -153,7 +155,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     for (const bucket of snapshot.buckets) {
       if (!invalid.has(bucket.id) || reauthorizationNotifiedRef.current.has(bucket.id)) continue
       reauthorizationNotifiedRef.current.add(bucket.id)
-      notifyStorageReauthorization(bucket)
+      notifyStorageReauthorization(bucket, navigate)
     }
   }, [isAuthenticated, snapshot.buckets])
 
