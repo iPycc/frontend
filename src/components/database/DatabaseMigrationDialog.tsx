@@ -1,3 +1,4 @@
+import { MigrationProgress } from "./MigrationProgress"
 import * as React from "react"
 import {
   ArrowLeft,
@@ -39,7 +40,6 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import "@/styles/slide-transition.css"
 
 const backendLabels: Record<DatabaseBackend, string> = {
   sqlite: "SQLite",
@@ -93,66 +93,13 @@ export function DatabaseMigrationDialog({
   const [error, setError] = React.useState<string | null>(null)
   const [step, setStep] = React.useState<WizardStep>(() => wizardStepFromStatus(initialStatus))
 
-  const [slideTransition, setSlideTransition] = React.useState<{
-    isAnimating: boolean
-    isGoingBack: boolean
-    leavingStep: WizardStep
-    enteringStep: WizardStep
-  } | null>(null)
-  const [containerHeight, setContainerHeight] = React.useState<number | "auto">("auto")
-  const [enableHeightTransition, setEnableHeightTransition] = React.useState(false)
-  const contentRef = React.useRef<HTMLDivElement>(null)
-  const hasMeasuredHeight = React.useRef(false)
+  const initialStatusRef = React.useRef(initialStatus)
+  initialStatusRef.current = initialStatus
   const lastLogSeq = React.useRef(0)
-
-  const changeStep = React.useCallback(
-    (nextStep: WizardStep, goingBack = nextStep < step) => {
-      if (step === nextStep || slideTransition?.isAnimating) return
-      setError(null)
-      setEnableHeightTransition(true)
-      setSlideTransition({
-        isAnimating: true,
-        isGoingBack: goingBack,
-        leavingStep: step,
-        enteringStep: nextStep,
-      })
-      window.setTimeout(() => {
-        setStep(nextStep)
-        window.setTimeout(() => setSlideTransition(null), 50)
-      }, 280)
-    },
-    [slideTransition?.isAnimating, step]
-  )
-
-  React.useLayoutEffect(() => {
-    if (!open || !contentRef.current) return
-    const content = contentRef.current
-
-    const syncHeight = () => {
-      const nextHeight = content.offsetHeight
-      if (nextHeight > 0) {
-        setContainerHeight(nextHeight)
-        if (hasMeasuredHeight.current) {
-          setEnableHeightTransition(true)
-        }
-        hasMeasuredHeight.current = true
-      }
-    }
-
-    syncHeight()
-    const observer = new ResizeObserver(syncHeight)
-    observer.observe(content)
-    return () => observer.disconnect()
-  }, [open, step, form.backend, error, migration?.phase, readyStateKey(status, migration)])
-
-  React.useEffect(() => {
-    if (!open) {
-      hasMeasuredHeight.current = false
-      setEnableHeightTransition(false)
-      setContainerHeight("auto")
-      setSlideTransition(null)
-    }
-  }, [open])
+  const changeStep = (nextStep: WizardStep, _goingBack?: boolean) => {
+    setError(null)
+    setStep(nextStep)
+  }
 
   const publishStatus = React.useCallback(
     (next: DatabaseStatus) => {
@@ -182,6 +129,7 @@ export function DatabaseMigrationDialog({
 
   React.useEffect(() => {
     if (!open) return
+    const initialStatus = initialStatusRef.current
     if (initialStatus) {
       const current = currentMigrationFromStatus(initialStatus)
       setStatus(initialStatus)
@@ -201,7 +149,7 @@ export function DatabaseMigrationDialog({
         if (!controller.signal.aborted) setError(errorMessage(reason))
       })
     return () => controller.abort()
-  }, [initialStatus, open, refreshStatus])
+  }, [open, refreshStatus])
 
   React.useEffect(() => {
     if (!open || !migration || !activePhases.has(migration.phase)) return
@@ -247,14 +195,9 @@ export function DatabaseMigrationDialog({
     status?.activation_pending ||
       (status?.switch_pending && migration?.phase === "ready" && migration.restart_required)
   )
-  const targetName = confirmationName(
-    status?.switch_pending ? status.requested.backend : form.backend,
-    status?.switch_pending
-      ? status.requested.name
-      : form.backend === "sqlite"
-        ? form.sqlitePath
-        : form.name
-  )
+  let confirmationTarget = form.backend === "sqlite" ? form.sqlitePath : form.name
+  if (status?.switch_pending) confirmationTarget = status.requested.name
+  const targetName = confirmationName(status?.switch_pending ? status.requested.backend : form.backend, confirmationTarget)
   const targetCanBeAdopted = connection
     ? hasTargetUsers(connection) && instancesAreCompatible(status?.source, connection)
     : false
@@ -282,9 +225,6 @@ export function DatabaseMigrationDialog({
       await updateDatabaseConfig(input)
       const next = await refreshStatus(undefined, false)
       setForm(formFromStatus(next))
-      if (next.target) {
-        setConnection({ ...next.target, database_created: tested.database_created })
-      }
       toast.success(tested.database_created ? `已创建并连接 ${form.name}` : "连接测试通过")
       changeStep(2, false)
     } catch (reason) {
@@ -330,31 +270,20 @@ export function DatabaseMigrationDialog({
   const sourceRows = status?.source?.summary.total_rows ?? 0
   const targetRows = connection?.summary.total_rows ?? 0
 
-  const stepTitle =
-    step === 1
-      ? "连接目标数据库"
-      : step === 2
-        ? "选择数据保留方式"
-        : step === 3
-          ? "验证管理员身份"
-          : ready
-            ? "等待重启生效"
-            : migration?.phase === "failed"
-              ? "迁移未完成"
-              : "正在迁移数据"
-
-  const stepDescription =
-    step === 1
-      ? `当前为 ${backendLabels[activeBackend]}，选择要切换到的目标数据库`
-      : step === 2
-        ? `${backendLabels[activeBackend]} (${sourceRows.toLocaleString()} 行) → ${backendLabels[targetBackend]} (${targetRows.toLocaleString()} 行)`
-        : step === 3
-          ? `确认将数据库切换至 ${backendLabels[targetBackend]} (${targetName})`
-          : `${backendLabels[activeBackend]} → ${backendLabels[targetBackend]}`
+  let stepTitle = "正在迁移数据"
+  if (step === 1) stepTitle = "连接目标数据库"
+  else if (step === 2) stepTitle = "选择数据保留方式"
+  else if (step === 3) stepTitle = "验证管理员身份"
+  else if (ready) stepTitle = "等待重启生效"
+  else if (migration?.phase === "failed") stepTitle = "迁移未完成"
+  let stepDescription = `${backendLabels[activeBackend]} → ${backendLabels[targetBackend]}`
+  if (step === 1) stepDescription = `当前为 ${backendLabels[activeBackend]}，选择要切换到的目标数据库`
+  else if (step === 2) stepDescription = `${backendLabels[activeBackend]} (${sourceRows.toLocaleString()} 行) → ${backendLabels[targetBackend]} (${targetRows.toLocaleString()} 行)`
+  else if (step === 3) stepDescription = `确认将数据库切换至 ${backendLabels[targetBackend]} (${targetName})`
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(92vw,29rem)] max-w-none gap-5 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl sm:max-w-none">
+      <DialogContent className="w-[min(92vw,29rem)] max-h-[90dvh] max-w-none gap-5 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl sm:max-w-none">
         <DialogHeader className="space-y-1 text-left">
           <div className="text-xs font-medium text-muted-foreground tabular-nums">
             步骤 {step} / 4
@@ -367,37 +296,8 @@ export function DatabaseMigrationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          className="slide-container"
-          style={{
-            height: containerHeight === "auto" ? "auto" : `${containerHeight + 6}px`,
-            transition: enableHeightTransition
-              ? "height 260ms cubic-bezier(0.4, 0, 0.2, 1)"
-              : "none",
-          }}
-        >
-          <div
-            ref={contentRef}
-            className={cn(
-              "slide-phase space-y-4",
-              slideTransition?.isAnimating &&
-                !slideTransition.isGoingBack &&
-                slideTransition.leavingStep === step &&
-                "slide-exit slide-exit-active",
-              slideTransition?.isAnimating &&
-                !slideTransition.isGoingBack &&
-                slideTransition.enteringStep === step &&
-                "slide-enter slide-enter-active",
-              slideTransition?.isAnimating &&
-                slideTransition.isGoingBack &&
-                slideTransition.leavingStep === step &&
-                "slide-back-exit slide-back-exit-active",
-              slideTransition?.isAnimating &&
-                slideTransition.isGoingBack &&
-                slideTransition.enteringStep === step &&
-                "slide-back-enter slide-back-enter-active"
-            )}
-          >
+        <div className="custom-scrollbar min-h-0 overflow-y-auto">
+          <div key={step} className="flex flex-col gap-4 animate-in fade-in duration-200 motion-reduce:animate-none">
             {status && status.managed_by !== "config" ? (
               <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                 {status.warning || "当前由外部配置接管，请先移除环境变量或 URL 覆盖。"}
@@ -414,9 +314,10 @@ export function DatabaseMigrationDialog({
                       <button
                         key={backend}
                         type="button"
+                        aria-pressed={selected}
                         disabled={!status?.editable || running || ready}
                         onClick={() => {
-                          setEnableHeightTransition(true)
+                          if (selected) return
                           const profile = status?.profiles.find((item) => item.backend === backend)
                           setForm(formFromProfile(profile ?? defaultProfile(backend)))
                           setConnection(null)
@@ -601,7 +502,7 @@ export function DatabaseMigrationDialog({
 
                 {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <Button
                     type="button"
                     variant="ghost"
@@ -626,6 +527,9 @@ export function DatabaseMigrationDialog({
             {/* Step 3: 验证管理员身份 */}
             {step === 3 ? (
               <form onSubmit={beginMigration} className="space-y-4">
+                <p className="text-sm text-muted-foreground">{choice === "source"
+                  ? "使用源数据库数据：备份并替换目标库中的 Cloudrave 记录。"
+                  : "使用目标数据库中已有的 Cloudrave 数据。"}本地文件和对象存储文件保留在原位置。</p>
                 <FieldGroup className="gap-3.5">
                   <Field>
                     <FieldLabel htmlFor="database-current-password">管理员密码</FieldLabel>
@@ -657,7 +561,7 @@ export function DatabaseMigrationDialog({
 
                 {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <Button
                     type="button"
                     variant="ghost"
@@ -689,35 +593,7 @@ export function DatabaseMigrationDialog({
               <div className="space-y-4">
                 {migration ? (
                   <>
-                    <div className="relative overflow-hidden rounded-xl border border-border bg-muted/30 px-4 py-3">
-                      <div
-                        className={cn(
-                          "pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-300 ease-out",
-                          migration.phase === "failed"
-                            ? "bg-destructive/15"
-                            : migration.phase === "ready"
-                              ? "bg-emerald-500/15"
-                              : "bg-primary/15"
-                        )}
-                        style={{ width: `${Math.max(0, Math.min(100, migration.progress || 0))}%` }}
-                        aria-hidden="true"
-                      />
-                      <div className="relative z-10 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-foreground">
-                            {migration.detail || "正在迁移..."}
-                          </div>
-                          <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                            {migration.current_table ? `${migration.current_table} · ` : ""}
-                            {migration.processed_rows.toLocaleString()} /{" "}
-                            {migration.total_rows.toLocaleString()} 行
-                          </div>
-                        </div>
-                        <span className="shrink-0 font-mono text-sm font-semibold text-foreground tabular-nums">
-                          {migration.progress}%
-                        </span>
-                      </div>
-                    </div>
+                    <MigrationProgress migration={migration} />
 
                     {migration.phase === "failed" ? (
                       <p role="alert" className="text-xs text-destructive">
@@ -746,8 +622,8 @@ export function DatabaseMigrationDialog({
 
                 {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
 
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     {migration?.phase === "failed" ? (
                       <Button
                         type="button"
@@ -790,7 +666,7 @@ export function DatabaseMigrationDialog({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => void refreshStatus(undefined, false)}
+                        onClick={() => { void refreshStatus().catch((reason: unknown) => setError(errorMessage(reason))) }}
                       >
                         <RefreshCw className="size-3.5" />
                         刷新
@@ -846,10 +722,6 @@ function MigrationLogs({ migration }: { migration: DatabaseMigration }) {
   )
 }
 
-function readyStateKey(status: DatabaseStatus | null, migration: DatabaseMigration | null) {
-  return `${status?.activation_pending ?? false}:${migration?.id ?? "none"}:${migration?.backup_available ?? false}`
-}
-
 function formFromStatus(status?: DatabaseStatus | null): FormState {
   return formFromProfile(status?.requested ?? defaultProfile("mysql"))
 }
@@ -858,11 +730,7 @@ function formFromProfile(profile: DatabaseStatus["requested"]): FormState {
   return {
     backend: profile.backend,
     host: profile.host ?? "127.0.0.1",
-    port: profile.port
-      ? String(profile.port)
-      : profile.backend === "postgresql"
-        ? "5432"
-        : "3306",
+    port: String(profile.port ?? defaultProfile(profile.backend).port ?? ""),
     user: profile.user ?? "cloudrave",
     password: "",
     name: profile.name || "cloudrave",
@@ -874,8 +742,8 @@ function defaultProfile(backend: DatabaseBackend): DatabaseStatus["requested"] {
   return {
     backend,
     host: backend === "sqlite" ? null : "127.0.0.1",
-    port: backend === "mysql" ? 3306 : backend === "postgresql" ? 5432 : null,
-    user: backend === "mysql" ? "root" : backend === "postgresql" ? "postgres" : null,
+    port: { sqlite: null, mysql: 3306, postgresql: 5432 }[backend],
+    user: { sqlite: null, mysql: "root", postgresql: "postgres" }[backend],
     name: backend === "sqlite" ? "data/cloudrave.db" : "cloudrave",
     password_configured: false,
   }

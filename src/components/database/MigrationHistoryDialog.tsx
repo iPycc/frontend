@@ -1,3 +1,4 @@
+import { MigrationProgress } from "./MigrationProgress"
 import * as React from "react"
 import { Download, Loader2 } from "lucide-react"
 
@@ -52,7 +53,7 @@ export function MigrationHistoryDialog({
 
   return (
     <Dialog open={Boolean(migrationId)} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="w-[min(92vw,29rem)] max-w-none gap-4 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl sm:max-w-none">
+      <DialogContent className="w-[min(92vw,29rem)] max-h-[90dvh] overflow-y-auto max-w-none gap-4 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl sm:max-w-none">
         <DialogHeader className="space-y-1 text-left">
           <DialogTitle className="text-xl font-semibold tracking-tight">迁移记录</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
@@ -66,29 +67,7 @@ export function MigrationHistoryDialog({
 
         {migration ? (
           <div className="space-y-3.5">
-            <div className="relative overflow-hidden rounded-xl border border-border bg-muted/30 px-4 py-3">
-              <div
-                className={cn(
-                  "pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-300",
-                  migration.phase === "failed"
-                    ? "bg-destructive/15"
-                    : migration.phase === "ready"
-                      ? "bg-emerald-500/15"
-                      : "bg-primary/15"
-                )}
-                style={{ width: `${Math.max(0, Math.min(100, migration.progress || 0))}%` }}
-                aria-hidden="true"
-              />
-              <div className="relative z-10 flex items-center justify-between gap-3">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {migration.detail || "迁移结束"}
-                </span>
-                <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                  {migration.processed_rows.toLocaleString()} / {migration.total_rows.toLocaleString()} 行 ·{" "}
-                  {migration.progress}%
-                </span>
-              </div>
-            </div>
+            <MigrationProgress migration={migration} />
 
             <ScrollArea className="h-44 rounded-xl border border-border bg-muted/25">
               <div className="space-y-1 p-3 font-mono text-[11px] leading-5 text-foreground/85">
