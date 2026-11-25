@@ -1,3 +1,4 @@
+import type { ConflictPolicy } from "@/api/file/type"
 import * as React from "react"
 
 import {
@@ -159,7 +160,7 @@ export type AppStateValue = {
   createFolder: (parentId: string | null, name: string, bucketId?: string) => Promise<FileNode | null>
   createFile: (parentId: string | null, name: string, bucketId?: string) => Promise<FileNode | null>
   renameNode: (nodeId: string, name: string) => Promise<void>
-  moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string, onConflict?: "error" | "rename" | "replace" | "skip") => Promise<void>
+  moveNodes: (nodeIds: string[], targetParentId: string | null, bucketId?: string, onConflict?: ConflictPolicy) => Promise<void>
   duplicateNodes: (nodeIds: string[]) => Promise<void>
   deleteNodes: (nodeIds: string[], hardDelete?: boolean) => Promise<boolean>
   restoreNodes: (nodeIds: string[]) => Promise<void>

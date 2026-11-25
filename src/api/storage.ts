@@ -52,7 +52,7 @@ export type StoragePolicy = {
 }
 
 export type MountMode = "managed" | "mirror"
-export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
+export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "paused" | "canceled" | "completed" | "failed"
 
 export type MountSyncResult = {
   mount_id: number
