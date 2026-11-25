@@ -30,15 +30,21 @@ export function UploadConflictDialog({
   onResolve,
   action = "upload",
   replaceAllowed = true,
+  onCancel,
 }: {
   conflict: UploadConflictInfo | null
   onResolve: (choice: UploadConflictChoice) => void
   action?: "upload" | "move"
   replaceAllowed?: boolean
+  onCancel?: () => void
 }) {
   const { settings } = useSettingsState()
   return (
-    <Dialog open={Boolean(conflict)} onOpenChange={(open) => !open && onResolve("skip")}>
+    <Dialog open={Boolean(conflict)} onOpenChange={(open) => {
+      if (open) return
+      if (onCancel) onCancel()
+      else onResolve("skip")
+    }}>
       <DialogContent className="sm:max-w-[32rem]">
         <DialogHeader>
           <div className="flex items-center gap-2">

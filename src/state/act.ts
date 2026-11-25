@@ -1,3 +1,4 @@
+import type { ConflictPolicy } from "@/api/file/type"
 import * as React from "react"
 
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/lib/models"
 import { toast } from "sonner"
 
+import { usePathTaskCompletion } from "@/state/use-path-task-completion"
 import { useClipActions } from "@/state/act/clip"
 import { useShareActions } from "@/state/act/share"
 import {
@@ -57,6 +59,7 @@ export function useActions({
   loadRecycle,
   getNodeById,
 }: ActionDeps) {
+  const watchPathTasks = usePathTaskCompletion(snapshotRef.current.auth.session?.user.id)
   const deleteKeys = React.useRef(new Map<string, string>())
   const createFolder = React.useCallback(
     async (parentId: string | null, name: string, bucketId = defaultBucketId) => {
@@ -193,7 +196,9 @@ export function useActions({
 
     const existing = snapshotRef.current.nodes.find((node) => node.id === nodeId)
     const renamed = await apiRenameNode(session.tokens.accessToken, backendId, { name: name.trim() })
+    if (snapshotRef.current.auth.session?.user.id !== session.user.id) return
     if ("kind" in renamed) {
+      if (existing) watchPathTasks([renamed.task_id], () => Promise.all([refreshCachedDirectory(existing.parentId, existing.bucketId), refreshLoadedCategories(existing.bucketId)]))
       toast.info("改名已加入后台任务")
       return
     }
@@ -231,7 +236,7 @@ export function useActions({
     nodeIds: string[],
     targetParentId: string | null,
     bucketId = defaultBucketId,
-    onConflict: "error" | "rename" | "replace" | "skip" = "rename"
+    onConflict: ConflictPolicy = "rename"
   ) => {
     const session = snapshotRef.current.auth.session
     const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
@@ -247,7 +252,13 @@ export function useActions({
       target_parent_id: target,
       on_conflict: onConflict,
     })
+    if (snapshotRef.current.auth.session?.user.id !== session.user.id) return
     if (!Array.isArray(moved)) {
+      watchPathTasks(moved.task_ids, () => Promise.all([
+        ...sourceParents.map((parent) => refreshCachedDirectory(parent, bucket.id)),
+        refreshCachedDirectory(targetParentId || bucket.rootNodeId, bucket.id),
+        refreshLoadedCategories(bucket.id),
+      ]))
       toast.info(`已将 ${moved.task_ids.length} 项加入后台移动任务`)
       return
     }
@@ -276,7 +287,9 @@ export function useActions({
       node_ids: backendIds,
       target_parent_id: first.parentId && !first.parentId.startsWith("root:") ? Number(first.parentId) : null,
     })
+    if (snapshotRef.current.auth.session?.user.id !== session.user.id) return
     if (!Array.isArray(copied)) {
+      watchPathTasks(copied.task_ids, () => Promise.all([refreshCachedDirectory(first.parentId, first.bucketId), refreshLoadedCategories(first.bucketId)]))
       toast.info(`已将 ${copied.task_ids.length} 项加入后台复制任务`)
       return
     }
@@ -384,11 +397,16 @@ export function useActions({
     const restored = await apiRestoreNodes(session.tokens.accessToken, {
       node_ids: backendIds,
     })
+    if (snapshotRef.current.auth.session?.user.id !== session.user.id) return
     if (Array.isArray(restored)) {
       const restoredIds = new Set(restored.map((node) => String(node.id)))
       setRecycleNodes((current) => current.filter((node) => !restoredIds.has(node.id)))
       toast.success(`已恢复 ${backendIds.length} 项`)
     } else {
+      watchPathTasks(restored.task_ids, () => Promise.all([
+        ...restoringNodes.map((node) => refreshCachedDirectory(node.parentId, node.bucketId)),
+        ...Array.from(new Set(restoringNodes.map((node) => node.bucketId))).map(refreshLoadedCategories), loadRecycle(),
+      ]))
       toast.info(`已将 ${restored.task_ids.length} 项加入后台恢复任务`)
     }
     await Promise.all([
@@ -422,6 +440,7 @@ export function useActions({
     snapshotRef,
     updateSnapshot,
     moveNodes,
+    watchPathTasks,
     refreshCachedDirectory,
     refreshLoadedCategories,
   })

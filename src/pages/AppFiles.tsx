@@ -1,3 +1,4 @@
+import type { ConflictPolicy } from "@/api/file/type"
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
@@ -134,6 +135,8 @@ export function AppFiles() {
   const [inlineEdit, setInlineEdit] = React.useState<InlineEditState | null>(null)
   const [moveIds, setMoveIds] = React.useState<string[]>([])
   const [moveTargetId, setMoveTargetId] = React.useState<string>("")
+  const [moving, setMoving] = React.useState(false)
+  const moveRequestRef = React.useRef<{ ids: string[]; targetId: string; bucketId: string } | null>(null)
   const [moveConflict, setMoveConflict] = React.useState<(UploadConflictInfo & { replaceAllowed: boolean }) | null>(null)
   const [shareDialogNodes, setShareDialogNodes] = React.useState<FileNode[]>([])
   const [downloadDialogNodes, setDownloadDialogNodes] = React.useState<FileNode[]>([])
@@ -177,6 +180,9 @@ export function AppFiles() {
   const category = rawCategory && rawCategory in categoryMap ? (rawCategory as keyof typeof categoryMap) : null
   const currentPath = searchParams.get("folder") ?? ""
   const hasImportTask = ["pending", "running", "paused", "failed"].includes(activeBucket.syncStatus)
+  let importLabel = "导入已有文件"
+  if (startingImport) importLabel = "正在加入队列…"
+  if (hasImportTask) importLabel = "查看导入任务"
   const canImportHere = !category && !currentPath && activeBucket.mountMode === "mirror"
     && activeBucket.canEditConnection && Boolean(activeBucket.backendId && authSession)
   const openImportTask = async () => {
@@ -352,7 +358,11 @@ export function AppFiles() {
 
   React.useEffect(() => {
     setSelectedIds([])
-  }, [currentPath, category])
+    moveRequestRef.current = null
+    setMoving(false)
+    setMoveIds([])
+    setMoveConflict(null)
+  }, [currentPath, category, activeBucket.id])
 
   // Properties panel is managed independently; do not auto-close on selection change.
 
@@ -646,12 +656,18 @@ export function AppFiles() {
     await pasteNodes(currentFolderId)
   }
 
-  const submitMove = async (targetId: string, onConflict: "error" | "rename" | "replace" | "skip" = "error") => {
-    if (!moveIds.length) return
+  const submitMove = async (targetId: string, onConflict: ConflictPolicy = "error") => {
+    if (!moveIds.length || moving) return
+    const request = moveRequestRef.current ?? { ids: [...moveIds], targetId, bucketId: activeBucket.id }
+    moveRequestRef.current = request
+    setMoving(true)
     try {
-      await moveNodes(moveIds, targetId, activeBucket.id, onConflict)
+      await moveNodes(request.ids, request.targetId, request.bucketId, onConflict)
+      if (moveRequestRef.current !== request) return
       setMoveIds([])
+      moveRequestRef.current = null
     } catch (error) {
+      if (moveRequestRef.current !== request) return
       const detail = error instanceof ApiError && error.payload && typeof error.payload === "object"
         ? (error.payload as { detail?: unknown }).detail : null
       if (detail && typeof detail === "object" && (detail as { kind?: string }).kind === "move_conflict") {
@@ -668,11 +684,14 @@ export function AppFiles() {
           incomingSize: conflict.source.size,
           incomingModified: Date.parse(conflict.source.updated_at),
           incomingCount: 0,
-          replaceAllowed: conflict.replace_allowed,
+          replaceAllowed: conflict.replace_allowed && request.ids.length === 1,
         })
         return
       }
+      moveRequestRef.current = null
       toast.error(error instanceof Error ? error.message : "移动失败")
+    } finally {
+      if (moveRequestRef.current === request || moveRequestRef.current === null) setMoving(false)
     }
   }
 
@@ -806,7 +825,7 @@ export function AppFiles() {
                 (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.upload !== false}
               emptyAction={canImportHere ? (
                 <Button variant={activeBucket.readOnly ? "default" : "outline"} disabled={startingImport} onClick={() => void openImportTask()}>
-                  {hasImportTask ? "查看导入任务" : startingImport ? "正在加入队列…" : "导入已有文件"}
+                  {importLabel}
                 </Button>
               ) : null}
               loading={routeLoading || unresolvedFolder || pageState.loading}
@@ -896,6 +915,7 @@ export function AppFiles() {
         {moveIds.length > 0 && !moveConflict ? (
           <MoveDialog
             open
+            busy={moving}
             folders={folderOptions}
             items={moveBrowserItems}
             root={{ id: activeBucket.rootNodeId, name: activeBucket.name }}
@@ -908,7 +928,7 @@ export function AppFiles() {
                 loadDirectoryFolders(folderId, activeBucket.id),
               ])
             }}
-            onCancel={() => setMoveIds([])}
+            onCancel={() => { moveRequestRef.current = null; setMoveIds([]); setMoving(false) }}
             onSubmit={(value) => void submitMove(value)}
           />
         ) : null}
@@ -916,6 +936,7 @@ export function AppFiles() {
         <UploadConflictDialog
           conflict={moveConflict}
           action="move"
+          onCancel={() => { moveRequestRef.current = null; setMoveConflict(null); setMoveIds([]) }}
           replaceAllowed={moveConflict?.replaceAllowed}
           onResolve={(choice) => {
             setMoveConflict(null)

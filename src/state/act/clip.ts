@@ -9,6 +9,7 @@ type ClipDeps = {
   snapshotRef: { current: AppSnapshot }
   updateSnapshot: (recipe: (current: AppSnapshot) => AppSnapshot) => void
   moveNodes: (nodeIds: string[], parentId: string | null, bucketId?: string) => Promise<void>
+  watchPathTasks: (ids: string[], refresh: () => Promise<unknown>) => void
   refreshCachedDirectory: (parentId: string | null, bucketId: string) => Promise<void>
   refreshLoadedCategories: (bucketId: string) => Promise<void>
 }
@@ -18,6 +19,7 @@ export function useClipActions({
   snapshotRef,
   updateSnapshot,
   moveNodes,
+  watchPathTasks,
   refreshCachedDirectory,
   refreshLoadedCategories,
 }: ClipDeps) {
@@ -61,7 +63,9 @@ export function useClipActions({
           node_ids: backendIds,
           target_parent_id: target,
         })
+        if (snapshotRef.current.auth.session?.user.id !== session.user.id) return
         if (!Array.isArray(copied)) {
+          watchPathTasks(copied.task_ids, () => Promise.all([refreshCachedDirectory(targetParentId || bucket.rootNodeId, bucket.id), refreshLoadedCategories(bucket.id)]))
           toast.info(`已将 ${copied.task_ids.length} 项加入后台复制任务`)
           return
         }

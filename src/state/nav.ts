@@ -68,6 +68,11 @@ export function useNav({
   setRecycleLoading,
   setSharesLoading,
 }: NavDeps) {
+  const sessionGeneration = React.useRef({ userId: snapshot.auth.session?.user.id, value: 0 })
+  if (sessionGeneration.current.userId !== snapshot.auth.session?.user.id) {
+    sessionGeneration.current = { userId: snapshot.auth.session?.user.id, value: sessionGeneration.current.value + 1 }
+  }
+
   const loadDirectoryPage = React.useCallback(
     async (
       mode: "content" | "folders",
@@ -75,6 +80,7 @@ export function useNav({
       bucketId = snapshotRef.current.activeBucketId,
       options: PageLoadOptions = {}
     ) => {
+      const generation = sessionGeneration.current.value
       const session = snapshotRef.current.auth.session
       const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
       const backendId = bucket?.backendId
@@ -100,7 +106,7 @@ export function useNav({
       }
 
       const cursor = reset ? null : currentState.nextCursor
-      const requestKey = `${stateKey}:${queryKey}:${cursor ?? "first"}`
+      const requestKey = `${generation}:${stateKey}:${queryKey}:${cursor ?? "first"}`
       const inFlight = pageRequestsRef.current.get(requestKey)
       if (inFlight) {
         return inFlight
@@ -123,6 +129,7 @@ export function useNav({
               parentId: apiParentId,
               foldersOnly: mode === "folders",
             }).then((metadata) => {
+              if (generation !== sessionGeneration.current.value) return
               updatePageState(stateKey, (current) => {
                 if (current.queryKey !== queryKey || !current.loading) return current
                 return {
@@ -135,6 +142,7 @@ export function useNav({
                 }
               })
             }).catch(() => {
+              if (generation !== sessionGeneration.current.value) return
               updatePageState(stateKey, (current) => current.queryKey === queryKey
                 ? { ...current, metadataLoading: false }
                 : current)
@@ -148,6 +156,7 @@ export function useNav({
             sort,
             foldersOnly: mode === "folders",
           })
+          if (generation !== sessionGeneration.current.value) return
           const mapped = response.items.map((node) =>
             mapNodeToFileNode(node, bucket.id, uiParentId, snapshotRef.current.settings.timezone)
           )
@@ -231,6 +240,7 @@ export function useNav({
             })
           }
         } catch (error) {
+          if (generation !== sessionGeneration.current.value) return
           updatePageState(stateKey, (current) => ({ ...current, loading: false, metadataLoading: false }))
           throw error
         } finally {
@@ -252,19 +262,23 @@ export function useNav({
 
   const refreshCachedDirectory = React.useCallback(
     async (parentId: string | null, bucketId: string) => {
+      const generation = sessionGeneration.current.value
       const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
       if (!bucket) return
       const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
-      const state = pageStatesRef.current[directoryPageKey("content", bucket.id, uiParentId)]
-      if (!state?.loaded) return
-      const [sort, rawLimit] = state.queryKey.split(":") as [SortValue, string]
-      await loadDirectory(uiParentId, bucket.id, {
-        reset: true,
-        sort,
-        limit: Number(rawLimit) || 200,
-      })
+      await Promise.all((["content", "folders"] as const).map(async (mode) => {
+        const stateKey = directoryPageKey(mode, bucket.id, uiParentId)
+        const state = pageStatesRef.current[stateKey]
+        if (!state?.loaded) return
+        const [sort, rawLimit] = state.queryKey.split(":") as [SortValue, string]
+        let reset = true
+        do {
+          await loadDirectoryPage(mode, uiParentId, bucket.id, { reset, sort, limit: Number(rawLimit) || 200 })
+          reset = false
+        } while (generation === sessionGeneration.current.value && mode === "folders" && pageStatesRef.current[stateKey]?.nextCursor)
+      }))
     },
-    [loadDirectory]
+    [loadDirectoryPage]
   )
 
   const loadDirectoryFolders = React.useCallback(
@@ -369,6 +383,7 @@ export function useNav({
 
   const loadCategory = React.useCallback(
     async (category: NodeCategory, bucketId = defaultBucketId, options: PageLoadOptions = {}) => {
+      const generation = sessionGeneration.current.value
       const session = snapshotRef.current.auth.session
       const bucket = snapshotRef.current.buckets.find((item) => item.id === bucketId)
       const backendId = bucket?.backendId
@@ -387,7 +402,7 @@ export function useNav({
       }
 
       const cursor = reset ? null : currentState.nextCursor
-      const requestKey = `${stateKey}:${queryKey}:${cursor ?? "first"}`
+      const requestKey = `${generation}:${stateKey}:${queryKey}:${cursor ?? "first"}`
       const inFlight = pageRequestsRef.current.get(requestKey)
       if (inFlight) {
         return inFlight
@@ -409,6 +424,7 @@ export function useNav({
               mountId: backendId,
               category,
             }).then((metadata) => {
+              if (generation !== sessionGeneration.current.value) return
               updatePageState(stateKey, (current) => {
                 if (current.queryKey !== queryKey || !current.loading) return current
                 return {
@@ -421,6 +437,7 @@ export function useNav({
                 }
               })
             }).catch(() => {
+              if (generation !== sessionGeneration.current.value) return
               updatePageState(stateKey, (current) => current.queryKey === queryKey
                 ? { ...current, metadataLoading: false }
                 : current)
@@ -433,6 +450,7 @@ export function useNav({
             cursor,
             sort,
           })
+          if (generation !== sessionGeneration.current.value) return
           const mapped = response.items.map((node) =>
             mapNodeToFileNode(
               node,
@@ -477,6 +495,7 @@ export function useNav({
             })
           }
         } catch (error) {
+          if (generation !== sessionGeneration.current.value) return
           updatePageState(stateKey, (current) => ({ ...current, loading: false, metadataLoading: false }))
           throw error
         } finally {
@@ -516,6 +535,7 @@ export function useNav({
   )
 
   const loadRecycle = React.useCallback(async () => {
+    const generation = sessionGeneration.current.value
     const session = snapshotRef.current.auth.session
     if (!session) {
       return
@@ -523,6 +543,7 @@ export function useNav({
     setRecycleLoading(true)
     try {
       const entries = await listRecycle(session.tokens.accessToken)
+      if (generation !== sessionGeneration.current.value) return
       setRecycleNodes(
         entries.map((node) =>
           mapNodeToFileNode(
@@ -534,11 +555,12 @@ export function useNav({
         )
       )
     } finally {
-      setRecycleLoading(false)
+      if (generation === sessionGeneration.current.value) setRecycleLoading(false)
     }
   }, [])
 
   const loadShares = React.useCallback(async () => {
+    const generation = sessionGeneration.current.value
     const session = snapshotRef.current.auth.session
     if (!session) {
       return
@@ -546,9 +568,10 @@ export function useNav({
     setSharesLoading(true)
     try {
       const entries = await apiListMyShares(session.tokens.accessToken)
+      if (generation !== sessionGeneration.current.value) return
       updateSnapshot((current) => ({ ...current, shares: entries.map(mapShareRead) }))
     } finally {
-      setSharesLoading(false)
+      if (generation === sessionGeneration.current.value) setSharesLoading(false)
     }
   }, [updateSnapshot])
 
