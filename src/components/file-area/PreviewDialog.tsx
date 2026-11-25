@@ -107,34 +107,34 @@ export function PreviewDialog({
         )}
       >
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className={cn("flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 sm:gap-3", minimized ? "min-h-11 py-1" : "min-h-14 py-1 md:px-4")}>
-            <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onClose} aria-label="关闭预览">
+          <header className={cn("flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2.5 sm:gap-2", minimized ? "min-h-11 py-1" : "min-h-13 py-1.5 md:px-4")}>
+            <Button variant="ghost" size="icon" className={cn("shrink-0", previewIconButtonClass)} onClick={onClose} aria-label="关闭预览">
               <IconX />
             </Button>
             {titleIcon ? <span className="flex size-5 shrink-0 items-center justify-center">{titleIcon}</span> : null}
-            <div className="min-w-0 flex-1 basis-48">
-              <DialogTitle className="whitespace-normal break-all text-sm font-medium leading-5 text-foreground" title={name}>{name}</DialogTitle>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <DialogTitle className="block truncate text-sm font-medium leading-5 text-foreground" title={name}>{name}</DialogTitle>
             </div>
             <div
               ref={setImageToolbarTarget}
               className={cn(
                 manifest?.kind === "image" && !minimized
-                  ? "custom-scrollbar order-last min-w-0 basis-full overflow-x-auto lg:order-none lg:basis-auto"
+                  ? "custom-scrollbar order-last flex min-w-0 basis-full items-center overflow-x-auto border-t border-border/60 pt-1 lg:order-none lg:basis-auto lg:border-t-0 lg:pt-0"
                   : "hidden"
               )}
             />
-            {!minimized && totalCount > 1 && onPrev && onNext ? (
-              <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onPrev} aria-label="上一个">
-                  <IconChevronLeft />
-                </Button>
-                <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onNext} aria-label="下一个">
-                  <IconChevronRight />
-                </Button>
-              </div>
-            ) : null}
-            {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+              {!minimized && totalCount > 1 && onPrev && onNext ? (
+                <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+                  <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onPrev} aria-label="上一个">
+                    <IconChevronLeft />
+                  </Button>
+                  <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onNext} aria-label="下一个">
+                    <IconChevronRight />
+                  </Button>
+                </div>
+              ) : null}
+              {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
               {minimized ? (
                 <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={() => setDisplayMode("window")} aria-label="恢复音频播放器" title="恢复播放器">
                   <IconArrowsMaximize />

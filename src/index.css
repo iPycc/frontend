@@ -203,6 +203,62 @@
   --crepe-color-inline-area: var(--muted);
 }
 
+.milkdown .ProseMirror {
+  padding: 20px 12px !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (min-width: 640px) {
+  .milkdown .ProseMirror {
+    padding: 36px 32px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .milkdown .ProseMirror {
+    padding: 48px 56px !important;
+  }
+}
+
+.milkdown .milkdown-top-bar {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 30%, transparent) transparent;
+}
+
+.milkdown .milkdown-top-bar .top-bar-inner {
+  flex-wrap: nowrap !important;
+  width: max-content !important;
+  min-width: 100%;
+}
+
+.milkdown .milkdown-table-block {
+  overflow-x: auto;
+}
+
+@media (max-width: 639px) {
+  .milkdown .ProseMirror h1 {
+    font-size: 1.75em;
+    margin-top: 20px;
+  }
+
+  .milkdown .ProseMirror h2 {
+    font-size: 1.45em;
+    margin-top: 18px;
+  }
+
+  .milkdown .ProseMirror h3 {
+    font-size: 1.25em;
+    margin-top: 16px;
+  }
+
+  .milkdown .ProseMirror h4 {
+    font-size: 1.125em;
+    margin-top: 14px;
+  }
+}
+
 .markdown-source-block,
 .markdown-source-fragment {
   transition: background-color 120ms ease, box-shadow 120ms ease;

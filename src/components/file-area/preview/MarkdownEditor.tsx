@@ -50,7 +50,7 @@ export function MarkdownEditor({
 
   return (
     <div className="custom-scrollbar h-full min-h-0 overflow-auto bg-background">
-      <div ref={hostRef} className="milkdown mx-auto min-h-full w-full max-w-4xl px-4 py-6 sm:px-8" />
+      <div ref={hostRef} className="milkdown mx-auto min-h-full w-full max-w-4xl px-2 py-3 sm:px-6 sm:py-6" />
     </div>
   )
 }

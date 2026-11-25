@@ -6,6 +6,7 @@ import type { PreviewManifest } from "@/api/files"
 import { saveTextPreview } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
 import { MarkdownPreview, type MarkdownPreviewHandle } from "./MarkdownPreview"
 import { AdaptiveCodeEditor, type AdaptiveCodeEditorHandle, type SourceLineRange } from "./AdaptiveCodeEditor"
@@ -33,6 +34,7 @@ function hasExtendedMarkdownSyntax(content: string) {
 }
 
 export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
+  const isMobile = useIsMobile()
   const isMarkdown = ["md", "markdown"].includes(manifest.name.split(".").pop()?.toLowerCase() ?? "")
   const [content, setContent] = React.useState("")
   const [view, setView] = React.useState<"visual" | "source" | "split">(isMarkdown ? "visual" : "source")
@@ -108,17 +110,18 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
 
   if (loading) return <PreviewSkeleton kind="text" />
   if (error) return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
+  if (isMarkdown && isMobile) return <MarkdownPreview content={content} />
 
   const language = inferLanguage(manifest.name)
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="truncate text-xs text-muted-foreground">
+      <div className="custom-scrollbar flex min-h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-border px-3 py-1">
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {language.label} · {textEncoding.toUpperCase()}{truncated ? ` · 仅显示前 ${Math.round(maxBytes / 1024 / 1024)} MB` : ""}{dirty ? " · 未保存" : ""}{readOnlyReason ? ` · ${readOnlyReason}` : ""}{sourceOnly ? " · 检测到扩展语法，使用源码模式" : ""}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           {isMarkdown ? <ToggleGroup type="single" value={sourceOnly ? "source" : view} onValueChange={(value) => { if (!sourceOnly && (value === "visual" || value === "source" || value === "split")) setView(value) }} variant="outline" size="sm" spacing={0} aria-label="Markdown 显示模式"><ToggleGroupItem value="visual" disabled={sourceOnly} aria-label={editable ? "所见即所得编辑" : "预览 Markdown"}><IconEdit data-icon="inline-start" />{editable ? "编辑" : "预览"}</ToggleGroupItem><ToggleGroupItem value="source" aria-label={editable ? "编辑 Markdown 源码" : "查看 Markdown 源码"}><IconCode data-icon="inline-start" />源码</ToggleGroupItem><ToggleGroupItem value="split" disabled={sourceOnly} aria-label="左侧源码、右侧预览"><IconColumns3 data-icon="inline-start" />分屏</ToggleGroupItem></ToggleGroup> : null}
-          {editable ? <Button size="sm" variant="outline" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}保存</Button> : null}
+          {editable ? <Button size="sm" variant="outline" className="shrink-0" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconDeviceFloppy data-icon="inline-start" />}保存</Button> : null}
         </div>
       </div>
       {isMarkdown && view === "split" && !sourceOnly ? (
