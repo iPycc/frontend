@@ -88,6 +88,10 @@ export function useUploadRun({
         })
         return
       }
+      if (bucket.extra?.requires_reauthorization === true) {
+        updateUploadQueueItem(id, { status: "paused", speedText: "需要重新授权", errorMessage: "请在存储设置中更新此挂载的授权后继续上传" })
+        return
+      }
       if (bucket.readOnly) {
         updateUploadQueueItem(id, {
           status: "failed",
@@ -172,7 +176,6 @@ export function useUploadRun({
           throw new Error("重新选择的文件校验值与原上传任务不一致")
         }
         updateUploadQueueItem(id, {
-          checksum: checksum ?? queueItem?.checksum,
           fileFingerprint,
           fileLastModified: saved.file.lastModified,
           progressStage: undefined,
@@ -201,6 +204,12 @@ export function useUploadRun({
               (existing.provider_checksum && providerChecksum && existing.provider_checksum !== providerChecksum)
             ) {
               throw new Error("原上传会话与所选文件不匹配")
+            }
+            if (!queueItem?.checksum && !existing.checksum && !existing.provider_checksum) {
+              await uploadApiSchedulerRef.current.run(
+                () => abortUpload(getAccessToken(), existing.id, "unverified_resume"), controller.signal
+              )
+              existing = { ...existing, state: "aborted", ready_to_complete: false }
             }
             if (existing.ready_to_complete) {
               uploadCommitIdsRef.current.add(id)
@@ -257,28 +266,19 @@ export function useUploadRun({
               updateUploadQueueItem(id, { createKey })
             }
             if (existing.state !== "aborted" && existing.state !== "expired") {
-              if (!queueItem?.checksum && !providerChecksum) {
-                await uploadApiSchedulerRef.current.run(
-                  () => abortUpload(getAccessToken(), existing.id, "unverified_resume"),
-                  controller.signal
-                )
-                createKey = createId("upload")
-                updateUploadQueueItem(id, { createKey })
-              } else {
-                plan = {
-                  session_id: existing.id,
-                  upload_mode: existing.mode,
-                  upload_id: existing.upload_id,
-                  object_key: existing.path,
-                  part_size: existing.part_size,
-                  part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
-                  upload_urls: [],
-                  transport: existing.transport,
-                  required_response_headers: existing.required_response_headers,
-                  part_checksum_algorithm: existing.part_checksum_algorithm,
-                }
-                serverParts = existing.parts
+              plan = {
+                session_id: existing.id,
+                upload_mode: existing.mode,
+                upload_id: existing.upload_id,
+                object_key: existing.path,
+                part_size: existing.part_size,
+                part_count: Math.max(1, Math.ceil(existing.size / Math.max(existing.part_size, 1))),
+                upload_urls: [],
+                transport: existing.transport,
+                required_response_headers: existing.required_response_headers,
+                part_checksum_algorithm: existing.part_checksum_algorithm,
               }
+              serverParts = existing.parts
             }
           } catch (error) {
             if (!(error instanceof ApiError) || error.status !== 404) throw error
@@ -317,6 +317,7 @@ export function useUploadRun({
           )
         }
 
+        updateUploadQueueItem(id, { checksum })
         const activeSessionId = plan.session_id
         if (!activeSessionId) throw new Error("Upload session id is missing")
         sessionId = activeSessionId

@@ -198,5 +198,6 @@ export async function hashBlob(
     }
     if (blob.size === 0) break
   }
+  signal?.throwIfAborted()
   return hasher.digest()
 }

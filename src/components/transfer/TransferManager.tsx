@@ -188,7 +188,10 @@ function getSummary(items: TransferItem[]) {
   const speed = items
     .filter((item) => isActive(item) && item.upload?.progressStage !== "hashing")
     .reduce((sum, item) => sum + item.speed, 0)
-  const remainingSeconds = active > 0 && speed > 0 && total > loaded ? (total - loaded) / speed : 0
+  const estimating = items.filter((item) => isActive(item) && item.total !== null && item.upload?.progressStage !== "hashing")
+  const remaining = estimating.reduce((sum, item) => sum + Math.max((item.total ?? 0) - item.loaded, 0), 0)
+  const estimateSpeed = estimating.reduce((sum, item) => sum + item.speed, 0)
+  const remainingSeconds = estimateSpeed > 0 ? remaining / estimateSpeed : 0
   return { active, paused, failed, completed, uploads, downloads, progress, speed, total, loaded, remainingSeconds }
 }
 
@@ -276,7 +279,7 @@ export function TransferManager({
   const [panelSize, setPanelSize] = React.useState<"normal" | "expanded">(
     placement === "content" ? "expanded" : "normal"
   )
-  const [minimized, setMinimized] = React.useState(false)
+  const [minimized, setMinimized] = React.useState(!uploadQueueOpen)
   const [closed, setClosed] = React.useState(false)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
 
@@ -344,7 +347,7 @@ export function TransferManager({
     }
   }, [items, selectedId])
 
-  if (closed || (!items.length && !uploadQueueOpen)) return null
+  if ((closed || !items.length) && !uploadQueueOpen) return null
 
   const clearFinished = () => {
     clearCompletedUploads()
@@ -354,7 +357,8 @@ export function TransferManager({
   }
 
   const handleCloseWindow = () => {
-    setClosed(true)
+    setClosed(!items.some((item) => !isTerminal(item)))
+    setMinimized(true)
     setUploadQueueOpen(false)
     if (downloadTask && ["complete", "error"].includes(downloadTask.phase)) {
       onDismissDownload?.()
@@ -362,30 +366,25 @@ export function TransferManager({
   }
 
   const handleToggleMinimize = () => {
-    setMinimized((prev) => {
-      const next = !prev
-      setUploadQueueOpen(!next)
-      return next
-    })
+    const next = !minimized
+    setMinimized(next)
+    setUploadQueueOpen(!next)
   }
 
-  const overallStatus: "active" | "failed" | "paused" | "completed" = summary.active
-    ? "active"
-    : summary.failed
-      ? "failed"
-      : summary.paused
-        ? "paused"
-        : "completed"
+  let overallStatus: "active" | "failed" | "paused" | "completed" | "canceled" = "completed"
+  let summaryTitle = items.length ? "传输已完成" : "传输管理"
+  if (items.length && items.every((item) => item.status === "canceled")) { overallStatus = "canceled"; summaryTitle = "传输已取消" }
+  if (summary.paused) { overallStatus = "paused"; summaryTitle = "传输已暂停" }
+  if (summary.failed) { overallStatus = "failed"; summaryTitle = "传输存在异常" }
+  if (summary.active) { overallStatus = "active"; summaryTitle = "正在传输" }
 
-  const summaryTitle = summary.active
-    ? "正在传输"
-    : summary.failed
-      ? "传输存在异常"
-      : summary.paused
-        ? "传输已暂停"
-        : items.length
-          ? "传输已完成"
-          : "传输管理"
+  let summaryIcon = <ArrowUpToLine className="size-4 text-primary" />
+  let summaryColor = "bg-muted text-muted-foreground"
+  if (overallStatus === "completed" && items.length) { summaryIcon = <Check className="size-4 text-emerald-600 dark:text-emerald-400" />; summaryColor = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" }
+  if (overallStatus === "canceled") summaryIcon = <X className="size-4 text-muted-foreground" />
+  if (overallStatus === "paused") { summaryIcon = <Pause className="size-4 text-amber-600 dark:text-amber-400" />; summaryColor = "bg-amber-500/15 text-amber-700 dark:text-amber-300" }
+  if (overallStatus === "failed") { summaryIcon = <CircleAlert className="size-4 text-destructive" />; summaryColor = "bg-destructive/15 text-destructive" }
+  if (overallStatus === "active") { summaryIcon = <LoaderCircle className="size-4 animate-spin text-primary" />; summaryColor = "bg-primary/15 text-primary" }
 
   const summaryStatsText = (() => {
     if (!items.length) return "暂无活动任务"
@@ -455,17 +454,7 @@ export function TransferManager({
           className="relative z-10 flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/85 text-foreground ring-1 ring-border/70 transition-colors hover:bg-background"
           aria-label={minimized ? "展开传输列表" : "收起传输列表"}
         >
-          {summary.active ? (
-            <LoaderCircle className="size-4 animate-spin text-primary" />
-          ) : summary.failed ? (
-            <CircleAlert className="size-4 text-destructive" />
-          ) : summary.paused ? (
-            <Pause className="size-4 text-amber-600 dark:text-amber-400" />
-          ) : items.length ? (
-            <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <ArrowUpToLine className="size-4 text-primary" />
-          )}
+          {summaryIcon}
         </button>
 
         {/* 中间汇总信息区（点击可展开/收起） */}
@@ -480,13 +469,7 @@ export function TransferManager({
               <span
                 className={cn(
                   "inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                  overallStatus === "failed"
-                    ? "bg-destructive/15 text-destructive"
-                    : summary.paused && !summary.active
-                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                      : summary.active
-                        ? "bg-primary/15 text-primary"
-                        : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  summaryColor
                 )}
               >
                 {Math.round(summary.progress)}%
@@ -678,6 +661,7 @@ function TransferRow({
         aria-expanded={selected}
         onClick={onSelect}
         onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault()
             onSelect()

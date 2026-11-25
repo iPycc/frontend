@@ -465,6 +465,7 @@ export function UploadProvider({
   const resumeUpload = React.useCallback((id: string) => {
     const item = getUploadQueueItem(id)
     if (!item || ["completed", "canceled", "processing"].includes(item.status)) return
+    if (!resolveUploadBucket(item.mountId)) return
     if (!uploadFilesRef.current.has(id)) {
       pendingResumeIdRef.current = id
       resumeInputRef.current?.click()
@@ -484,7 +485,7 @@ export function UploadProvider({
       return
     }
     enqueueUploads([id])
-  }, [enqueueUploads, getUploadQueueItem, updateUploadQueueItem])
+  }, [enqueueUploads, getUploadQueueItem, resolveUploadBucket, updateUploadQueueItem])
 
   const retryUpload = resumeUpload
 
@@ -524,7 +525,7 @@ export function UploadProvider({
     })
     void fingerprintFile(file).then((fingerprint) => {
       const latest = getUploadQueueItem(id)
-      if (!latest) return
+      if (!latest || latest.status === "canceled") return
       if (latest.fileFingerprint && latest.fileFingerprint !== fingerprint) {
         updateUploadQueueItem(id, {
           status: "paused",
@@ -558,6 +559,8 @@ export function UploadProvider({
       })
       enqueueUploads([id])
     }).catch(() => {
+      const latest = getUploadQueueItem(id)
+      if (!latest || latest.status === "canceled" || latest.status === "paused") return
       updateUploadQueueItem(id, {
         status: "paused",
         speedText: "文件校验失败，请重新选择",
