@@ -121,6 +121,8 @@ export type MountDeleteResult = {
 export type MountHealth = {
   status: "healthy" | "reauthorization_required" | "failed"
   detail: string
+  message: string
+  code: string | null
   checked_at: string
   capabilities: Record<"download" | "upload" | "multipart" | "direct_upload" | "batch", boolean>
 }

@@ -9,6 +9,7 @@ import { IconArrowRight } from "@tabler/icons-react"
 import { MountStatus, mountCorsLabels } from "@/components/storage/MountStatus"
 import { getProviderDisplayName, ProviderIcon } from "@/components/storage/ProviderIcon"
 import { checkMountHealth, type MountHealth } from "@/api/storage"
+import { ApiError } from "@/api/client"
 
 export function Mounts() {
   usePageTitle("存储桶")
@@ -26,10 +27,12 @@ export function Mounts() {
     try {
       const result = await checkMountHealth(authSession.tokens.accessToken, mountId)
       setHealth((current) => ({ ...current, [mountId]: result }))
-      if (result.status === "healthy") toast.success(result.detail)
-      else toast.error(result.detail)
+      if (result.status === "healthy") toast.success(result.message)
+      else toast.error(result.message, { description: result.code })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "连接检查失败")
+      toast.error(error instanceof Error ? error.message : "连接检查失败", {
+        description: error instanceof ApiError ? error.code : undefined,
+      })
     } finally {
       setCheckingId(null)
     }
@@ -90,7 +93,10 @@ export function Mounts() {
             </div>
             {status && status.status !== "healthy" ? (
               <div className="mt-2 flex items-start justify-between gap-2 text-xs text-destructive" role="status">
-                <span>{status.detail}</span>
+                <div className="min-w-0 [overflow-wrap:anywhere]">
+                  <div>{status.message || "连接检查失败，请重新检查连接"}</div>
+                  {status.code ? <div>{status.code}</div> : null}
+                </div>
                 {(bucket.extra?.requires_reauthorization === true ||
                   status.status === "reauthorization_required") && bucket.canEditConnection ? (
                   <Button size="sm" variant="outline" className="h-7 shrink-0" onClick={() => navigate("/settings/storage")}>重新授权</Button>

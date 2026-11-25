@@ -75,6 +75,9 @@ function toRequestBody(body: unknown) {
 function pickErrorMessage(payload: unknown, status: number) {
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>
+    if (record.code !== "validation_error" && typeof record.message === "string" && record.message.trim()) {
+      return record.message
+    }
     const advice: Record<string, string> = {
       quota_exceeded: "存储空间不足，请释放空间或调整配额后重试",
       storage_reauthorization_required: "存储授权已失效，请重新授权后重试",
