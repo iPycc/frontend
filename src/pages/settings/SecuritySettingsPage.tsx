@@ -1,5 +1,6 @@
 import { GitHubIcon } from "@/components/icons/github-icon"
 import * as React from "react"
+import { resolveRequestUrl } from "@/api/client"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   Check,
@@ -55,6 +56,9 @@ import {
 } from "@/lib/github-oauth-popup"
 import {
   openGoogleOAuthPopup,
+  closeGoogleOAuthPopup,
+  GOOGLE_OAUTH_MESSAGE_TYPE,
+  GOOGLE_OAUTH_TIMEOUT_MS,
   subscribeGoogleOAuthResults,
   type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
@@ -226,12 +230,15 @@ export function SecuritySettingsPage() {
   const handledQQOAuthLinkResult = React.useRef<string | null>(null)
   const githubOAuthPopupRef = React.useRef<Window | null>(null)
   const googleOAuthPopupRef = React.useRef<Window | null>(null)
+  const googleTestConfirmationRef = React.useRef<AbortController | null>(null)
   const googleTestPopupRef = React.useRef<Window | null>(null)
   const qqOAuthPopupRef = React.useRef<Window | null>(null)
   const isSavingGitHubOAuth = githubOAuthSavingAction !== null
   const isSavingGoogleOAuth = googleOAuthSavingAction !== null
   const googleConfigChanged = googleClientId.trim() !== savedGoogleClientId || Boolean(googleClientSecret.trim())
   const googleClosingForSave = googleOAuthEnabled && googleConfigChanged
+  let googleSaveLabel = googleClosingForSave ? "关闭并保存配置" : "保存配置"
+  if (googleOAuthSavingAction === "save") googleSaveLabel = "保存中..."
   const isSavingQQOAuth = qqOAuthSavingAction !== null
 
   React.useEffect(() => {
@@ -787,16 +794,18 @@ export function SecuritySettingsPage() {
   }
 
   const saveGoogleOAuth = async (enabled = true, saveOnly = false) => {
-    if (!token || !isAdmin) {
+    if (!token || !isAdmin || isTestingGoogle || isLinkingGoogle) {
       return
     }
 
-    setGoogleOAuthSavingAction(saveOnly ? "save" : enabled ? "enable" : "disable")
+    let action: "save" | "enable" | "disable" = enabled ? "enable" : "disable"
+    if (saveOnly) action = "save"
+    setGoogleOAuthSavingAction(action)
     try {
       const response = await updateGoogleOAuthSettings(token, {
         enabled,
-        clientId: googleClientId.trim(),
-        clientSecret: googleClientSecret,
+        clientId: saveOnly ? googleClientId.trim() : savedGoogleClientId,
+        clientSecret: saveOnly ? googleClientSecret : undefined,
       })
       setGoogleOAuthEnabled(response.enabled)
       setGoogleConfigVerified(response.configuration_verified)
@@ -808,9 +817,9 @@ export function SecuritySettingsPage() {
       if (!response.enabled && !saveOnly) {
         setGoogleConfigExpanded(false)
       }
-      toast.success(saveOnly
-        ? googleClosingForSave ? "已关闭 Google OAuth 并保存新配置" : "Google OAuth 配置已保存"
-        : response.enabled ? "Google OAuth 已开启" : "Google OAuth 已关闭")
+      let message = response.enabled ? "Google OAuth 已开启" : "Google OAuth 已关闭"
+      if (saveOnly) message = googleClosingForSave ? "已关闭 Google OAuth 并保存新配置" : "Google OAuth 配置已保存"
+      toast.success(message)
     } catch (error) {
       toast.error("保存 Google OAuth 配置失败", {
         description: error instanceof Error ? error.message : "请稍后再试。",
@@ -825,11 +834,9 @@ export function SecuritySettingsPage() {
       return
     }
 
-    const popup = openGoogleOAuthPopup(googleLinkUrl, "link")
+    const { popup, error } = openGoogleOAuthPopup(googleLinkUrl, "link")
     if (!popup) {
-      toast.error("无法打开 Google 授权窗口", {
-        description: "请允许此站点打开弹出式窗口后重试。",
-      })
+      toast.error(error)
       return
     }
 
@@ -839,9 +846,9 @@ export function SecuritySettingsPage() {
 
   const testGoogle = () => {
     if (isTestingGoogle || isLinkingGoogle) return
-    const popup = openGoogleOAuthPopup("/api/v1/oauth/google/test", "test")
+    const { popup, error } = openGoogleOAuthPopup(resolveRequestUrl("/oauth/google/test"), "test")
     if (!popup) {
-      toast.error("无法打开 Google 授权窗口，请允许弹出式窗口后重试。")
+      toast.error(error)
       return
     }
     googleTestPopupRef.current = popup
@@ -850,7 +857,11 @@ export function SecuritySettingsPage() {
 
   const handleGoogleTestResult = React.useCallback(async (message: GoogleOAuthMessage) => {
     if (!googleTestPopupRef.current) return
+    closeGoogleOAuthPopup(googleTestPopupRef.current)
     googleTestPopupRef.current = null
+    const controller = new AbortController()
+    googleTestConfirmationRef.current = controller
+    const deadline = window.setTimeout(() => controller.abort("timeout"), 30_000)
     try {
       if (message.result !== "success") {
         toast.error("Google 授权测试失败", {
@@ -859,7 +870,8 @@ export function SecuritySettingsPage() {
         return
       }
       if (!token || !isAdmin) return
-      const response = await getGoogleOAuthSettings(token)
+      const response = await getGoogleOAuthSettings(token, controller.signal)
+      if (controller.signal.aborted) return
       setGoogleConfigVerified(response.configuration_verified && response.client_id === savedGoogleClientId)
       if (response.configuration_verified && response.client_id === savedGoogleClientId) {
         toast.success("Google 授权测试成功")
@@ -867,9 +879,14 @@ export function SecuritySettingsPage() {
         toast.error("当前配置仍需测试，请检查已保存的凭据和回调地址。")
       }
     } catch (error) {
+      if (controller.signal.aborted) {
+        if (controller.signal.reason === "timeout") toast.error("确认 Google 授权结果超时，请重试")
+        return
+      }
       toast.error(error instanceof Error ? error.message : "无法确认 Google 授权测试结果")
     } finally {
-      setIsTestingGoogle(false)
+      window.clearTimeout(deadline)
+      if (googleTestConfirmationRef.current === controller) { googleTestConfirmationRef.current = null; setIsTestingGoogle(false) }
     }
   }, [isAdmin, savedGoogleClientId, token])
 
@@ -880,16 +897,33 @@ export function SecuritySettingsPage() {
   React.useEffect(() => {
     if (!isTestingGoogle) return
     const timeout = window.setTimeout(() => {
-      handleGoogleTestResult({ type: "cloudrave:google-oauth-result", flow: "test", result: "timeout" })
-    }, 10 * 60 * 1000)
+      handleGoogleTestResult({ type: GOOGLE_OAUTH_MESSAGE_TYPE, flow: "test", result: "timeout" })
+    }, GOOGLE_OAUTH_TIMEOUT_MS)
     return () => window.clearTimeout(timeout)
   }, [handleGoogleTestResult, isTestingGoogle])
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get("google_oauth_test")
+    if (!result || !token || !isAdmin || isLoadingGoogleOAuth || !savedGoogleClientId) return
+    params.delete("google_oauth_test")
+    const query = params.toString()
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`)
+    if (result !== "success") { toast.error("Google 授权测试失败"); return }
+    const controller = new AbortController()
+    void getGoogleOAuthSettings(token, controller.signal).then((response) => {
+      setGoogleConfigVerified(response.configuration_verified && response.client_id === savedGoogleClientId)
+      if (response.configuration_verified) toast.success("Google 授权测试成功")
+    }).catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : "无法确认测试结果") })
+    return () => controller.abort()
+  }, [token, isAdmin, savedGoogleClientId, isLoadingGoogleOAuth])
 
   const handleGoogleLinkResult = React.useCallback((message: GoogleOAuthMessage) => {
     if (!googleOAuthPopupRef.current) {
       return
     }
 
+    closeGoogleOAuthPopup(googleOAuthPopupRef.current)
     googleOAuthPopupRef.current = null
     setIsLinkingGoogle(false)
 
@@ -919,14 +953,17 @@ export function SecuritySettingsPage() {
 
     // Google may isolate its window with COOP. Do not inspect its WindowProxy.
     const timeout = window.setTimeout(() => {
-      handleGoogleLinkResult({ type: "cloudrave:google-oauth-result", flow: "link", result: "timeout" })
-    }, 10 * 60 * 1000)
+      handleGoogleLinkResult({ type: GOOGLE_OAUTH_MESSAGE_TYPE, flow: "link", result: "timeout" })
+    }, GOOGLE_OAUTH_TIMEOUT_MS)
 
     return () => window.clearTimeout(timeout)
   }, [handleGoogleLinkResult, isLinkingGoogle])
 
   React.useEffect(() => {
     return () => {
+      closeGoogleOAuthPopup(googleOAuthPopupRef.current)
+      closeGoogleOAuthPopup(googleTestPopupRef.current)
+      googleTestConfirmationRef.current?.abort()
       googleOAuthPopupRef.current = null
       googleTestPopupRef.current = null
     }
@@ -1427,14 +1464,20 @@ export function SecuritySettingsPage() {
                     onClick={() => void saveGoogleOAuth(googleOAuthEnabled && !googleClosingForSave, true)}
                     disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle}
                   >
-                    {googleOAuthSavingAction === "save" ? "保存中..." : googleClosingForSave ? "关闭并保存配置" : "保存配置"}
+                    {googleSaveLabel}
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={testGoogle}
-                    disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle || isLinkingGoogle || !googleCallbackUrl || !googleSecretConfigured || !savedGoogleClientId || googleConfigChanged}
+                    onClick={isTestingGoogle ? () => {
+                      closeGoogleOAuthPopup(googleTestPopupRef.current)
+                      googleTestPopupRef.current = null
+                      googleTestConfirmationRef.current?.abort()
+                      googleTestConfirmationRef.current = null
+                      setIsTestingGoogle(false)
+                    } : testGoogle}
+                    disabled={!isTestingGoogle && (isLoadingGoogleOAuth || isSavingGoogleOAuth || isLinkingGoogle || !googleCallbackUrl || !googleSecretConfigured || !savedGoogleClientId || googleConfigChanged)}
                   >
-                    {isTestingGoogle ? "等待授权..." : "测试登录"}
+                    {isTestingGoogle ? "取消测试" : "测试登录"}
                   </Button>
                   {!googleOAuthEnabled ? (
                     <Button
@@ -1450,7 +1493,7 @@ export function SecuritySettingsPage() {
                     <Button
                       variant="outline"
                       onClick={() => void saveGoogleOAuth(false)}
-                      disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth}
+                      disabled={isLoadingGoogleOAuth || isSavingGoogleOAuth || isTestingGoogle || isLinkingGoogle}
                       aria-busy={googleOAuthSavingAction === "disable"}
                     >
                       {googleOAuthSavingAction === "disable" ? (
@@ -1508,8 +1551,12 @@ export function SecuritySettingsPage() {
             ) : (
               <Button
                 variant="outline"
-                onClick={linkGoogle}
-                disabled={isLinkingGoogle || isTestingGoogle}
+                onClick={isLinkingGoogle ? () => {
+                  closeGoogleOAuthPopup(googleOAuthPopupRef.current)
+                  googleOAuthPopupRef.current = null
+                  setIsLinkingGoogle(false)
+                } : linkGoogle}
+                disabled={isTestingGoogle}
                 aria-busy={isLinkingGoogle}
               >
                 {isLinkingGoogle ? (
@@ -1517,7 +1564,7 @@ export function SecuritySettingsPage() {
                 ) : (
                   <GoogleIcon data-icon="inline-start" />
                 )}
-                {isLinkingGoogle ? "等待 Google 授权..." : "关联 Google"}
+                {isLinkingGoogle ? "取消关联" : "关联 Google"}
               </Button>
             )}
           </section>

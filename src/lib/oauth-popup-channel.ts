@@ -5,10 +5,14 @@ export function publishPopupResult<T extends object>(message: T, channelName: st
     // COOP can sever the opener; the other same-origin channels still work.
   }
 
+  try {
   if (typeof window.BroadcastChannel !== "undefined") {
     const channel = new window.BroadcastChannel(channelName)
     channel.postMessage(message)
     channel.close()
+  }
+  } catch {
+    // Storage still delivers results when BroadcastChannel is blocked.
   }
 
   try {
@@ -32,9 +36,12 @@ export function subscribePopupResults<T>(
   const handleWindowMessage = (event: MessageEvent<unknown>) => {
     if (event.origin === window.location.origin && event.source === getPopup()) deliver(event.data)
   }
-  const channel = typeof window.BroadcastChannel !== "undefined"
-    ? new window.BroadcastChannel(channelName)
-    : null
+  let channel: BroadcastChannel | null = null
+  try {
+    if (typeof window.BroadcastChannel !== "undefined") channel = new window.BroadcastChannel(channelName)
+  } catch {
+    // Window messages and storage remain available.
+  }
   const handleChannelMessage = (event: MessageEvent<unknown>) => deliver(event.data)
   const handleStorage = (event: StorageEvent) => {
     if (event.key !== storageKey || !event.newValue) return

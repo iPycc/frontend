@@ -46,6 +46,9 @@ import {
 } from "@/lib/github-oauth-popup"
 import {
   openGoogleOAuthPopup,
+  closeGoogleOAuthPopup,
+  GOOGLE_OAUTH_MESSAGE_TYPE,
+  GOOGLE_OAUTH_TIMEOUT_MS,
   subscribeGoogleOAuthResults,
   type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
@@ -399,6 +402,7 @@ export function LoginForm({
       return
     }
 
+    closeGoogleOAuthPopup(googleOAuthPopupRef.current)
     googleOAuthPopupRef.current = null
     setIsGoogleLoginLoading(false)
 
@@ -437,14 +441,14 @@ export function LoginForm({
 
     // Google may isolate its window with COOP. Do not inspect its WindowProxy.
     const timeout = window.setTimeout(() => {
-      handleGoogleOAuthResult({ type: "cloudrave:google-oauth-result", flow: "login", result: "timeout" })
-    }, 10 * 60 * 1000)
+      handleGoogleOAuthResult({ type: GOOGLE_OAUTH_MESSAGE_TYPE, flow: "login", result: "timeout" })
+    }, GOOGLE_OAUTH_TIMEOUT_MS)
 
     return () => window.clearTimeout(timeout)
   }, [handleGoogleOAuthResult, isGoogleLoginLoading])
 
   useEffect(() => {
-    return () => { googleOAuthPopupRef.current = null }
+    return () => { closeGoogleOAuthPopup(googleOAuthPopupRef.current); googleOAuthPopupRef.current = null }
   }, [])
 
   const handleQQOAuthResult = React.useCallback((message: QQOAuthMessage) => {
@@ -665,11 +669,9 @@ export function LoginForm({
       return
     }
 
-    const popup = openGoogleOAuthPopup(googleOAuthUrl, "login")
+    const { popup, error } = openGoogleOAuthPopup(googleOAuthUrl, "login")
     if (!popup) {
-      toast.error("无法打开 Google 授权窗口", {
-        description: "请允许此站点打开弹出式窗口后重试。",
-      })
+      toast.error(error)
       return
     }
 
@@ -820,6 +822,11 @@ export function LoginForm({
                               : "使用 GitHub 继续"}
                         </Button>
                       ) : null}
+                      {isGoogleLoginLoading ? <Button type="button" variant="ghost" onClick={() => {
+                        closeGoogleOAuthPopup(googleOAuthPopupRef.current)
+                        googleOAuthPopupRef.current = null
+                        setIsGoogleLoginLoading(false)
+                      }}>取消 Google 登录</Button> : null}
                       {googleOAuthUrl || isGoogleOAuthLoading ? (
                         <Button
                           variant="outline"

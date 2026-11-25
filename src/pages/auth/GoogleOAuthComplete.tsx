@@ -3,10 +3,9 @@ import * as React from "react"
 import { GoogleIcon } from "@/components/icons/google-icon"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  GOOGLE_OAUTH_MESSAGE_TYPE,
+  readGoogleOAuthCompletion,
   publishGoogleOAuthResult,
   type GoogleOAuthFlow,
-  type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
 
 function getFallbackUrl(flow: GoogleOAuthFlow, result: string) {
@@ -25,39 +24,11 @@ function getFallbackUrl(flow: GoogleOAuthFlow, result: string) {
   return `/login?google_oauth_error=${encodeURIComponent(result)}`
 }
 
-function readOAuthResult(): { flow: GoogleOAuthFlow; result: string } {
-  const params = new URLSearchParams(window.location.search)
-
-  if (window.location.pathname === "/app" || window.location.pathname.startsWith("/app/")) {
-    return { flow: "login" as const, result: "success" }
-  }
-  if (window.location.pathname === "/login") {
-    if (params.get("oauth_2fa") === "google") {
-      return { flow: "login" as const, result: "two_factor" }
-    }
-    return { flow: "login" as const, result: params.get("google_oauth_error") || "provider_error" }
-  }
-  if (window.location.pathname === "/settings/security") {
-    return { flow: "link" as const, result: params.get("google_oauth_link") || "provider_error" }
-  }
-
-  const requestedFlow = params.get("flow")
-  return {
-    flow: requestedFlow === "link" || requestedFlow === "test" ? requestedFlow : "login" as const,
-    result: params.get("result") || "provider_error",
-  }
-}
-
 export function GoogleOAuthComplete() {
-  const { flow, result } = React.useMemo(readOAuthResult, [])
+  const message = React.useMemo(() => readGoogleOAuthCompletion(window.location), [])
+  const { flow, result } = message
 
   React.useEffect(() => {
-    const message: GoogleOAuthMessage = {
-      type: GOOGLE_OAUTH_MESSAGE_TYPE,
-      flow,
-      result,
-    }
-
     publishGoogleOAuthResult(message)
     const completionTimer = window.setTimeout(() => {
       window.close()
@@ -67,7 +38,7 @@ export function GoogleOAuthComplete() {
     }, 120)
 
     return () => window.clearTimeout(completionTimer)
-  }, [flow, result])
+  }, [flow, result, message])
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted p-6">

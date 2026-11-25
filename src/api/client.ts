@@ -50,7 +50,7 @@ function getApiBaseUrl() {
   return env?.VITE_API_BASE_URL || DEFAULT_API_BASE
 }
 
-function resolveRequestUrl(path: string) {
+export function resolveRequestUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path
   }

@@ -46,7 +46,7 @@ function isGoogleOAuthReturn() {
     pathname === "/app" ||
     pathname.startsWith("/app/") ||
     (pathname === "/login" && (params.has("google_oauth_error") || params.get("oauth_2fa") === "google")) ||
-    (pathname === "/settings/security" && params.has("google_oauth_link"))
+    (pathname === "/settings/security" && (params.has("google_oauth_link") || params.has("google_oauth_test")))
   )
 }
 
