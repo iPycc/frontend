@@ -1,4 +1,5 @@
-﻿import { type ReactNode } from "react"
+﻿import * as React from "react"
+import { type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
   IconArrowsSort,
@@ -107,6 +108,20 @@ export function Toolbar({
   const canBatch = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities.batch !== false
   const canCopy = canBatch && hasCapability(currentUser, "file.copy")
   const canShare = hasCapability(currentUser, "share.manage")
+  const breadcrumbScrollRef = React.useRef<HTMLDivElement>(null)
+  const pathSignature = currentLabel ?? pathParts.join("/")
+
+  React.useLayoutEffect(() => {
+    const container = breadcrumbScrollRef.current
+    if (!container) return
+    const alignRight = () => {
+      container.scrollLeft = container.scrollWidth
+    }
+    alignRight()
+    const frame = window.requestAnimationFrame(alignRight)
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeBucket.id, pathSignature, selectedCount])
+
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait" initial={false}>
@@ -169,35 +184,35 @@ export function Toolbar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="flex w-full items-center justify-between gap-3"
+            className="flex min-w-0 w-full items-center justify-between gap-2 sm:gap-3"
           >
-            <div className="min-w-0 flex-1">
-              <Breadcrumb>
-                <BreadcrumbList className="flex-nowrap gap-1.5 text-[13px] [&>li]:shrink-0">
-                  <BreadcrumbItem className="min-w-0 md:hidden">
+            <div ref={breadcrumbScrollRef} className="custom-scrollbar min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+              <Breadcrumb className="w-max min-w-full">
+                <BreadcrumbList className="w-max flex-nowrap gap-1.5 whitespace-nowrap text-[13px] [&>li]:shrink-0">
+                  <BreadcrumbItem className="shrink-0 md:hidden">
                     <BucketSwitcher compact />
                   </BreadcrumbItem>
-                  <BreadcrumbSeparator className="md:hidden">
+                  <BreadcrumbSeparator className="shrink-0 md:hidden">
                     <IconChevronRight size={14} className="text-muted-foreground" />
                   </BreadcrumbSeparator>
-                  <BreadcrumbItem>
+                  <BreadcrumbItem className="shrink-0">
                     <BreadcrumbLink asChild>
                       <Link
                         to="/app"
-                        className="flex h-8 items-center gap-2 text-foreground"
+                        className="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap text-foreground"
                       >
-                        <IconHome2 size={18} className="text-foreground" />
+                        <IconHome2 size={18} className="shrink-0 text-foreground" />
                         我的文件
                       </Link>
                     </BreadcrumbLink>
                   </BreadcrumbItem>
                   {currentLabel ? (
                     <>
-                      <BreadcrumbSeparator>
+                      <BreadcrumbSeparator className="shrink-0">
                         <IconChevronRight size={14} className="text-muted-foreground" />
                       </BreadcrumbSeparator>
-                      <BreadcrumbItem className="min-w-0 !shrink">
-                        <BreadcrumbPage className="truncate text-foreground">
+                      <BreadcrumbItem className="shrink-0">
+                        <BreadcrumbPage className="whitespace-nowrap text-foreground">
                           {currentLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
@@ -207,33 +222,30 @@ export function Toolbar({
                       const folderPath = "/" + pathParts.slice(0, index + 1).join("/")
                       const toPath = `/app?folder=${encodeURIComponent(folderPath)}`
                       const isLast = index === pathParts.length - 1
-                      const isMobileHidden = !isLast && pathParts.length > 1
 
                       return (
-                        <div
-                          className={isMobileHidden ? "hidden sm:contents" : "contents"}
-                          key={`${part}-${index}`}
-                        >
-                          <BreadcrumbSeparator>
+                        <React.Fragment key={`${part}-${index}`}>
+                          <BreadcrumbSeparator className="shrink-0">
                             <IconChevronRight size={14} className="text-muted-foreground" />
                           </BreadcrumbSeparator>
-                          <BreadcrumbItem className="min-w-0 !shrink">
+                          <BreadcrumbItem className="shrink-0">
                             {isLast ? (
-                              <BreadcrumbPage className="truncate text-foreground" title={part}>
+                              <BreadcrumbPage className="flex h-8 items-center whitespace-nowrap text-foreground" title={part}>
                                 {part}
                               </BreadcrumbPage>
                             ) : (
                               <BreadcrumbLink asChild>
                                 <Link
                                   to={toPath}
-                                  className="flex h-8 items-center text-muted-foreground"
+                                  className="flex h-8 items-center whitespace-nowrap text-muted-foreground"
+                                  title={part}
                                 >
                                   {part}
                                 </Link>
                               </BreadcrumbLink>
                             )}
                           </BreadcrumbItem>
-                        </div>
+                        </React.Fragment>
                       )
                     })
                   )}

@@ -80,6 +80,7 @@ export function MoveDialog({
     hasHierarchy ? value || defaultRootId : FLAT_ROOT_ID
   )
   const [loadingFolderId, setLoadingFolderId] = React.useState<string | null>(null)
+  const breadcrumbRef = React.useRef<HTMLDivElement>(null)
   const disabledIds = React.useMemo(() => new Set(disabledFolderIds), [disabledFolderIds])
 
   const allFolders = React.useMemo(() => {
@@ -144,6 +145,18 @@ export function MoveDialog({
     }
     return chain
   }, [currentFolderId, folderById, hasHierarchy])
+
+  const breadcrumbSignature = breadcrumb.map((folder) => folder.id).join("/")
+  React.useLayoutEffect(() => {
+    const container = breadcrumbRef.current
+    if (!container) return
+    const alignRight = () => {
+      container.scrollLeft = container.scrollWidth
+    }
+    alignRight()
+    const frame = window.requestAnimationFrame(alignRight)
+    return () => window.cancelAnimationFrame(frame)
+  }, [breadcrumbSignature, open])
 
   const treeRows = React.useMemo(() => {
     if (!hasHierarchy || !activeRoot) return []
@@ -282,7 +295,7 @@ export function MoveDialog({
                     ))}
                   </select>
                 ) : null}
-                <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                <div ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap">
                   {breadcrumb.map((folder, index) => (
                     <React.Fragment key={folder.id}>
                       {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}

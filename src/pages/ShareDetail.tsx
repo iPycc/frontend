@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -80,6 +80,19 @@ export function ShareDetail() {
   const [verifyingPassword, setVerifyingPassword] = useState(false)
   const [mounting, setMounting] = useState(false)
   const [mountedId, setMountedId] = useState<number | null>(null)
+  const breadcrumbRef = useRef<HTMLElement>(null)
+  const breadcrumbSignature = breadcrumbs.map((crumb) => crumb.id).join("/")
+
+  useLayoutEffect(() => {
+    const container = breadcrumbRef.current
+    if (!container) return
+    const alignRight = () => {
+      container.scrollLeft = container.scrollWidth
+    }
+    alignRight()
+    const frame = window.requestAnimationFrame(alignRight)
+    return () => window.cancelAnimationFrame(frame)
+  }, [breadcrumbSignature, slug])
 
   usePageTitle(info ? `${info.owner_name} 的分享` : "分享详情")
 
@@ -336,15 +349,15 @@ export function ShareDetail() {
 
       {canAccess ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <nav className="flex min-w-0 items-center gap-1 text-sm" aria-label="分享目录路径">
-              <button type="button" className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(-1)}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <nav ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm" aria-label="分享目录路径">
+              <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(-1)}>
                 <IconHome size={16} />给您分享的文件
               </button>
               {breadcrumbs.map((crumb, index) => (
-                <span key={crumb.id} className="flex min-w-0 items-center gap-1">
-                  <IconChevronRight size={15} className="text-muted-foreground" />
-                  <button type="button" className="max-w-48 truncate rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(index)}>{crumb.name}</button>
+                <span key={crumb.id} className="flex shrink-0 items-center gap-1">
+                  <IconChevronRight size={15} className="shrink-0 text-muted-foreground" />
+                  <button type="button" className="shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(index)}>{crumb.name}</button>
                 </span>
               ))}
             </nav>
