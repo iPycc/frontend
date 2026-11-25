@@ -1,3 +1,5 @@
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
+import * as React from "react"
 import {
   IconChevronRight,
   IconDeviceFloppy,
@@ -43,6 +45,9 @@ export function SharedBrowser({
   const ownerName = mount.owner_username ?? `用户 #${mount.owner_id ?? "-"}`
   const folders = items.filter((item) => item.type === "folder")
   const files = items.filter((item) => item.type === "file")
+  const pathSignature = path.map((item) => item.id).join("/")
+
+  const breadcrumbRef = useBreadcrumbAlignment(`${mount.id}:${pathSignature}`)
 
   return (
     <div className="space-y-5">
@@ -59,14 +64,14 @@ export function SharedBrowser({
         </div>
       </header>
 
-      <nav className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm" aria-label="共享目录路径">
+      <nav ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm" aria-label="共享目录路径">
         <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted" onClick={onRoot}>
           <IconHome size={16} />共享根目录
         </button>
         {path.map((item, index) => (
-          <span key={item.id} className="flex min-w-0 items-center gap-1">
+          <span key={item.id} className="flex shrink-0 items-center gap-1">
             <IconChevronRight size={15} className="shrink-0 text-muted-foreground" />
-            <button type="button" className="max-w-48 truncate rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => onCrumb(index)}>{item.name}</button>
+            <button type="button" className="shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => onCrumb(index)}>{item.name}</button>
           </span>
         ))}
       </nav>

@@ -1,8 +1,9 @@
-﻿﻿import type { BucketMount } from "@/lib/models"
+﻿import type { BucketMount } from "@/lib/models"
 
 export type DriveStrategyKey = "139" | "189" | "wo"
 export type StorageStrategyKey = "tencent" | "local" | "aliyun" | DriveStrategyKey
 export type StorageFormMode = "create" | "edit" | "readonly"
+export type ObjectPathMode = "readable" | "opaque" | "original" | "custom"
 
 export interface TencentStorageDraft {
   name: string
@@ -11,9 +12,15 @@ export interface TencentStorageDraft {
   prefix: string
   mountMode: "managed" | "mirror"
   readOnly: boolean
+  importDeleteSource: boolean
+  importWriteback?: boolean
   legacyPrefixedKeys: boolean
-  objectKeyStyle: "readable" | "opaque"
+  objectKeyStyle: ObjectPathMode
+  objectKeyTemplate?: string
   accessPermission: "private" | "public-read"
+  downloadDomainType: "default" | "origin" | "cdn"
+  downloadDomain: string
+  downloadCdnAuth: "cos" | "public"
   accessDomain: string
   secretId: string
   secretKey: string
@@ -34,6 +41,8 @@ export interface LocalStorageDraft {
 }
 
 export interface AliyunStorageDraft {
+  downloadDomainType: "default" | "origin"
+  downloadDomain: string
   name: string
   bucketName: string
   region: string
@@ -41,8 +50,11 @@ export interface AliyunStorageDraft {
   prefix: string
   mountMode: "managed" | "mirror"
   readOnly: boolean
+  importDeleteSource: boolean
+  importWriteback?: boolean
   legacyPrefixedKeys: boolean
-  objectKeyStyle: "readable" | "opaque"
+  objectKeyStyle: ObjectPathMode
+  objectKeyTemplate?: string
   accessKeyId: string
   accessKeySecret: string
   securityToken: string

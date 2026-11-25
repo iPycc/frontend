@@ -52,7 +52,7 @@ export type StoragePolicy = {
 }
 
 export type MountMode = "managed" | "mirror"
-export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
+export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "paused" | "canceled" | "completed" | "failed"
 
 export type MountSyncResult = {
   mount_id: number
@@ -116,6 +116,15 @@ export type MountDeletePreview = {
 export type MountDeleteResult = {
   message: string
   deleted_objects: number
+}
+
+export type MountHealth = {
+  status: "healthy" | "reauthorization_required" | "failed"
+  detail: string
+  message: string
+  code: string | null
+  checked_at: string
+  capabilities: Record<"download" | "upload" | "multipart" | "direct_upload" | "batch", boolean>
 }
 
 export type CreateStoragePolicyInput = {
@@ -228,6 +237,13 @@ export async function deleteMount(token: string, mountId: number, deleteObjects 
 
 export async function applyMountCors(token: string, mountId: number) {
   return requestJson<Record<string, unknown>>(`/admin/mount/${mountId}/cors/apply`, {
+    method: "POST",
+    token,
+  })
+}
+
+export async function checkMountHealth(token: string, mountId: number) {
+  return requestJson<MountHealth>(`/mounts/${mountId}/health`, {
     method: "POST",
     token,
   })

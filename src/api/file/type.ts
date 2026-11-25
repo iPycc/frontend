@@ -70,9 +70,12 @@ export type DeleteNodesInput = {
   hard_delete: boolean
 }
 
+export type ConflictPolicy = "error" | "rename" | "replace" | "skip"
+
 export type TransferNodesInput = {
   node_ids: number[]
   target_parent_id?: number | null
+  on_conflict?: ConflictPolicy
 }
 
 export type RestoreNodesInput = {

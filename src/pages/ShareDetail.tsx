@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -80,6 +81,9 @@ export function ShareDetail() {
   const [verifyingPassword, setVerifyingPassword] = useState(false)
   const [mounting, setMounting] = useState(false)
   const [mountedId, setMountedId] = useState<number | null>(null)
+  const breadcrumbSignature = breadcrumbs.map((crumb) => crumb.id).join("/")
+
+  const breadcrumbRef = useBreadcrumbAlignment(`${slug}:${breadcrumbSignature}`)
 
   usePageTitle(info ? `${info.owner_name} 的分享` : "分享详情")
 
@@ -336,15 +340,15 @@ export function ShareDetail() {
 
       {canAccess ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <nav className="flex min-w-0 items-center gap-1 text-sm" aria-label="分享目录路径">
-              <button type="button" className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(-1)}>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <nav ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm" aria-label="分享目录路径">
+              <button type="button" className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(-1)}>
                 <IconHome size={16} />给您分享的文件
               </button>
               {breadcrumbs.map((crumb, index) => (
-                <span key={crumb.id} className="flex min-w-0 items-center gap-1">
-                  <IconChevronRight size={15} className="text-muted-foreground" />
-                  <button type="button" className="max-w-48 truncate rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(index)}>{crumb.name}</button>
+                <span key={crumb.id} className="flex shrink-0 items-center gap-1">
+                  <IconChevronRight size={15} className="shrink-0 text-muted-foreground" />
+                  <button type="button" className="shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => void navigateTo(index)}>{crumb.name}</button>
                 </span>
               ))}
             </nav>
@@ -436,19 +440,23 @@ export function ShareDetail() {
           </section>
         </>
       ) : requiresPassword && !accessToken ? null : <ShareNotFound />}
-      <SharedFilePreviewModal
-        key={slug && selected ? `${slug}:${selected.id}:${accessToken ?? "public"}` : "public-preview-closed"}
-        source={slug ? { type: "public", shareId: slug, accessToken, ownerName: info.owner_name } : null}
-        item={selected}
-        formatBytes={formatBytes}
-        currentIndex={Math.max(0, previewIndex)}
-        totalCount={previewableNodes.length || 1}
-        onClose={() => setSelected(null)}
-        onDownload={() => selected && void downloadNodes([selected])}
-        detailsFooter={<ShareFacts info={info} requiresPassword={requiresPassword} />}
-        onPrev={() => openAdjacentPreview(-1)}
-        onNext={() => openAdjacentPreview(1)}
-      />
+      {canAccess && info.share_id === slug && selected ? (
+        <SharedFilePreviewModal
+          source={{
+            type: "public", shareId: slug, accessToken, ownerName: info.owner_name,
+            expiresAt: info.expires_at, maxDownloads: info.max_downloads,
+          }}
+          item={selected}
+          formatBytes={formatBytes}
+          currentIndex={Math.max(0, previewIndex)}
+          totalCount={previewableNodes.length || 1}
+          onClose={() => setSelected(null)}
+          onDownload={(item) => void downloadNodes([item])}
+          detailsFooter={<ShareFacts info={info} requiresPassword={requiresPassword} />}
+          onPrev={() => openAdjacentPreview(-1)}
+          onNext={() => openAdjacentPreview(1)}
+        />
+      ) : null}
       <TransferManager
         downloadTask={fileDownload.task}
         onCancelDownload={fileDownload.cancel}

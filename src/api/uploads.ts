@@ -49,9 +49,13 @@ export type UploadSession = {
   part_size: number
   created_at: string
   updated_at: string
+  expires_at?: string | null
+  last_seen_at?: string | null
+  error_reason?: string | null
   transport: "cloudrave" | "presigned"
   required_response_headers: string[]
   part_checksum_algorithm?: "md5" | null
+  ready_to_complete?: boolean
   parts: Array<{
     id: number
     part_number: number
@@ -73,6 +77,7 @@ export type CreateUploadSessionInput = {
   size: number
   part_size?: number
   content_type?: string | null
+  idempotency_key?: string
 }
 
 export async function createUploadSession(token: string, body: CreateUploadSessionInput) {
@@ -80,6 +85,7 @@ export async function createUploadSession(token: string, body: CreateUploadSessi
     method: "POST",
     token,
     body,
+    headers: body.idempotency_key ? { "Idempotency-Key": body.idempotency_key } : undefined,
   })
 }
 
@@ -112,7 +118,8 @@ export async function uploadLocalPart(
   file: Blob,
   partNumber: number,
   size?: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onProgress?: (loaded: number) => void
 ) {
   const form = new FormData()
   form.set("part_number", String(partNumber))
@@ -124,6 +131,7 @@ export async function uploadLocalPart(
     token,
     body: form,
     signal,
+    onUploadProgress: onProgress ? (loaded, total) => onProgress(Math.min(file.size, file.size * loaded / total)) : undefined,
   })
 }
 
@@ -157,6 +165,7 @@ export async function completeUpload(
     method: "POST",
     token,
     body: { parts },
+    headers: { "Idempotency-Key": `complete:${sessionId}` },
   })
 }
 

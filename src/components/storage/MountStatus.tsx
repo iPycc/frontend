@@ -5,11 +5,20 @@ import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 import { useSettingsState } from "@/state/app"
 
+export const mountCorsLabels: Record<BucketMount["corsStatus"], string> = {
+  healthy: "CORS 已配置",
+  warning: "CORS 配置未确认",
+  "provider-managed": "CORS 由运营商管理",
+  "not-required": "无需配置 CORS",
+}
+
 const labels = {
   never: "尚未同步",
   idle: "尚未同步",
   pending: "等待同步",
   running: "同步未完成",
+  paused: "同步已暂停",
+  canceled: "同步已取消",
   completed: "同步完成",
   failed: "同步失败",
 } as const

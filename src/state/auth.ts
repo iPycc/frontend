@@ -17,6 +17,7 @@ import {
   type UserSettings,
 } from "@/lib/models"
 import { emitAuthEvent } from "@/lib/session"
+import { runThemeTransition } from "@/lib/theme-transition"
 import {
   isPasskeyCanceled,
   type AuthRegisterInput,
@@ -35,11 +36,37 @@ export function useAuth({
   updateSnapshot,
 }: AuthDeps) {
   const setThemeMode = React.useCallback(
-    (mode: ThemeMode) => {
-      updateSnapshot((current) => ({
-        ...current,
-        settings: { ...current.settings, themeMode: mode },
-      }))
+    (mode: ThemeMode, origin?: { x?: number; y?: number }) => {
+      if (typeof window === "undefined" || typeof document === "undefined") {
+        updateSnapshot((current) => ({
+          ...current,
+          settings: { ...current.settings, themeMode: mode },
+        }))
+        return
+      }
+
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+      const nextIsDark = mode === "system" ? systemDark : mode === "dark"
+      const currentIsDark = document.documentElement.classList.contains("dark")
+
+      if (currentIsDark === nextIsDark) {
+        updateSnapshot((current) => ({
+          ...current,
+          settings: { ...current.settings, themeMode: mode },
+        }))
+        return
+      }
+
+      runThemeTransition(
+        () => {
+          document.documentElement.classList.toggle("dark", nextIsDark)
+          updateSnapshot((current) => ({
+            ...current,
+            settings: { ...current.settings, themeMode: mode },
+          }))
+        },
+        { origin, toDark: nextIsDark }
+      )
     },
     [updateSnapshot]
   )

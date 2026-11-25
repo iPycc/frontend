@@ -47,6 +47,8 @@ interface FileAreaProps {
   pageSize: number
   showThumbnail?: boolean
   canPaste: boolean
+  canUpload: boolean
+  emptyAction?: React.ReactNode
   onSelectNode: (id: string, event: MouseEvent) => void
   onSelectIds: (ids: string[]) => void
   onPrepareContext: (id: string) => void
@@ -96,6 +98,8 @@ export function FileArea({
   pageSize,
   showThumbnail = false,
   canPaste,
+  canUpload,
+  emptyAction,
   onSelectNode,
   onSelectIds,
   onPrepareContext,
@@ -282,7 +286,16 @@ export function FileArea({
               />
             ) : items.length === 0 && !loaded ? null : items.length === 0 ? (
               <div className="flex h-full items-center justify-center">
-                <EmptyState title="没有任何内容" description="在此处上传文件或创建文件夹" />
+                <EmptyState
+                  title="没有任何内容"
+                  description={null}
+                  action={canUpload || emptyAction ? (
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {canUpload ? <Button onClick={onUploadRequest}><IconUpload />上传文件</Button> : null}
+                      {emptyAction}
+                    </div>
+                  ) : null}
+                />
               </div>
             ) : (
               <div className="flex min-h-full flex-col" aria-label={`目录内容，共 ${items.length} 项`}>

@@ -1,15 +1,29 @@
+import { MigrationProgress } from "./MigrationProgress"
 import * as React from "react"
-import { Download } from "lucide-react"
+import { Download, Loader2 } from "lucide-react"
 
 import { downloadDatabaseBackup, getDatabaseMigration, type DatabaseMigration } from "@/api/database"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 const backendNames = { sqlite: "SQLite", mysql: "MySQL", postgresql: "PostgreSQL" }
 
-export function MigrationHistoryDialog({ migrationId, onClose }: { migrationId: string | null; onClose: () => void }) {
+export function MigrationHistoryDialog({
+  migrationId,
+  onClose,
+}: {
+  migrationId: string | null
+  onClose: () => void
+}) {
   const [migration, setMigration] = React.useState<DatabaseMigration | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -21,7 +35,9 @@ export function MigrationHistoryDialog({ migrationId, onClose }: { migrationId: 
     void getDatabaseMigration(migrationId, 0, controller.signal)
       .then(setMigration)
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "无法读取迁移日志")
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "无法读取迁移日志")
+        }
       })
     return () => controller.abort()
   }, [migrationId])
@@ -37,37 +53,66 @@ export function MigrationHistoryDialog({ migrationId, onClose }: { migrationId: 
 
   return (
     <Dialog open={Boolean(migrationId)} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="w-[min(94vw,42rem)] max-w-none gap-4 sm:max-w-none">
-        <DialogHeader>
-          <DialogTitle>迁移记录与日志</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="w-[min(92vw,29rem)] max-h-[90dvh] overflow-y-auto max-w-none gap-4 rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl sm:max-w-none">
+        <DialogHeader className="space-y-1 text-left">
+          <DialogTitle className="text-xl font-semibold tracking-tight">迁移记录</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
             {migration
-              ? `${backendNames[migration.source_backend]} → ${backendNames[migration.target_backend]} · ${migration.data_choice === "source" ? "迁移原库数据" : "保留目标库数据"}`
-              : "正在读取迁移记录"}
+              ? `${backendNames[migration.source_backend]} → ${backendNames[migration.target_backend]} · ${
+                  migration.data_choice === "source" ? "迁移原库数据" : "直接使用目标库"
+                }`
+              : "正在读取迁移记录..."}
           </DialogDescription>
         </DialogHeader>
+
         {migration ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm">{migration.detail} · {migration.progress}% · {migration.processed_rows.toLocaleString()} / {migration.total_rows.toLocaleString()} 行</p>
-            <ScrollArea className="h-64 rounded-md border bg-muted/20">
-              <div className="flex flex-col gap-1 p-3 font-mono text-xs leading-5">
-                {migration.logs.length ? migration.logs.map((entry) => (
-                  <div key={entry.seq} className={cn("break-words", entry.level === "error" && "text-destructive")}>
-                    <span className="text-muted-foreground">{new Date(entry.timestamp).toLocaleTimeString()} </span>{entry.message}
-                  </div>
-                )) : <p className="text-muted-foreground">暂无日志</p>}
+          <div className="space-y-3.5">
+            <MigrationProgress migration={migration} />
+
+            <ScrollArea className="h-44 rounded-xl border border-border bg-muted/25">
+              <div className="space-y-1 p-3 font-mono text-[11px] leading-5 text-foreground/85">
+                {migration.logs.length ? (
+                  migration.logs.map((entry) => (
+                    <div
+                      key={entry.seq}
+                      className={cn(
+                        "break-words",
+                        entry.level === "error" && "font-medium text-destructive",
+                        entry.level === "warning" && "text-amber-600 dark:text-amber-400"
+                      )}
+                    >
+                      <span className="mr-2 text-muted-foreground select-none">
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                      </span>
+                      {entry.message}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground">暂无日志</p>
+                )}
               </div>
             </ScrollArea>
           </div>
         ) : error ? (
-          <p role="alert" className="text-sm text-destructive">{error}</p>
+          <p role="alert" className="text-xs text-destructive">{error}</p>
         ) : (
-          <p className="text-sm text-muted-foreground">正在加载…</p>
+          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            加载中...
+          </div>
         )}
-        {error && migration ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-        <DialogFooter>
-          {migration?.backup_available ? <Button variant="outline" onClick={() => void download()}><Download />下载目标库备份</Button> : null}
-          <Button variant="outline" onClick={onClose}>关闭</Button>
+        {error && migration ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
+
+        <DialogFooter className="pt-1">
+          {migration?.backup_available ? (
+            <Button variant="outline" onClick={() => void download()}>
+              <Download className="size-4" />
+              下载备份
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={onClose}>
+            关闭
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

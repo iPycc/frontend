@@ -1,5 +1,5 @@
+import { GitHubIcon } from "@/components/icons/github-icon"
 import * as React from "react"
-import { Github } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -69,7 +69,7 @@ export function GitHubOAuthComplete() {
     <main className="flex min-h-svh items-center justify-center bg-muted p-6">
       <div className="flex max-w-sm flex-col items-center gap-4 text-center">
         <div className="flex size-12 items-center justify-center rounded-full bg-background text-foreground">
-          <Github className="size-6" aria-hidden="true" />
+          <GitHubIcon className="size-6" aria-hidden="true" />
         </div>
         <div className="flex items-center gap-2 text-sm font-medium">
           <Spinner />

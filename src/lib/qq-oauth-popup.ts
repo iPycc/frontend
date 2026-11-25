@@ -1,3 +1,5 @@
+import { publishPopupResult, subscribePopupResults } from "./oauth-popup-channel"
+
 export const QQ_OAUTH_POPUP_NAME = "cloudrave-qq-oauth"
 export const QQ_OAUTH_MESSAGE_TYPE = "cloudrave:qq-oauth-result"
 const QQ_OAUTH_CHANNEL_NAME = "cloudrave-qq-oauth"
@@ -61,22 +63,7 @@ function isQQOAuthPayload(value: unknown, flow: QQOAuthFlow): value is QQOAuthMe
 }
 
 export function publishQQOAuthResult(message: QQOAuthMessage) {
-  try {
-    window.opener?.postMessage(message, window.location.origin)
-  } catch {
-    // The fallback channels below cover isolated opener contexts.
-  }
-  if (typeof window.BroadcastChannel !== "undefined") {
-    const channel = new window.BroadcastChannel(QQ_OAUTH_CHANNEL_NAME)
-    channel.postMessage(message)
-    channel.close()
-  }
-  try {
-    localStorage.setItem(QQ_OAUTH_STORAGE_KEY, JSON.stringify(message))
-    localStorage.removeItem(QQ_OAUTH_STORAGE_KEY)
-  } catch {
-    // Storage may be unavailable in private browsing modes.
-  }
+  publishPopupResult(message, QQ_OAUTH_CHANNEL_NAME, QQ_OAUTH_STORAGE_KEY)
 }
 
 export function readQQOAuthPopupResult(popup: Window, flow: QQOAuthFlow): QQOAuthMessage | null {
@@ -121,34 +108,8 @@ export function subscribeQQOAuthResults(
   getPopup: () => Window | null,
   handler: (message: QQOAuthMessage) => void
 ) {
-  const deliver = (data: unknown) => {
-    if (getPopup() && isQQOAuthPayload(data, flow)) {
-      handler(data)
-    }
-  }
-  const handleWindowMessage = (event: MessageEvent<unknown>) => {
-    if (event.origin === window.location.origin && event.source === getPopup()) {
-      deliver(event.data)
-    }
-  }
-  const channel = typeof window.BroadcastChannel !== "undefined"
-    ? new window.BroadcastChannel(QQ_OAUTH_CHANNEL_NAME)
-    : null
-  const handleChannelMessage = (event: MessageEvent<unknown>) => deliver(event.data)
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key !== QQ_OAUTH_STORAGE_KEY || !event.newValue) return
-    try {
-      deliver(JSON.parse(event.newValue))
-    } catch {
-      // Ignore malformed cross-window data.
-    }
-  }
-  window.addEventListener("message", handleWindowMessage)
-  window.addEventListener("storage", handleStorage)
-  channel?.addEventListener("message", handleChannelMessage)
-  return () => {
-    window.removeEventListener("message", handleWindowMessage)
-    window.removeEventListener("storage", handleStorage)
-    channel?.close()
-  }
+  return subscribePopupResults(
+    QQ_OAUTH_CHANNEL_NAME, QQ_OAUTH_STORAGE_KEY, getPopup,
+    (data): data is QQOAuthMessage => isQQOAuthPayload(data, flow), handler
+  )
 }

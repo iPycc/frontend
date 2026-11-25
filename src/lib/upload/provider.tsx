@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 
 import {
   UploadConflictDialog,
@@ -6,13 +7,14 @@ import {
   type UploadConflictInfo,
 } from "@/components/file-area/UploadConflictDialog"
 import { abortUpload } from "@/api/uploads"
-import { createId, type AuthSession, type BucketMount, type FileNode, type OfflineTask, type UploadQueueItem } from "@/lib/models"
+import { createId, formatBytes, type AuthSession, type BucketMount, type FileNode, type UploadQueueItem } from "@/lib/models"
 import { createUploadApiScheduler } from "@/lib/upload/api-scheduler"
 import { createGate } from "@/lib/upload/gate"
 import { fingerprintFile } from "@/lib/upload/hash"
 import { persistUploadTasks, restoreUploadTasks } from "@/lib/upload/persistence"
 import { FILE_LIMIT, NETWORK_LIMIT, takeUploads } from "@/lib/upload/pool"
 import { useUploadRun } from "@/lib/upload/run"
+import { notifyStorageReauthorization } from "@/lib/storage-reauthorization"
 import { toast } from "sonner"
 
 export type UploadSelection = {
@@ -26,11 +28,11 @@ type UploadTarget = {
 }
 
 export type UploadStateValue = {
-  offlineTasks: OfflineTask[]
   uploadQueue: UploadQueueItem[]
   uploadQueueOpen: boolean
   setUploadQueueOpen: (open: boolean) => void
   retryUpload: (id: string) => void
+  retryFailedUploads: () => void
   pauseUpload: (id: string) => void
   resumeUpload: (id: string) => void
   removeUpload: (id: string) => void
@@ -44,6 +46,21 @@ const UploadStateContext = React.createContext<UploadStateValue | null>(null)
 
 function nowString() {
   return new Date().toISOString()
+}
+
+function uploadTargetDirectory(nodes: FileNode[], rootId: string, parentId: string) {
+  if (parentId === rootId) return "/"
+  const folders = new Map(nodes.filter((node) => node.kind === "folder").map((node) => [node.id, node]))
+  const names: string[] = []
+  let folderId: string | null = parentId
+  while (folderId !== rootId) {
+    const folder: FileNode | undefined = folderId ? folders.get(folderId) : undefined
+    if (!folder) return undefined
+    names.push(folder.name)
+    folders.delete(folder.id)
+    folderId = folder.parentId
+  }
+  return `/${names.reverse().join("/")}`
 }
 
 export interface UploadProviderProps {
@@ -65,6 +82,7 @@ export function UploadProvider({
   deleteNodes,
   onUploadComplete,
 }: UploadProviderProps) {
+  const navigate = useNavigate()
   const getSessionRef = React.useRef(getSession)
   const getBucketsRef = React.useRef(getBuckets)
   const getActiveBucketIdRef = React.useRef(getActiveBucketId)
@@ -207,43 +225,37 @@ export function UploadProvider({
     drainUploadQueue()
   }, [drainUploadQueue])
 
-  const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
-    const session = getSessionRef.current()
+  const resolveUploadBucket = React.useCallback((mountId?: string) => {
     const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    if (!session || !targetMountId) {
+    const bucket = getBucketsRef.current().find((item) => item.id === targetMountId)
+    if (!getSessionRef.current() || !bucket) {
       toast.error("当前没有可用的上传目标")
       return
     }
-    if (getBucketsRef.current().find((bucket) => bucket.id === targetMountId)?.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件")
+    if (bucket.readOnly) {
+      toast.info("当前挂载为只读，无法上传")
       return
     }
-
-    pendingUploadTargetRef.current = {
-      mountId: targetMountId,
-      parentId,
+    if (bucket.extra?.requires_reauthorization === true) {
+      notifyStorageReauthorization(bucket, navigate)
+      return
     }
+    return bucket
+  }, [navigate])
+
+  const requestUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    pendingUploadTargetRef.current = { mountId: bucket.id, parentId }
     fileInputRef.current?.click()
-  }, [])
+  }, [resolveUploadBucket])
 
   const requestFolderUpload = React.useCallback((parentId: string | null = null, mountId?: string) => {
-    const session = getSessionRef.current()
-    const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    if (!session || !targetMountId) {
-      toast.error("当前没有可用的上传目标")
-      return
-    }
-    if (getBucketsRef.current().find((bucket) => bucket.id === targetMountId)?.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件夹")
-      return
-    }
-
-    pendingUploadTargetRef.current = {
-      mountId: targetMountId,
-      parentId,
-    }
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    pendingUploadTargetRef.current = { mountId: bucket.id, parentId }
     folderInputRef.current?.click()
-  }, [])
+  }, [resolveUploadBucket])
 
   const askUploadConflict = React.useCallback((conflict: UploadConflictInfo) => {
     return new Promise<UploadConflictChoice>((resolve) => {
@@ -264,21 +276,13 @@ export function UploadProvider({
     parentId: string | null = null,
     mountId?: string
   ) => {
-    const targetMountId = mountId ?? getActiveBucketIdRef.current()
-    const bucket = getBucketsRef.current().find((item) => item.id === targetMountId)
-    if (!getSessionRef.current() || !targetMountId || !bucket) {
-      toast.error("当前没有可用的上传目标")
-      return
-    }
-    if (bucket.readOnly) {
-      toast.info("当前挂载为只读，不能上传文件")
-      return
-    }
-    const target = { mountId: targetMountId, parentId }
+    const bucket = resolveUploadBucket(mountId)
+    if (!bucket) return
+    const target = { mountId: bucket.id, parentId }
     const uiParentId = parentId && !parentId.startsWith("root:") ? parentId : bucket.rootNodeId
-    const siblings = getNodesRef.current().filter(
-      (node) => node.bucketId === bucket.id && node.parentId === uiParentId && !node.deletedAt
-    )
+    const bucketNodes = getNodesRef.current().filter((node) => node.bucketId === bucket.id && !node.deletedAt)
+    const siblings = bucketNodes.filter((node) => node.parentId === uiParentId)
+    const targetDirectory = uploadTargetDirectory(bucketNodes, bucket.rootNodeId, uiParentId)
     let resolvedSelections = [...selections]
     const topNames = Array.from(new Set(selections.map(({ file, relativePath }) => relativePath?.split("/")[0] || file.name)))
     const reservedNames = new Set(siblings.map((node) => node.name))
@@ -386,6 +390,16 @@ export function UploadProvider({
     }
     resolvedSelections = uniqueSelections
 
+    if (bucket.quota && resolvedSelections.length) {
+      const remaining = Math.max(0, bucket.quota.total - bucket.quota.used)
+      const selectedBytes = resolvedSelections.reduce((total, { file }) => total + file.size, 0)
+      if (selectedBytes > remaining) {
+        toast.warning(`所选文件超过「${bucket.name}」最近记录的剩余空间`, {
+          description: `当前估计可用 ${remaining ? formatBytes(remaining) : "0 B"}，上传时以服务器校验为准。`,
+        })
+      }
+    }
+
     const nextItems = resolvedSelections.map<UploadQueueItem>(({ file, relativePath }) => {
       const id = createId("upload")
       uploadFilesRef.current.set(id, { file, target, relativePath })
@@ -393,6 +407,7 @@ export function UploadProvider({
         id,
         fileName: file.name,
         relativePath,
+        targetDirectory,
         fileSize: file.size,
         mountId: target.mountId,
         parentId: target.parentId,
@@ -411,7 +426,7 @@ export function UploadProvider({
     mutateUploadQueue((current) => [...nextItems, ...current])
     setUploadQueueOpen(true)
     enqueueUploads(nextItems.map((item) => item.id))
-  }, [askUploadConflict, enqueueUploads, mutateUploadQueue])
+  }, [askUploadConflict, enqueueUploads, mutateUploadQueue, resolveUploadBucket])
 
   const handleFileInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>, isFolder: boolean) => {
     const target = pendingUploadTargetRef.current
@@ -442,6 +457,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: "已暂停，可继续上传",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     uploadControllersRef.current.get(id)?.abort("pause")
   }, [getUploadQueueItem, updateUploadQueueItem])
@@ -449,6 +465,7 @@ export function UploadProvider({
   const resumeUpload = React.useCallback((id: string) => {
     const item = getUploadQueueItem(id)
     if (!item || ["completed", "canceled", "processing"].includes(item.status)) return
+    if (!resolveUploadBucket(item.mountId)) return
     if (!uploadFilesRef.current.has(id)) {
       pendingResumeIdRef.current = id
       resumeInputRef.current?.click()
@@ -460,6 +477,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: item.sessionId ? "准备查询已上传分片..." : "准备中...",
       errorMessage: undefined,
+      errorRequestId: undefined,
       requiresFileSelection: false,
     })
     if (uploadActiveIdsRef.current.has(id)) {
@@ -467,9 +485,17 @@ export function UploadProvider({
       return
     }
     enqueueUploads([id])
-  }, [enqueueUploads, getUploadQueueItem, updateUploadQueueItem])
+  }, [enqueueUploads, getUploadQueueItem, resolveUploadBucket, updateUploadQueueItem])
 
   const retryUpload = resumeUpload
+
+  const retryFailedUploads = React.useCallback(() => {
+    for (const item of uploadQueueRef.current) {
+      if (item.status === "failed" && uploadFilesRef.current.has(item.id)) {
+        resumeUpload(item.id)
+      }
+    }
+  }, [resumeUpload])
 
   const handleResumeInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const id = pendingResumeIdRef.current
@@ -495,10 +521,11 @@ export function UploadProvider({
       status: "preparing",
       speedText: "正在校验所选文件...",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     void fingerprintFile(file).then((fingerprint) => {
       const latest = getUploadQueueItem(id)
-      if (!latest) return
+      if (!latest || latest.status === "canceled") return
       if (latest.fileFingerprint && latest.fileFingerprint !== fingerprint) {
         updateUploadQueueItem(id, {
           status: "paused",
@@ -532,6 +559,8 @@ export function UploadProvider({
       })
       enqueueUploads([id])
     }).catch(() => {
+      const latest = getUploadQueueItem(id)
+      if (!latest || latest.status === "canceled" || latest.status === "paused") return
       updateUploadQueueItem(id, {
         status: "paused",
         speedText: "文件校验失败，请重新选择",
@@ -580,6 +609,7 @@ export function UploadProvider({
       speedBytesPerSecond: 0,
       speedText: "已取消",
       errorMessage: undefined,
+      errorRequestId: undefined,
     })
     abortSavedUpload(item)
   }, [abortSavedUpload, getUploadQueueItem, mutateUploadQueue, updateUploadQueueItem])
@@ -593,37 +623,13 @@ export function UploadProvider({
     )
   }, [abortSavedUpload, mutateUploadQueue])
 
-  const offlineTasks = React.useMemo<OfflineTask[]>(
-    () =>
-      uploadQueue.map((item) => ({
-        id: item.id,
-        name: item.fileName,
-        url: "",
-        status:
-          item.status === "completed"
-            ? "已完成"
-            : item.status === "failed"
-              ? "失败"
-              : item.status === "paused"
-                ? "已暂停"
-              : item.status === "canceled"
-                ? "已取消"
-                : item.status === "processing"
-                  ? "处理中"
-                  : "上传中",
-        progress: Math.round(item.progress),
-        updatedAt: item.createdAt,
-      })),
-    [uploadQueue]
-  )
-
   const value = React.useMemo<UploadStateValue>(
     () => ({
-      offlineTasks,
       uploadQueue,
       uploadQueueOpen,
       setUploadQueueOpen,
       retryUpload,
+      retryFailedUploads,
       pauseUpload,
       resumeUpload,
       removeUpload,
@@ -634,11 +640,11 @@ export function UploadProvider({
     }),
     [
       clearCompletedUploads,
-      offlineTasks,
       removeUpload,
       requestFolderUpload,
       requestUpload,
       retryUpload,
+      retryFailedUploads,
       pauseUpload,
       resumeUpload,
       queueUploadFiles,

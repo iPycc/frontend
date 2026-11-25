@@ -5,7 +5,6 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconCloudDownload,
   IconFileText,
   IconHome,
   IconLink,
@@ -44,7 +43,6 @@ const utilityPaths = [
   "/app/shares",
   "/app/mounts",
   "/app/tasks",
-  "/app/offline",
 ]
 
 export function SidebarLayout() {
@@ -224,14 +222,14 @@ export function SidebarLayout() {
               <IconUsers size={17} />
               <span>与我共享</span>
             </SidebarNavItem>
-            <button type="button" onClick={() => setSharedOwnersOpen((value) => !value)}
+            {sharedOwners.length > 0 ? <button type="button" onClick={() => setSharedOwnersOpen((value) => !value)}
               aria-label={sharedOwnersOpen ? "收起共享用户" : "展开共享用户"}
               aria-expanded={sharedOwnersOpen} aria-controls="sidebar-shared-owners"
               className="absolute inset-y-0 left-0 flex w-8 items-center justify-center rounded-full text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
               {sharedOwnersOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
-            </button>
+            </button> : null}
             </div>
-            <div id="sidebar-shared-owners" hidden={!sharedOwnersOpen}>
+            <div id="sidebar-shared-owners" hidden={sharedOwners.length > 0 && !sharedOwnersOpen}>
             {sharedOwners.length ? (
               <div className="space-y-0.5 pb-1 pl-7">
                 {sharedOwners.map((owner) => (
@@ -302,13 +300,6 @@ export function SidebarLayout() {
             >
               <IconLink size={17} />
               <span>存储桶</span>
-            </SidebarNavItem>
-            <SidebarNavItem
-              to="/app/offline"
-              active={location.pathname === "/app/offline"}
-            >
-              <IconCloudDownload size={17} />
-              <span>离线下载</span>
             </SidebarNavItem>
           </section>
           </> : null}

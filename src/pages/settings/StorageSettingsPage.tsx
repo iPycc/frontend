@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
@@ -10,12 +11,14 @@ import {
 } from "@/api/storage"
 import {
   applyUserMountCors,
+  checkUserMountCors,
   deleteUserMount,
   getUserMountDeletePreview,
-  syncUserMount,
-  syncUserMountPages,
+  startUserMountSyncTask,
   updateUserMount,
+  type UploadCorsStatus,
   type UserMountDeletePreview,
+  type UserMountResource,
 } from "@/api/user-storage"
 import { useAppState } from "@/state/app"
 import { buildLocalStoragePath, type BucketMount, type StorageStrategyKey, validateLocalStoragePath } from "@/lib/models"
@@ -38,6 +41,8 @@ import {
   type MountDeleteMode,
 } from "@/components/storage/MountDeleteDialog"
 import { getProviderDisplayName } from "@/components/storage/ProviderIcon"
+import { StoragePathMigration } from "@/components/storage/StoragePathMigration"
+import { objectPathDraft, objectPathSettings } from "@/components/storage/object-path"
 import {
   buildAliyunMountInput,
   buildAliyunPolicyInput,
@@ -59,6 +64,7 @@ import {
 } from "./store/build"
 
 export function StorageSettingsPage() {
+  const navigate = useNavigate()
   const { authSession, buckets, currentUser, profile, reloadWorkspace } = useAppState()
   const [view, setView] = React.useState<View>({ type: "list" })
   const [drivers, setDrivers] = React.useState<StorageDriver[] | null>(null)
@@ -78,10 +84,7 @@ export function StorageSettingsPage() {
   const [deletePreviewLoading, setDeletePreviewLoading] = React.useState(false)
   const [deletePreviewError, setDeletePreviewError] = React.useState<string | null>(null)
   const [deletingMode, setDeletingMode] = React.useState<MountDeleteMode | null>(null)
-  const syncControllerRef = React.useRef<AbortController | null>(null)
   const deletePreviewRequestRef = React.useRef(0)
-
-  React.useEffect(() => () => syncControllerRef.current?.abort(), [])
 
   const token = authSession?.tokens.accessToken ?? null
   const userSeed = profile.uid || profile.username || "workspace"
@@ -203,6 +206,60 @@ export function StorageSettingsPage() {
     setView({ type: "cors-step", strategy: "tencent" })
   }
 
+  const announceImportQueued = React.useCallback(() => {
+    toast.success("已提交导入任务", {
+      action: { label: "查看任务", onClick: () => void navigate("/app/tasks") },
+    })
+  }, [navigate])
+
+  const queueImportAfterMount = async (accessToken: string, mountId: number) => {
+    try {
+      await startUserMountSyncTask(accessToken, mountId)
+    } catch (error) {
+      toast.warning(error instanceof Error ? error.message : "挂载已创建，请在存储设置中启动导入。")
+      return false
+    }
+    announceImportQueued()
+    return true
+  }
+
+  const finishCloudMount = async (accessToken: string, mount: UserMountResource["mount"], autoConfigure: boolean) => {
+    const importTask = mount.mode === "mirror" ? queueImportAfterMount(accessToken, mount.id) : undefined
+    let autoConfigFailed = false
+    if (autoConfigure) {
+      try {
+        await applyUserMountCors(accessToken, mount.id)
+      } catch {
+        autoConfigFailed = true
+      }
+    }
+
+    void checkUserMountCors(accessToken, mount.id, window.location.origin)
+      .catch(() => ({ status: "unavailable" as const }))
+      .then(({ status }) => {
+        const descriptions: Record<UploadCorsStatus, string> = {
+          ready: "当前站点的单次和分片直传预检通过。",
+          same_origin: "直传地址与当前站点同源。",
+          read_only: "当前挂载为只读。",
+          blocked: "直传预检未通过。请检查桶的跨域来源、PUT 方法和请求头。",
+          missing_etag: "分片直传缺少可读取的 ETag。请在桶的跨域响应头中暴露 ETag。",
+          unavailable: "暂时无法确认直传跨域配置。",
+        }
+        const description = autoConfigFailed ? `自动配置未完成。${descriptions[status]}` : descriptions[status]
+        const corsReady = status === "ready" || status === "same_origin" || status === "read_only"
+        const title = `「${mount.name}」已连接`
+        if (corsReady && !autoConfigFailed) {
+          toast.success(title, { description })
+        } else {
+          toast.warning(title, { description })
+        }
+      })
+
+    await importTask
+    await reloadWorkspace()
+    setView({ type: "list" })
+  }
+
   const handleTencentSubmit = (autoConfigure: boolean) =>
     void withSubmit(async () => {
       const accessToken = requireToken()
@@ -214,17 +271,7 @@ export function StorageSettingsPage() {
         (policyId) => buildTencentMountInput(tencentDraft, fallbackSlug, policyId)
       )
 
-      if (autoConfigure) {
-        try {
-          await applyUserMountCors(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "已创建 COS 挂载，但跨域配置尚未完成。")
-        }
-      }
-
-      await reloadWorkspace()
-      toast.success("腾讯云 COS 存储策略已创建。")
-      setView({ type: "list" })
+      await finishCloudMount(accessToken, created.mount, autoConfigure)
     })
 
   const handleAliyunNext = () => {
@@ -245,17 +292,7 @@ export function StorageSettingsPage() {
         (policyId) => buildAliyunMountInput(aliyunDraft, fallbackSlug, policyId)
       )
 
-      if (autoConfigure) {
-        try {
-          await applyUserMountCors(accessToken, created.mount.id)
-        } catch (error) {
-          toast.warning(error instanceof Error ? error.message : "已创建 OSS 挂载，但跨域配置尚未完成。")
-        }
-      }
-
-      await reloadWorkspace()
-      toast.success("阿里云 OSS 存储空间已创建。")
-      setView({ type: "list" })
+      await finishCloudMount(accessToken, created.mount, autoConfigure)
     })
 
   const handleLocalSubmit = () =>
@@ -293,15 +330,9 @@ export function StorageSettingsPage() {
         (policyId) => buildRemoteDriveMountInput(remoteDraft, inspection, fallbackSlug, policyId)
       )
 
-      let firstSyncComplete = false
-      try {
-        const sync = await syncUserMount(accessToken, created.mount.id)
-        firstSyncComplete = sync.complete
-      } catch (error) {
-        toast.warning(error instanceof Error ? error.message : "挂载已创建，但首次目录同步尚未完成。")
-      }
+      const importQueued = await queueImportAfterMount(accessToken, created.mount.id)
       await reloadWorkspace()
-      toast.success(firstSyncComplete ? "云盘已挂载，目录索引同步完成。" : "云盘已挂载，已导入首批目录索引。")
+      if (!importQueued) toast.success("云盘已挂载。")
       setView({ type: "list" })
     })
 
@@ -326,10 +357,14 @@ export function StorageSettingsPage() {
         prefix: bucket.rootPath ?? "",
         mountMode: bucket.mountMode,
         readOnly: bucket.readOnly,
+        importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
-        objectKeyStyle: bucket.objectKeyStyle,
+        ...objectPathDraft(bucket),
         accessPermission: "private" as const,
         accessDomain: bucket.endpoint ?? "",
+        downloadDomainType: bucket.extra?.download_domain_type === "origin" || bucket.extra?.download_domain_type === "cdn" ? bucket.extra.download_domain_type : "default",
+        downloadDomain: typeof bucket.extra?.download_domain === "string" ? bucket.extra.download_domain : "",
+        downloadCdnAuth: bucket.extra?.download_cdn_auth === "public" ? "public" : "cos",
         secretId: "",
         secretKey: "",
         concurrency: Math.max(1, Math.min(3, bucket.strategy?.concurrency ?? 3)),
@@ -346,6 +381,8 @@ export function StorageSettingsPage() {
     } else if (strategy === "aliyun") {
       const encryption = bucket.extra?.server_side_encryption
       const draft: AliyunStorageDraft = {
+        downloadDomainType: bucket.extra?.download_domain_type === "origin" ? "origin" : "default",
+        downloadDomain: typeof bucket.extra?.download_domain === "string" ? bucket.extra.download_domain : "",
         name: bucket.name,
         bucketName: bucket.bucket ?? "",
         region: bucket.region ?? "cn-hangzhou",
@@ -353,8 +390,9 @@ export function StorageSettingsPage() {
         prefix: bucket.rootPath ?? "",
         mountMode: bucket.mountMode,
         readOnly: bucket.readOnly,
+        importDeleteSource: bucket.extra?.import_delete_source === true,
         legacyPrefixedKeys: bucket.legacyPrefixedKeys,
-        objectKeyStyle: bucket.objectKeyStyle,
+        ...objectPathDraft(bucket),
         accessKeyId: "",
         accessKeySecret: "",
         securityToken: "",
@@ -523,6 +561,9 @@ export function StorageSettingsPage() {
             storage_type: "tencent",
             bucket_name: tencentDraft.bucketName.trim(),
             endpoint: tencentDraft.accessDomain.trim(),
+            download_domain_type: tencentDraft.downloadDomainType,
+            download_domain: tencentDraft.downloadDomain.trim(),
+            download_cdn_auth: tencentDraft.downloadCdnAuth,
             region: tencentDraft.region.trim(),
             concurrency: tencentDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(tencentDraft.multipartThreshold, 25),
@@ -551,13 +592,17 @@ export function StorageSettingsPage() {
             storage_type: "tencent",
             bucket_name: tencentDraft.bucketName.trim(),
             endpoint: tencentDraft.accessDomain.trim(),
+            download_domain_type: tencentDraft.downloadDomainType,
+            download_domain: tencentDraft.downloadDomain.trim(),
+            download_cdn_auth: tencentDraft.downloadCdnAuth,
             region: tencentDraft.region.trim(),
             concurrency: tencentDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(tencentDraft.multipartThreshold, 25),
             part_size_mb: parseSizeMb(tencentDraft.partSize, 25),
             mount_mode: tencentDraft.mountMode,
             read_only: tencentDraft.readOnly,
-            object_key_style: tencentDraft.objectKeyStyle,
+
+            ...objectPathSettings(tencentDraft),
           },
         }
 
@@ -568,13 +613,16 @@ export function StorageSettingsPage() {
           name: aliyunDraft.name.trim(),
           bucket_name: aliyunDraft.bucketName.trim(),
           region: aliyunDraft.region.trim(),
-          endpoint: aliyunDraft.endpoint.trim() || undefined,
+          endpoint: aliyunDraft.endpoint.trim() || null,
           multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
           part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
           extra: {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            endpoint: aliyunDraft.endpoint.trim() || null,
+            download_domain_type: aliyunDraft.downloadDomainType,
+            download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
@@ -600,12 +648,16 @@ export function StorageSettingsPage() {
             ...(bucket.extra ?? {}),
             provider_label: "Aliyun OSS",
             storage_type: "aliyun",
+            endpoint: aliyunDraft.endpoint.trim() || null,
+            download_domain_type: aliyunDraft.downloadDomainType,
+            download_domain: aliyunDraft.downloadDomain.trim(),
             concurrency: aliyunDraft.concurrency,
             multipart_threshold_mb: parseSizeMb(aliyunDraft.multipartThreshold, 25),
             part_size_mb: parseSizeMb(aliyunDraft.partSize, 25),
             mount_mode: aliyunDraft.mountMode,
             read_only: aliyunDraft.readOnly,
-            object_key_style: aliyunDraft.objectKeyStyle,
+
+            ...objectPathSettings(aliyunDraft),
           },
         }
         await updateUserMount(accessToken, bucket.backendId, policyPatch, mountPatch)
@@ -674,32 +726,19 @@ export function StorageSettingsPage() {
       return
     }
 
-    if (syncingMountId === bucket.backendId) {
-      syncControllerRef.current?.abort()
-      return
-    }
     if (syncingMountId !== null) return
 
-    const controller = new AbortController()
-    syncControllerRef.current = controller
     setSyncingMountId(bucket.backendId)
     try {
-      const result = await syncUserMountPages(accessToken, bucket.backendId, controller.signal)
+      await startUserMountSyncTask(accessToken, bucket.backendId)
+      announceImportQueued()
       await reloadWorkspace()
-      if (!result.complete) {
-        toast.info(`已同步 ${result.synced_objects} 个对象，可再次继续。`)
-      } else {
-        toast.success(`${bucket.name} 同步完成，共 ${result.synced_objects} 个对象。`)
-      }
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        toast.error(error instanceof Error ? error.message : "启动同步失败")
-      }
+      toast.error(error instanceof Error ? error.message : "启动同步失败")
     } finally {
-      syncControllerRef.current = null
       setSyncingMountId(null)
     }
-  }, [reloadWorkspace, requireToken, syncingMountId])
+  }, [announceImportQueued, reloadWorkspace, requireToken, syncingMountId])
 
   const submitLabel = submitting ? "处理中..." : undefined
   const editSubmitLabel = submitting ? "处理中..." : "保存"
@@ -724,6 +763,7 @@ export function StorageSettingsPage() {
 
       {view.type === "form" && view.strategy === "tencent" && (
         <TencentStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={tencentDraft}
           onChange={setTencentDraft}
           onBack={() => setView({ type: "select-provider" })}
@@ -744,6 +784,7 @@ export function StorageSettingsPage() {
 
       {view.type === "form" && view.strategy === "aliyun" && (
         <AliyunStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={aliyunDraft}
           onChange={setAliyunDraft}
           onBack={() => setView({ type: "select-provider" })}
@@ -773,6 +814,7 @@ export function StorageSettingsPage() {
 
       {view.type === "edit" && resolveStorageStrategy(view.bucket) === "tencent" && (
         <TencentStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={tencentDraft}
           initialDraft={initialTencentDraft}
           mode={view.bucket.canEditConnection ? "edit" : "readonly"}
@@ -797,8 +839,11 @@ export function StorageSettingsPage() {
 
       {view.type === "edit" && resolveStorageStrategy(view.bucket) === "aliyun" && (
         <AliyunStorageForm
+          canConfigureImportWriteback={currentUser?.role === "admin"}
           draft={aliyunDraft}
           initialDraft={initialAliyunDraft}
+          mountId={view.bucket.backendId}
+          accessToken={token ?? ""}
           mode={view.bucket.canEditConnection ? "edit" : "readonly"}
           onChange={setAliyunDraft}
           onBack={() => setView({ type: "list" })}
@@ -806,6 +851,11 @@ export function StorageSettingsPage() {
           submitLabel={editSubmitLabel}
         />
       )}
+
+      {view.type === "edit" && view.bucket.canEditConnection &&
+        ["tencent", "aliyun"].includes(resolveStorageStrategy(view.bucket)) && (
+          <StoragePathMigration key={view.bucket.id} bucket={view.bucket} />
+        )}
 
       {view.type === "edit" && ["139", "189", "wo"].includes(resolveStorageStrategy(view.bucket)) && (
         <RemoteDriveForm

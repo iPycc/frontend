@@ -29,7 +29,7 @@ const providerDisplayNames: Record<string, string> = {
   local_fs: "Local Storage",
   tencent_cos: "Tencent COS",
   aliyun_oss: "Aliyun OSS",
-  drive_139: "139zhey",
+  drive_139: "139 Cloud",
   drive_189: "189 Cloud",
   drive_wo: "Wo Cloud",
 }

@@ -63,13 +63,15 @@ export type SharedNode = {
   name: string
   type: "folder" | "file"
   size: number
+  preview_version?: string | null
 }
 
-export async function createShare(token: string, body: ShareCreateInput) {
+export async function createShare(token: string, body: ShareCreateInput, idempotencyKey?: string) {
   return requestJson<ShareRead>("/share", {
     method: "POST",
     token,
     body,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   })
 }
 
@@ -81,6 +83,19 @@ export async function revokeShare(token: string, shareId: string) {
   return requestJson<{ message: string }>(`/share/${shareId}`, {
     method: "DELETE",
     token,
+  })
+}
+
+export type ShareUpdateInput = {
+  expires_in_hours?: number | null
+  max_downloads?: number | null
+}
+
+export async function updateShare(token: string, shareId: string, body: ShareUpdateInput) {
+  return requestJson<ShareRead>(`/share/${shareId}`, {
+    method: "PATCH",
+    token,
+    body,
   })
 }
 

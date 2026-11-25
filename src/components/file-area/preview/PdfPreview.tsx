@@ -251,11 +251,11 @@ function PdfThumbnail({
       ref={hostRef}
       type="button"
       onClick={onSelect}
-      className={cn("w-24 shrink-0 rounded-md border p-1.5 text-center", active ? "border-primary bg-primary/10" : "border-transparent hover:bg-muted")}
+      className={cn("w-16 shrink-0 rounded-md border p-1 text-center md:w-24 md:p-1.5", active ? "border-primary bg-primary/10" : "border-transparent hover:bg-muted")}
       aria-label={`转到第 ${page} 页`}
       aria-current={active ? "page" : undefined}
     >
-      <span className="mx-auto flex h-24 w-20 items-center justify-center overflow-hidden bg-white shadow-sm">
+      <span className="mx-auto flex h-14 w-12 items-center justify-center overflow-hidden bg-white shadow-sm md:h-24 md:w-20">
         {visible ? <canvas ref={canvasRef} className="max-h-full max-w-full bg-white" /> : null}
       </span>
       <span className="mt-1 block text-[11px] tabular-nums text-muted-foreground">{page}</span>
@@ -600,11 +600,22 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
     setAnnotationDirty(true)
   }, [])
 
+  React.useLayoutEffect(() => {
+    const host = viewportHostRef.current
+    if (!document || !host) return
+    const padding = getComputedStyle(host)
+    const available = host.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
+    setScale(Math.min(Math.max(available / defaultPageSize.width, 0.25), 1))
+  }, [document, defaultPageSize.width])
+
   const fitWidth = React.useCallback(async () => {
     if (!document || !viewportHostRef.current) return
     const page = await document.getPage(pageNumber)
     const viewport = page.getViewport({ scale: 1, rotation })
-    const available = Math.max(viewportHostRef.current.clientWidth - 48, 200)
+    const containerWidth = viewportHostRef.current.clientWidth
+    const style = getComputedStyle(viewportHostRef.current)
+    const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+    const available = Math.max(containerWidth - horizontalPadding, 180)
     setScale(Math.min(Math.max(available / viewport.width, 0.25), 3))
   }, [document, pageNumber, rotation])
 
@@ -629,11 +640,11 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-muted/40">
-      <div className="shrink-0 overflow-hidden border-b border-border bg-background">
-        <div className="flex min-h-12 flex-wrap items-center gap-1.5 px-3 py-2">
-          <div className="flex min-w-0 items-center gap-1.5">
+      <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-border bg-background">
+        <div className="flex min-h-12 w-max min-w-full flex-nowrap items-center gap-1.5 px-3 py-1.5 sm:w-full sm:flex-wrap sm:py-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Input.Search value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void findText() }} placeholder="在 PDF 中查找" className="h-8 w-36 text-xs sm:w-48" />
-            <Button variant="ghost" size="sm" onClick={() => void findText()} disabled={searching || !query.trim()}>
+            <Button variant="ghost" size="sm" className="shrink-0" onClick={() => void findText()} disabled={searching || !query.trim()}>
               {searching ? <IconLoader2 data-icon="inline-start" className="animate-spin" /> : <IconSearch data-icon="inline-start" />}查找
             </Button>
           </div>
@@ -662,24 +673,24 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
             <Button variant="ghost" size="icon-sm" onClick={() => setScale((value) => Math.max(value - 0.15, 0.25))} aria-label="缩小" title="缩小"><IconZoomOut /></Button>
             <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">{Math.round(scale * 100)}%</span>
             <Button variant="ghost" size="icon-sm" onClick={() => setScale((value) => Math.min(value + 0.15, 4))} aria-label="放大" title="放大"><IconZoomIn /></Button>
-            <Button variant="ghost" size="sm" onClick={() => void fitWidth()}>适合宽度</Button>
+            <Button variant="ghost" size="sm" className="shrink-0" onClick={() => void fitWidth()}>适合宽度</Button>
             <Button variant="ghost" size="icon-sm" onClick={() => setRotation((value) => (value + 90) % 360)} aria-label="旋转" title="顺时针旋转"><IconRotateClockwise /></Button>
           </div>
           {canAnnotate ? (
-            <div className="flex min-w-0 flex-wrap items-center gap-1 border-l border-border pl-1.5">
+            <div className="flex shrink-0 items-center gap-1 border-l border-border pl-1.5">
               <ToggleGroup type="single" value={tool ?? ""} onValueChange={(value) => setTool((value || null) as PdfAnnotationKind | null)} variant="outline" size="sm" spacing={0} aria-label="PDF 标注工具">
                 <ToggleGroupItem value="highlight" aria-label="高亮" title="高亮"><IconHighlight /></ToggleGroupItem>
                 <ToggleGroupItem value="pen" aria-label="画笔" title="画笔"><IconPencil /></ToggleGroupItem>
                 <ToggleGroupItem value="text" aria-label="文字" title="文字"><IconLetterT /></ToggleGroupItem>
                 <ToggleGroupItem value="rectangle" aria-label="矩形" title="矩形"><IconSquare /></ToggleGroupItem>
               </ToggleGroup>
-              <label className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md border border-input" title="标注颜色">
+              <label className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input" title="标注颜色">
                 <span className="size-4 rounded-full border border-black/10" style={{ backgroundColor: color }} />
                 <input type="color" value={color} onChange={(event) => setColor(event.target.value)} className="sr-only" aria-label="标注颜色" />
               </label>
               {tool === "text" ? <Input value={annotationText} onChange={(event) => setAnnotationText(event.target.value)} placeholder="输入文字后点击页面" className="h-8 w-44 text-xs" /> : null}
               <Button variant="ghost" size="icon-sm" disabled={!annotations.length} onClick={() => mutateAnnotations((items) => items.slice(0, -1))} aria-label="撤销上一条标注" title="撤销标注"><IconArrowBackUp /></Button>
-              {annotationSaveBlocked ? <Button variant="ghost" size="sm" onClick={() => setAnnotationSaveBlocked(false)}><IconRefresh data-icon="inline-start" />重试保存</Button> : <span className="px-1 text-[11px] text-muted-foreground">{annotationSaving ? "正在保存标注…" : annotationDirty ? "标注待保存" : "私人标注"}</span>}
+              {annotationSaveBlocked ? <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setAnnotationSaveBlocked(false)}><IconRefresh data-icon="inline-start" />重试保存</Button> : <span className="shrink-0 px-1 text-[11px] text-muted-foreground">{annotationSaving ? "正在保存标注…" : annotationDirty ? "标注待保存" : "私人标注"}</span>}
             </div>
           ) : null}
         </div>
@@ -688,11 +699,11 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         {document ? (
-          <aside ref={thumbnailListRef} className="custom-scrollbar flex h-32 shrink-0 gap-2 overflow-x-auto border-b border-border bg-background p-2 md:h-auto md:w-32 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-b-0 md:border-r" aria-label="PDF 页面目录">
+          <aside ref={thumbnailListRef} className="custom-scrollbar flex h-24 shrink-0 gap-2 overflow-x-auto border-b border-border bg-background p-2 md:h-auto md:w-32 md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-b-0 md:border-r" aria-label="PDF 页面目录">
             {Array.from({ length: document.numPages }, (_, index) => index + 1).map((page) => <PdfThumbnail key={page} document={document} page={page} active={page === pageNumber} onSelect={() => scrollToPage(page)} registerHost={registerThumbnailHost} scrollRoot={thumbnailListRef} />)}
           </aside>
         ) : null}
-        <div ref={viewportHostRef} className="custom-scrollbar relative min-h-0 flex-1 overflow-auto p-6 [scrollbar-gutter:stable]" aria-label="PDF 连续页面">
+        <div ref={viewportHostRef} className="custom-scrollbar relative min-h-0 flex-1 overflow-auto p-3 sm:p-6 [scrollbar-gutter:stable]" aria-label="PDF 连续页面">
           {loading ? <PreviewSkeleton kind="pdf" className="pointer-events-none absolute inset-0 z-10" /> : null}
           {error && !document ? (
             <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>

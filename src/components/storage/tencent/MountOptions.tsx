@@ -7,16 +7,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FormRow } from "@/components/storage/shared"
+import { FormRow, objectStorageImportHint } from "@/components/storage/shared"
+import { ObjectPathOptions } from "@/components/storage/ObjectPathOptions"
 import type { StorageFormMode, TencentStorageDraft } from "@/components/storage/types"
 
 type Props = {
   draft: TencentStorageDraft
   mode: StorageFormMode
   onChange: (draft: TencentStorageDraft) => void
+  canConfigureImportWriteback?: boolean
 }
 
-export function MountOptions({ draft, mode, onChange }: Props) {
+export function MountOptions({ draft, mode, onChange, canConfigureImportWriteback }: Props) {
   const readonly = mode === "readonly"
   const update = <K extends keyof TencentStorageDraft>(key: K, value: TencentStorageDraft[K]) =>
     onChange({ ...draft, [key]: value })
@@ -43,7 +45,12 @@ export function MountOptions({ draft, mode, onChange }: Props) {
         />
       </FormRow>
 
-      <FormRow label="挂载模式" hint="托管模式只显示 Cloudrave 创建的文件；镜像模式可导入此前缀中的已有对象。">
+      <FormRow
+        label="挂载模式"
+        hint={draft.mountMode === "mirror" && mode === "create"
+          ? <span className="break-words">{objectStorageImportHint(draft)}</span>
+          : "托管模式只显示 Cloudrave 创建的文件；镜像模式可导入此前缀中的已有对象。"}
+      >
         <Select
           value={draft.mountMode}
           onValueChange={(value) => update("mountMode", value as TencentStorageDraft["mountMode"])}
@@ -59,24 +66,9 @@ export function MountOptions({ draft, mode, onChange }: Props) {
         </Select>
       </FormRow>
 
-      <FormRow
-        label="原始对象命名"
-        hint="只影响今后上传的新对象。文件夹由 Cloudrave 的目录树管理，不会创建空的对象占位符。"
-      >
-        <Select
-          value={draft.objectKeyStyle}
-          onValueChange={(value) => update("objectKeyStyle", value as TencentStorageDraft["objectKeyStyle"])}
-          disabled={readonly}
-        >
-          <SelectTrigger className="h-10 w-full text-[15px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="readable">blobid-原文件名（推荐）</SelectItem>
-            <SelectItem value="opaque">仅 blobid 与扩展名</SelectItem>
-          </SelectContent>
-        </Select>
-      </FormRow>
+      <ObjectPathOptions draft={draft} readOnly={readonly}
+        onMode={(value) => update("objectKeyStyle", value)} onTemplate={(value) => update("objectKeyTemplate", value)}
+        onWriteback={canConfigureImportWriteback ? (value) => update("importWriteback", value) : undefined} />
 
       <FormRow label="只读挂载" hint="启用后禁止上传、重命名和删除，适合归档桶或共享数据源。">
         <div className="flex min-h-10 items-center justify-between gap-4">
@@ -84,6 +76,17 @@ export function MountOptions({ draft, mode, onChange }: Props) {
           <Switch checked={draft.readOnly} onCheckedChange={(checked) => update("readOnly", checked)} disabled={readonly} />
         </div>
       </FormRow>
+
+      {canConfigureImportWriteback && draft.mountMode === "mirror" ? (
+        <FormRow label="删除导入的源对象" hint="永久删除时，仅清理可确认版本的源对象。">
+          <Switch
+            checked={draft.importDeleteSource}
+            onCheckedChange={(checked) => update("importDeleteSource", checked)}
+            disabled={readonly || draft.readOnly}
+            aria-label="删除导入的源对象"
+          />
+        </FormRow>
+      ) : null}
 
     </>
   )

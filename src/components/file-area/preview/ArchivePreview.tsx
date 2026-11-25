@@ -81,6 +81,18 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
   const allVisibleSelected = visible.length > 0 && visible.every((entry) => selected.has(entry.fullPath))
   const someVisibleSelected = visible.some((entry) => selected.has(entry.fullPath))
   const selectAllRef = React.useRef<HTMLInputElement>(null)
+  const breadcrumbRef = React.useRef<HTMLElement>(null)
+
+  React.useLayoutEffect(() => {
+    const container = breadcrumbRef.current
+    if (!container) return
+    const alignRight = () => {
+      container.scrollLeft = container.scrollWidth
+    }
+    alignRight()
+    const frame = window.requestAnimationFrame(alignRight)
+    return () => window.cancelAnimationFrame(frame)
+  }, [manifest.node_id, path])
 
   const toggleSelected = (entryPath: string) => {
     setSelected((current) => {
@@ -148,7 +160,7 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
         </div>
 
         <div className="flex min-h-12 shrink-0 items-center gap-3 border-b border-border px-3 md:px-4">
-          <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-sm" aria-label="压缩包路径">
+          <nav ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm" aria-label="压缩包路径">
             <button type="button" className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-muted" onClick={() => { setPath(""); setPreview(null) }}>
               <IconHome size={16} />根目录
             </button>
@@ -157,7 +169,7 @@ export function ArchivePreview({ manifest }: { manifest: PreviewManifest }) {
                 <IconChevronRight size={15} className="shrink-0 text-muted-foreground" />
                 <button
                   type="button"
-                  className="max-w-48 shrink-0 truncate rounded-md px-2 py-1.5 hover:bg-muted"
+                  className="shrink-0 whitespace-nowrap rounded-md px-2 py-1.5 hover:bg-muted"
                   onClick={() => { setPath(crumbs.slice(0, index + 1).join("/")); setPreview(null) }}
                 >
                   {crumb}

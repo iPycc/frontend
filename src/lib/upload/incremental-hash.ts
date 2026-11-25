@@ -184,17 +184,20 @@ export async function hashBlob(
     const end = blob.size === 0 ? 0 : Math.min(blob.size, offset + chunkSize)
     hasher.update(new Uint8Array(await blob.slice(offset, end).arrayBuffer()))
     const now = Date.now()
-    if (onProgress && (now - lastReportedAt >= 100 || end >= blob.size)) {
-      const elapsedSeconds = Math.max((now - startedAt) / 1000, 0.001)
-      onProgress({
-        processedBytes: end,
-        totalBytes: blob.size,
-        bytesPerSecond: end / elapsedSeconds,
-      })
+    if (now - lastReportedAt >= 100 || (onProgress && end >= blob.size)) {
+      if (onProgress) {
+        const elapsedSeconds = Math.max((now - startedAt) / 1000, 0.001)
+        onProgress({
+          processedBytes: end,
+          totalBytes: blob.size,
+          bytesPerSecond: end / elapsedSeconds,
+        })
+      }
       lastReportedAt = now
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
     }
     if (blob.size === 0) break
   }
+  signal?.throwIfAborted()
   return hasher.digest()
 }

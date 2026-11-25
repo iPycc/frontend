@@ -1,5 +1,5 @@
 import * as React from "react"
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { Navigate, Route, Routes } from "react-router-dom"
 
 import { ShareGuard } from "@/app/guard"
 import { AudioPlayerProvider } from "@/components/audio/AudioPlayerProvider"
@@ -22,7 +22,6 @@ function lazyNamed<T extends React.ComponentType<any>>(
 
 const Buckets = lazyNamed(() => import("@/pages/Buckets"), "Buckets")
 const Mounts = lazyNamed(() => import("@/pages/Mounts"), "Mounts")
-const Offline = lazyNamed(() => import("@/pages/Offline"), "Offline")
 const Recycle = lazyNamed(() => import("@/pages/Recycle"), "Recycle")
 const ShareDetail = lazyNamed(() => import("@/pages/ShareDetail"), "ShareDetail")
 const ShareNotFound = lazyNamed(() => import("@/pages/ShareNotFound"), "ShareNotFound")
@@ -53,7 +52,7 @@ export default function App() {
     : <Deferred>{element}</Deferred>
 
   return (
-    <BrowserRouter>
+    <>
       <AudioPlayerProvider>
         <Toaster position="bottom-center" richColors />
         <Routes>
@@ -65,7 +64,7 @@ export default function App() {
               <Route path="/app/tasks" element={guestRestricted(<Tasks />)} />
               <Route path="/app/shared-with-me" element={guestRestricted(<SharedWithMe />)} />
               <Route path="/app/mounts" element={guestRestricted(<Mounts />)} />
-              <Route path="/app/offline" element={guestRestricted(<Offline />)} />
+              <Route path="/app/offline" element={<Navigate to={isGuest ? "/app" : "/app/tasks"} replace />} />
 
               <Route path="/settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to={isGuest ? "/settings/security" : "/settings/profile"} replace />} />
@@ -93,6 +92,6 @@ export default function App() {
             </Route>
           </Routes>
       </AudioPlayerProvider>
-    </BrowserRouter>
+    </>
   )
 }

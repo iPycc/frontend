@@ -2,7 +2,7 @@ import * as React from "react"
 import { IconDownload, IconX } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { buildDownloadUrl, getPreviewManifest, peekPreviewManifest, type PreviewManifest } from "@/api/files"
+import { buildDownloadUrl, getPreviewManifest, type PreviewManifest } from "@/api/files"
 import { requestResponse } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { PreviewSkeleton } from "@/components/file-area/preview/PreviewSkeleton"
@@ -61,9 +61,8 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
   React.useEffect(() => {
     if (!backendId) return
     const controller = new AbortController()
-    const cached = peekPreviewManifest(backendId)
-    setManifest(cached)
-    setLoading(!cached)
+    setManifest(null)
+    setLoading(true)
     setError(null)
     void getPreviewManifest(backendId, controller.signal)
       .then((next) => {

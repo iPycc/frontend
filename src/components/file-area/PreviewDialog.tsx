@@ -37,7 +37,7 @@ export type PreviewDialogProps = {
   onNext?: () => void
   leadingActions?: React.ReactNode
   moreActions?: React.ReactNode
-  details?: (close: () => void) => React.ReactNode
+  details?: (close: () => void, metadata?: PreviewManifest["metadata"]) => React.ReactNode
 }
 
 export const previewIconButtonClass = "size-8 text-muted-foreground hover:bg-accent hover:text-foreground sm:size-9"
@@ -65,33 +65,35 @@ export function PreviewDialog({
   const [imageToolbarTarget, setImageToolbarTarget] = React.useState<HTMLDivElement | null>(null)
   const [showDetails, setShowDetails] = React.useState(false)
   const [displayMode, setDisplayMode] = React.useState<"window" | "fullscreen" | "minimized">("window")
+  const [imageSize, setImageSize] = React.useState<{ manifest: PreviewManifest; width: number; height: number } | null>(null)
 
   React.useEffect(() => {
     if (!open) {
       setShowDetails(false)
       setDisplayMode("window")
+      setImageSize(null)
     }
   }, [open])
 
-  React.useEffect(() => {
-    if (!open) return
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      const isEditing = target?.closest("input, textarea, [contenteditable='true'], .monaco-editor")
-      if (!isEditing && event.key === "ArrowLeft" && totalCount > 1) onPrev?.()
-      if (!isEditing && event.key === "ArrowRight" && totalCount > 1) onNext?.()
-      if (event.key === "Escape" && showDetails) setShowDetails(false)
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
-  }, [onNext, onPrev, open, showDetails, totalCount])
-
   const minimized = displayMode === "minimized" && manifest?.kind === "audio"
-  const detailsContent = details?.(() => setShowDetails(false))
+  const metadata = manifest && imageSize?.manifest === manifest
+    ? { ...manifest.metadata, width: imageSize.width, height: imageSize.height }
+    : manifest?.metadata
+  const detailsContent = details?.(() => setShowDetails(false), metadata)
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && showDetails) setShowDetails(false)
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || minimized || totalCount <= 1) return
+    const navigate = event.key === "ArrowLeft" ? onPrev : event.key === "ArrowRight" ? onNext : undefined
+    if (!navigate || (event.target as HTMLElement).closest("input, textarea, select, [contenteditable], .monaco-editor")) return
+    event.preventDefault()
+    navigate()
+  }
 
   return (
     <Dialog open={open} modal={!minimized} onOpenChange={(value) => !value && onClose()}>
       <DialogContent
+        onKeyDown={handleKeyDown}
         showCloseButton={false}
         disableScaleAnimation
         hideOverlay={minimized}
@@ -105,34 +107,34 @@ export function PreviewDialog({
         )}
       >
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className={cn("flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 sm:gap-3", minimized ? "min-h-11 py-1" : "min-h-14 py-1 md:px-4")}>
-            <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onClose} aria-label="关闭预览">
+          <header className={cn("flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2.5 sm:gap-2", minimized ? "min-h-11 py-1" : "min-h-13 py-1.5 md:px-4")}>
+            <Button variant="ghost" size="icon" className={cn("shrink-0", previewIconButtonClass)} onClick={onClose} aria-label="关闭预览">
               <IconX />
             </Button>
             {titleIcon ? <span className="flex size-5 shrink-0 items-center justify-center">{titleIcon}</span> : null}
-            <div className="min-w-0 flex-1 basis-48">
-              <DialogTitle className="whitespace-normal break-all text-sm font-medium leading-5 text-foreground" title={name}>{name}</DialogTitle>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <DialogTitle className="block truncate text-sm font-medium leading-5 text-foreground" title={name}>{name}</DialogTitle>
             </div>
             <div
               ref={setImageToolbarTarget}
               className={cn(
                 manifest?.kind === "image" && !minimized
-                  ? "custom-scrollbar order-last min-w-0 basis-full overflow-x-auto lg:order-none lg:basis-auto"
+                  ? "custom-scrollbar order-last flex min-w-0 basis-full items-center overflow-x-auto border-t border-border/60 pt-1 lg:order-none lg:basis-auto lg:border-t-0 lg:pt-0"
                   : "hidden"
               )}
             />
-            {!minimized && totalCount > 1 && onPrev && onNext ? (
-              <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onPrev} aria-label="上一个">
-                  <IconChevronLeft />
-                </Button>
-                <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onNext} aria-label="下一个">
-                  <IconChevronRight />
-                </Button>
-              </div>
-            ) : null}
-            {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+              {!minimized && totalCount > 1 && onPrev && onNext ? (
+                <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+                  <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onPrev} aria-label="上一个">
+                    <IconChevronLeft />
+                  </Button>
+                  <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={onNext} aria-label="下一个">
+                    <IconChevronRight />
+                  </Button>
+                </div>
+              ) : null}
+              {!minimized ? <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{currentIndex + 1} / {totalCount}</span> : null}
               {minimized ? (
                 <Button variant="ghost" size="icon" className={previewIconButtonClass} onClick={() => setDisplayMode("window")} aria-label="恢复音频播放器" title="恢复播放器">
                   <IconArrowsMaximize />
@@ -192,7 +194,13 @@ export function PreviewDialog({
                 ) : null}
               </div>
             ) : manifest ? (
-              <PreviewRenderer manifest={manifest} onRetry={onRetry} compactAudio={minimized} imageToolbarTarget={imageToolbarTarget} />
+              <PreviewRenderer
+                manifest={manifest}
+                onRetry={onRetry}
+                compactAudio={minimized}
+                imageToolbarTarget={imageToolbarTarget}
+                onImageSize={(width, height) => setImageSize({ manifest, width, height })}
+              />
             ) : null}
           </main>
         </div>

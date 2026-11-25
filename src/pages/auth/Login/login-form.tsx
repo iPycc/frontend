@@ -1,10 +1,10 @@
+import { GitHubIcon } from "@/components/icons/github-icon"
 import * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
   ArrowRight,
-  Github,
   Loader2,
   LogIn,
   Mail,
@@ -46,7 +46,9 @@ import {
 } from "@/lib/github-oauth-popup"
 import {
   openGoogleOAuthPopup,
-  readGoogleOAuthPopupResult,
+  closeGoogleOAuthPopup,
+  GOOGLE_OAUTH_MESSAGE_TYPE,
+  GOOGLE_OAUTH_TIMEOUT_MS,
   subscribeGoogleOAuthResults,
   type GoogleOAuthMessage,
 } from "@/lib/google-oauth-popup"
@@ -89,6 +91,7 @@ const GOOGLE_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
   not_linked: "该 Google 账号尚未关联 Cloudrave 账号，请先登录后在账号与安全中关联。",
   not_configured: "管理员尚未完成 Google OAuth 配置。",
   provider_error: "Google 暂时无法完成授权，请稍后再试。",
+  timeout: "Google 授权等待超时，请关闭授权窗口后重试。",
 }
 
 const QQ_OAUTH_ERROR_DESCRIPTIONS: Record<string, string> = {
@@ -399,7 +402,7 @@ export function LoginForm({
       return
     }
 
-    googleOAuthPopupRef.current.close()
+    closeGoogleOAuthPopup(googleOAuthPopupRef.current)
     googleOAuthPopupRef.current = null
     setIsGoogleLoginLoading(false)
 
@@ -436,25 +439,16 @@ export function LoginForm({
       return
     }
 
-    const closeWatcher = window.setInterval(() => {
-      const popup = googleOAuthPopupRef.current
-      if (!popup || popup.closed) {
-        googleOAuthPopupRef.current = null
-        setIsGoogleLoginLoading(false)
-        return
-      }
+    // Google may isolate its window with COOP. Do not inspect its WindowProxy.
+    const timeout = window.setTimeout(() => {
+      handleGoogleOAuthResult({ type: GOOGLE_OAUTH_MESSAGE_TYPE, flow: "login", result: "timeout" })
+    }, GOOGLE_OAUTH_TIMEOUT_MS)
 
-      const result = readGoogleOAuthPopupResult(popup, "login")
-      if (result) {
-        handleGoogleOAuthResult(result)
-      }
-    }, 250)
-
-    return () => window.clearInterval(closeWatcher)
+    return () => window.clearTimeout(timeout)
   }, [handleGoogleOAuthResult, isGoogleLoginLoading])
 
   useEffect(() => {
-    return () => googleOAuthPopupRef.current?.close()
+    return () => { closeGoogleOAuthPopup(googleOAuthPopupRef.current); googleOAuthPopupRef.current = null }
   }, [])
 
   const handleQQOAuthResult = React.useCallback((message: QQOAuthMessage) => {
@@ -675,11 +669,9 @@ export function LoginForm({
       return
     }
 
-    const popup = openGoogleOAuthPopup(googleOAuthUrl, "login")
+    const { popup, error } = openGoogleOAuthPopup(googleOAuthUrl, "login")
     if (!popup) {
-      toast.error("无法打开 Google 授权窗口", {
-        description: "请允许此站点打开弹出式窗口后重试。",
-      })
+      toast.error(error)
       return
     }
 
@@ -821,7 +813,7 @@ export function LoginForm({
                           {isGitHubOAuthLoading || isGitHubLoginLoading ? (
                             <Loader2 data-icon="inline-start" className="animate-spin" />
                           ) : (
-                            <Github data-icon="inline-start" />
+                            <GitHubIcon data-icon="inline-start" />
                           )}
                           {isGitHubOAuthLoading
                             ? "正在加载 GitHub 登录..."
@@ -830,6 +822,11 @@ export function LoginForm({
                               : "使用 GitHub 继续"}
                         </Button>
                       ) : null}
+                      {isGoogleLoginLoading ? <Button type="button" variant="ghost" onClick={() => {
+                        closeGoogleOAuthPopup(googleOAuthPopupRef.current)
+                        googleOAuthPopupRef.current = null
+                        setIsGoogleLoginLoading(false)
+                      }}>取消 Google 登录</Button> : null}
                       {googleOAuthUrl || isGoogleOAuthLoading ? (
                         <Button
                           variant="outline"

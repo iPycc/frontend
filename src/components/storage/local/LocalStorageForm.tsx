@@ -212,7 +212,7 @@ export function LocalStorageForm({
 
         <FormRow label="上传并发数" hint="同时进行的分块上传线程数，本机存储建议保持为 1。">
           <Select
-            value={String(draft.concurrency)}
+            value={String(Math.min(draft.concurrency, 3))}
             onValueChange={(v) => update("concurrency", Number(v))}
             disabled={readonly}
           >
@@ -222,7 +222,7 @@ export function LocalStorageForm({
             <SelectContent>
               <SelectItem value="1">1（推荐）</SelectItem>
               <SelectItem value="2">2</SelectItem>
-              <SelectItem value="4">4</SelectItem>
+              <SelectItem value="3">3</SelectItem>
             </SelectContent>
           </Select>
         </FormRow>

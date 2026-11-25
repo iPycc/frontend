@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { NavLink, useNavigate } from "react-router-dom"
-import { IconMenu2, IconMoon, IconSun, IconX } from "@tabler/icons-react"
+import { IconMenu2, IconX } from "@tabler/icons-react"
 import { AnimatePresence, motion } from "motion/react"
 
+import { ThemeToggleButton } from "@/components/shared/ThemeToggleButton"
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/ui/logo"
 import { useAppState } from "@/state/app"
@@ -16,12 +17,8 @@ const navLinks = [
 
 export function ShareNavbar() {
   const navigate = useNavigate()
-  const { isAuthenticated, effectiveTheme, setThemeMode } = useAppState()
+  const { isAuthenticated } = useAppState()
   const [mobileOpen, setMobileOpen] = useState(false)
-
-  const toggleTheme = () => {
-    setThemeMode(effectiveTheme === "dark" ? "light" : "dark")
-  }
 
   const visibleLinks = navLinks.filter((link) => !link.auth || isAuthenticated)
 
@@ -55,14 +52,10 @@ export function ShareNavbar() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="切换主题"
-          >
-            {effectiveTheme === "dark" ? <IconSun size={20} /> : <IconMoon size={20} />}
-          </button>
+          <ThemeToggleButton
+            iconSize={20}
+            className="h-9 w-9 text-muted-foreground hover:bg-muted hover:text-foreground md:h-9 md:w-9 dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+          />
 
           {isAuthenticated ? (
             <UserMenu />

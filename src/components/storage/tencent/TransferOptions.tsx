@@ -5,7 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FormRow } from "@/components/storage/shared"
+import { FormRow, UploadPartSettings } from "@/components/storage/shared"
 import type { StorageFormMode, TencentStorageDraft } from "@/components/storage/types"
 
 interface TransferOptionsProps {
@@ -20,7 +20,7 @@ export function TransferOptions({ draft, mode, onChange }: TransferOptionsProps)
     onChange({ ...draft, [key]: value })
 
   return (
-    <>
+    <UploadPartSettings>
       <FormRow label="分块阈值" hint="文件不超过阈值时使用单次 PUT，超过后自动切换为分块上传。">
         <Select
           value={draft.multipartThreshold}
@@ -75,6 +75,6 @@ export function TransferOptions({ draft, mode, onChange }: TransferOptionsProps)
           </SelectContent>
         </Select>
       </FormRow>
-    </>
+    </UploadPartSettings>
   )
 }

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 
 import { checkBackendHealth } from "@/api/system"
 import { getPreviewManifest, listUserMounts, saveTextPreview } from "@/api/files"
@@ -9,6 +10,7 @@ import {
 } from "@/lib/models"
 import { UploadProvider } from "@/lib/upload/provider"
 import { isExpired } from "@/lib/session"
+import { notifyStorageReauthorization } from "@/lib/storage-reauthorization"
 import { toast } from "sonner"
 import { useActions } from "@/state/act"
 import { useAuth } from "@/state/auth"
@@ -32,6 +34,7 @@ import {
 } from "@/state/core"
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate()
   const [initialState] = React.useState(() => loadInitialFileRouteState(loadSnapshot()))
   const [snapshot, setSnapshot] = React.useState<AppSnapshot>(initialState.snapshot)
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light")
@@ -152,16 +155,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     for (const bucket of snapshot.buckets) {
       if (!invalid.has(bucket.id) || reauthorizationNotifiedRef.current.has(bucket.id)) continue
       reauthorizationNotifiedRef.current.add(bucket.id)
-      toast.error(`「${bucket.name}」需要重新授权`, {
-        id: `storage-reauthorization:${bucket.id}`,
-        description: bucket.canEditConnection
-          ? "登录信息已失效，请重新登录运营商网页并更新该云盘的登录信息。"
-          : "登录信息已失效，请联系此存储的管理员更新授权。",
-        action: bucket.canEditConnection
-          ? { label: "前往存储设置", onClick: () => window.location.assign("/settings/storage") }
-          : undefined,
-        duration: 10000,
-      })
+      notifyStorageReauthorization(bucket, navigate)
     }
   }, [isAuthenticated, snapshot.buckets])
 

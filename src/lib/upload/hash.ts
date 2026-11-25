@@ -1,17 +1,23 @@
+import { hashBlob } from "@/lib/upload/incremental-hash"
+
 const MAX_HASH_BYTES = 16 * 1024 * 1024
 const FINGERPRINT_SAMPLE_BYTES = 64 * 1024
 
-export async function hashFile(file: File): Promise<string | null> {
+export async function hashFile(file: File, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted()
   if (file.size > MAX_HASH_BYTES || typeof crypto === "undefined" || !crypto.subtle) {
-    return null
+    return hashBlob(file, "sha256", signal)
   }
 
   try {
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
+    const data = await file.arrayBuffer()
+    signal?.throwIfAborted()
+    const digest = await crypto.subtle.digest("SHA-256", data)
+    signal?.throwIfAborted()
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
   } catch {
-    // Safari private mode and constrained WebViews can expose crypto.subtle but reject digest.
-    return null
+    signal?.throwIfAborted()
+    return hashBlob(file, "sha256", signal)
   }
 }
 
@@ -30,6 +36,6 @@ export async function fingerprintFile(file: File): Promise<string> {
   sample.set(identity)
   sample.set(first, identity.byteLength)
   sample.set(last, identity.byteLength + first.byteLength)
-  const digest = await crypto.subtle.digest("SHA-256", sample)
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  const digest = await hashFile(new File([sample], "fingerprint"))
+  return digest
 }

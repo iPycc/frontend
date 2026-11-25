@@ -134,7 +134,7 @@ export async function createFile(token: string, body: CreateFileInput) {
 }
 
 export async function renameNode(token: string, nodeId: number, body: RenameNodeInput) {
-  return requestJson<ExplorerNode>(`/explorer/node/${nodeId}`, {
+  return requestJson<ExplorerNode | { kind: "path_change"; task_id: string }>(`/explorer/node/${nodeId}`, {
     method: "PATCH",
     token,
     body,
@@ -142,7 +142,7 @@ export async function renameNode(token: string, nodeId: number, body: RenameNode
 }
 
 export async function moveNodes(token: string, body: TransferNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/node/move", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/node/move", {
     method: "POST",
     token,
     body,
@@ -150,7 +150,7 @@ export async function moveNodes(token: string, body: TransferNodesInput) {
 }
 
 export async function copyNodes(token: string, body: TransferNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/node/copy", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/node/copy", {
     method: "POST",
     token,
     body,
@@ -165,11 +165,12 @@ export function listNodeActivity(nodeId: number) {
   return requestJson<NodeActivity[]>(`/explorer/node/${nodeId}/activity`)
 }
 
-export async function deleteNodes(token: string, body: DeleteNodesInput) {
+export async function deleteNodes(token: string, body: DeleteNodesInput, idempotencyKey?: string) {
   return requestJson<Record<string, unknown>>("/explorer/node", {
     method: "DELETE",
     token,
     body,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   })
 }
 
@@ -178,7 +179,7 @@ export async function listRecycle(token: string) {
 }
 
 export async function restoreNodes(token: string, body: RestoreNodesInput) {
-  return requestJson<ExplorerNode[]>("/explorer/recycle/restore", {
+  return requestJson<ExplorerNode[] | { kind: "path_change"; task_ids: string[] }>("/explorer/recycle/restore", {
     method: "POST",
     token,
     body,

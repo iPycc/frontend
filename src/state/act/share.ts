@@ -28,6 +28,7 @@ export function useShareActions({
   updateSnapshot,
   getNodeById,
 }: ShareDeps) {
+  const createKeys = React.useRef(new Map<string, string>())
   const shareNodes = React.useCallback(
     async (nodeIds: string[], options: ShareCreateOptions = {}) => {
       const session = snapshotRef.current.auth.session
@@ -48,8 +49,12 @@ export function useShareActions({
         max_downloads: options.maxDownloads ?? null,
       }
 
+      const requestKey = JSON.stringify(input)
+      const idempotencyKey = createKeys.current.get(requestKey) ?? crypto.randomUUID()
+      createKeys.current.set(requestKey, idempotencyKey)
       try {
-        const share = await apiCreateShare(session.tokens.accessToken, input)
+        const share = await apiCreateShare(session.tokens.accessToken, input, idempotencyKey)
+        createKeys.current.delete(requestKey)
         const node = nodes.find((candidate) => candidate.backendId === share.node_id) ?? nodes[0]
         const newRecords: ShareRecord[] = [{
           ...mapShareRead(share),

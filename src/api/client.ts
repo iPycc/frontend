@@ -2,15 +2,22 @@ const DEFAULT_API_BASE = "/api/v1"
 
 export class ApiError extends Error {
   status: number
+  code?: string
   payload: unknown
   retryAfterMs?: number
+  requestId?: string
+  retryable?: boolean
 
-  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number) {
+  constructor(status: number, message: string, payload?: unknown, retryAfterMs?: number, requestId?: string, retryable?: boolean) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).code === "string"
+      ? (payload as Record<string, string>).code : undefined
     this.payload = payload
     this.retryAfterMs = retryAfterMs
+    this.requestId = requestId
+    this.retryable = retryable
   }
 }
 
@@ -22,6 +29,7 @@ type RequestOptions = {
   signal?: AbortSignal
   cache?: RequestCache
   skipAuthRefresh?: boolean
+  onUploadProgress?: (loaded: number, total: number) => void
 }
 
 type AuthRuntime = {
@@ -42,7 +50,7 @@ function getApiBaseUrl() {
   return env?.VITE_API_BASE_URL || DEFAULT_API_BASE
 }
 
-function resolveRequestUrl(path: string) {
+export function resolveRequestUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path
   }
@@ -67,6 +75,16 @@ function toRequestBody(body: unknown) {
 function pickErrorMessage(payload: unknown, status: number) {
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>
+    if (record.code !== "validation_error" && typeof record.message === "string" && record.message.trim()) {
+      return record.message
+    }
+    const advice: Record<string, string> = {
+      quota_exceeded: "存储空间不足，请释放空间或调整配额后重试",
+      storage_reauthorization_required: "存储授权已失效，请重新授权后重试",
+      storage_unavailable: "存储连接失败，请检查挂载状态后重试",
+      rate_limited: "请求过于频繁，请稍后重试",
+    }
+    if (typeof record.code === "string" && advice[record.code]) return advice[record.code]
     const validationMessage = pickValidationMessage(record.detail)
     if (validationMessage) {
       return validationMessage
@@ -111,20 +129,25 @@ async function requestResponseInternal(
     headers.set("Accept", accept)
   }
   headers.set("X-Device-Fingerprint", getDeviceFingerprint())
+  headers.set("X-Request-ID", globalThis.crypto?.randomUUID?.() ?? `web-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   const token = options.token ?? authRuntime.getAccessToken?.() ?? null
   if (token) {
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const response = await fetch(resolveRequestUrl(path), {
-    method: options.method ?? "GET",
-    headers,
-    body: toRequestBody(options.body),
-    signal: options.signal,
-    cache: options.cache,
-    credentials: "include",
-  })
+  const url = resolveRequestUrl(path)
+  const body = toRequestBody(options.body)
+  const response = options.onUploadProgress && body instanceof FormData
+    ? await uploadResponse(url, options.method ?? "POST", headers, body, options.signal, options.onUploadProgress)
+    : await fetch(url, {
+      method: options.method ?? "GET",
+      headers,
+      body,
+      signal: options.signal,
+      cache: options.cache,
+      credentials: "include",
+    })
 
   if (
     response.status === 401 &&
@@ -156,11 +179,68 @@ async function requestResponseInternal(
       response.status,
       pickErrorMessage(payload, response.status),
       payload,
-      parseRetryAfter(response.headers.get("Retry-After"))
+      parseRetryAfter(response.headers.get("Retry-After")),
+      safeRequestId(response.headers.get("X-Request-ID"), payload),
+      response.headers.get("X-Upload-Retryable") === "false" ? false : undefined
     )
   }
 
   return response
+}
+
+function safeRequestId(header: string | null, payload: unknown) {
+  const fromBody = payload && typeof payload === "object" ? (payload as Record<string, unknown>).request_id : undefined
+  for (const value of [header, fromBody]) {
+    if (typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value)) return value
+  }
+  return undefined
+}
+
+function uploadResponse(
+  url: string,
+  method: string,
+  headers: Headers,
+  body: FormData,
+  signal: AbortSignal | undefined,
+  onProgress: (loaded: number, total: number) => void
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    if (signal?.aborted) {
+      reject(new DOMException("aborted", "AbortError"))
+      return
+    }
+    xhr.open(method, url)
+    xhr.withCredentials = true
+    headers.forEach((value, name) => xhr.setRequestHeader(name, value))
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total)
+    }
+    xhr.onload = () => {
+      signal?.removeEventListener("abort", abort)
+      const responseHeaders = new Headers()
+      xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+        const index = line.indexOf(":")
+        if (index > 0) responseHeaders.append(line.slice(0, index), line.slice(index + 1).trim())
+      })
+      resolve(new Response(xhr.status === 204 || xhr.status === 205 || xhr.status === 304 ? null : xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: responseHeaders,
+      }))
+    }
+    xhr.onerror = () => {
+      signal?.removeEventListener("abort", abort)
+      reject(new TypeError("上传时网络连接中断"))
+    }
+    xhr.onabort = () => {
+      signal?.removeEventListener("abort", abort)
+      reject(new DOMException("aborted", "AbortError"))
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+    xhr.send(body)
+  })
 }
 
 function parseRetryAfter(value: string | null) {

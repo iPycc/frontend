@@ -1,4 +1,6 @@
-﻿import { type ReactNode } from "react"
+import { useBreadcrumbAlignment } from "@/hooks/use-breadcrumb-alignment"
+﻿import * as React from "react"
+import { type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
   IconArrowsSort,
@@ -8,6 +10,7 @@ import {
   IconDots,
   IconDownload,
   IconEdit,
+  IconFolder,
   IconHome2,
   IconInfoCircle,
   IconLayoutGrid,
@@ -39,6 +42,7 @@ import { hasCapability, type SortValue, type ViewMode } from "@/lib/models"
 import { useAppState } from "@/state/app"
 import { ViewSettingsPopover } from "./ViewSettingsPopover"
 import { BucketSwitcher } from "@/components/sidebar/BucketSwitcher"
+import type { MountHealth } from "@/api/storage"
 
 interface ToolbarProps {
   pathParts?: string[]
@@ -58,6 +62,7 @@ interface ToolbarProps {
   canPaste: boolean
   onCopy: () => void
   onCut: () => void
+  onMove: () => void
   onDelete: () => void
   onRename: () => void
   onShare: () => void
@@ -92,6 +97,7 @@ export function Toolbar({
   canPaste,
   onCopy,
   onCut,
+  onMove,
   onDelete,
   onRename,
   onShare,
@@ -99,9 +105,14 @@ export function Toolbar({
   onProperties,
   currentLabel,
 }: ToolbarProps) {
-  const { currentUser } = useAppState()
-  const canCopy = hasCapability(currentUser, "file.copy")
+  const { currentUser, activeBucket } = useAppState()
+  const canBatch = (activeBucket.extra?._health as MountHealth | undefined)?.capabilities?.batch !== false
+  const canCopy = canBatch && hasCapability(currentUser, "file.copy")
   const canShare = hasCapability(currentUser, "share.manage")
+  const pathSignature = currentLabel ?? pathParts.join("/")
+
+  const breadcrumbScrollRef = useBreadcrumbAlignment(`${activeBucket.id}:${pathSignature}:${selectedCount}`)
+
   return (
     <div className="app-panel relative flex h-11 shrink-0 items-center justify-between overflow-hidden rounded-xl border border-border px-1.5 sm:h-11.5 sm:px-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset] dark:border-white/10 dark:shadow-none">
       <AnimatePresence mode="wait" initial={false}>
@@ -118,7 +129,8 @@ export function Toolbar({
               <button
                 type="button"
                 onClick={onClearSelection}
-                className="rounded-full p-1.5 text-primary transition-colors hover:bg-primary/10"
+                className="flex size-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/10"
+                aria-label="清除选择"
               >
                 <IconX size={18} />
               </button>
@@ -128,20 +140,22 @@ export function Toolbar({
             </div>
             <div className="hidden items-center gap-2 md:flex">
               {canCopy ? <ActionButton icon={<IconCopy size={18} />} label="复制" onClick={onCopy} /> : null}
-              <ActionButton icon={<IconCut size={18} />} label="剪切" onClick={onCut} />
+              {canBatch ? <ActionButton icon={<IconCut size={18} />} label="剪切" onClick={onCut} /> : null}
+              {canBatch ? <ActionButton icon={<IconFolder size={18} />} label="移动" onClick={onMove} /> : null}
               <ActionButton icon={<IconEdit size={18} />} label="重命名" onClick={onRename} />
               <ActionButton icon={<IconDownload size={18} />} label="下载" onClick={onDownload} />
               {canShare ? <ActionButton icon={<IconShare3 size={18} />} label="分享" onClick={onShare} /> : null}
-              <ActionButton icon={<IconX size={18} />} label="删除" onClick={onDelete} />
+              {canBatch ? <ActionButton icon={<IconX size={18} />} label="删除" onClick={onDelete} /> : null}
             </div>
             <div className="md:hidden">
               <DropdownMenu>
-                <DropdownMenuTrigger className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                <DropdownMenuTrigger aria-label="批量操作" className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                   <IconDots size={18} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {canCopy ? <DropdownMenuItem onClick={onCopy}>复制</DropdownMenuItem> : null}
-                  <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem>
+                  {canBatch ? <DropdownMenuItem onClick={onCut}>剪切</DropdownMenuItem> : null}
+                  {canBatch ? <DropdownMenuItem onClick={onMove}>移动</DropdownMenuItem> : null}
                   <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
                   <DropdownMenuItem onClick={onDownload}>下载</DropdownMenuItem>
                   {canShare ? <DropdownMenuItem onClick={onShare}>分享</DropdownMenuItem> : null}
@@ -149,7 +163,7 @@ export function Toolbar({
                     <IconInfoCircle size={16} className="mr-2" /> 属性
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem>
+                  {canBatch ? <DropdownMenuItem onClick={onDelete}>删除</DropdownMenuItem> : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -161,35 +175,35 @@ export function Toolbar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="flex w-full items-center justify-between gap-3"
+            className="flex min-w-0 w-full items-center justify-between gap-2 sm:gap-3"
           >
-            <div className="min-w-0 flex-1">
-              <Breadcrumb>
-                <BreadcrumbList className="flex-nowrap gap-1.5 text-[13px] [&>li]:shrink-0">
-                  <BreadcrumbItem className="min-w-0 md:hidden">
+            <div ref={breadcrumbScrollRef} className="custom-scrollbar min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+              <Breadcrumb className="w-max min-w-full">
+                <BreadcrumbList className="w-max flex-nowrap gap-1.5 whitespace-nowrap text-[13px] [&>li]:shrink-0">
+                  <BreadcrumbItem className="shrink-0 md:hidden">
                     <BucketSwitcher compact />
                   </BreadcrumbItem>
-                  <BreadcrumbSeparator className="md:hidden">
+                  <BreadcrumbSeparator className="shrink-0 md:hidden">
                     <IconChevronRight size={14} className="text-muted-foreground" />
                   </BreadcrumbSeparator>
-                  <BreadcrumbItem>
+                  <BreadcrumbItem className="shrink-0">
                     <BreadcrumbLink asChild>
                       <Link
                         to="/app"
-                        className="flex h-8 items-center gap-2 text-foreground"
+                        className="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap text-foreground"
                       >
-                        <IconHome2 size={18} className="text-foreground" />
+                        <IconHome2 size={18} className="shrink-0 text-foreground" />
                         我的文件
                       </Link>
                     </BreadcrumbLink>
                   </BreadcrumbItem>
                   {currentLabel ? (
                     <>
-                      <BreadcrumbSeparator>
+                      <BreadcrumbSeparator className="shrink-0">
                         <IconChevronRight size={14} className="text-muted-foreground" />
                       </BreadcrumbSeparator>
-                      <BreadcrumbItem className="min-w-0 !shrink">
-                        <BreadcrumbPage className="truncate text-foreground">
+                      <BreadcrumbItem className="shrink-0">
+                        <BreadcrumbPage className="whitespace-nowrap text-foreground">
                           {currentLabel}
                         </BreadcrumbPage>
                       </BreadcrumbItem>
@@ -199,33 +213,30 @@ export function Toolbar({
                       const folderPath = "/" + pathParts.slice(0, index + 1).join("/")
                       const toPath = `/app?folder=${encodeURIComponent(folderPath)}`
                       const isLast = index === pathParts.length - 1
-                      const isMobileHidden = !isLast && pathParts.length > 1
 
                       return (
-                        <div
-                          className={isMobileHidden ? "hidden sm:contents" : "contents"}
-                          key={`${part}-${index}`}
-                        >
-                          <BreadcrumbSeparator>
+                        <React.Fragment key={`${part}-${index}`}>
+                          <BreadcrumbSeparator className="shrink-0">
                             <IconChevronRight size={14} className="text-muted-foreground" />
                           </BreadcrumbSeparator>
-                          <BreadcrumbItem className="min-w-0 !shrink">
+                          <BreadcrumbItem className="shrink-0">
                             {isLast ? (
-                              <BreadcrumbPage className="truncate text-foreground" title={part}>
+                              <BreadcrumbPage className="flex h-8 items-center whitespace-nowrap text-foreground" title={part}>
                                 {part}
                               </BreadcrumbPage>
                             ) : (
                               <BreadcrumbLink asChild>
                                 <Link
                                   to={toPath}
-                                  className="flex h-8 items-center text-muted-foreground"
+                                  className="flex h-8 items-center whitespace-nowrap text-muted-foreground"
+                                  title={part}
                                 >
                                   {part}
                                 </Link>
                               </BreadcrumbLink>
                             )}
                           </BreadcrumbItem>
-                        </div>
+                        </React.Fragment>
                       )
                     })
                   )}

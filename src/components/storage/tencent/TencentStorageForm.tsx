@@ -1,3 +1,4 @@
+import { parseDownloadDomain } from "@/components/storage/download-domain"
 import * as React from "react"
 import { IconExternalLink } from "@tabler/icons-react"
 
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -24,6 +26,7 @@ interface TencentStorageFormProps {
   onBack?: () => void
   onSubmit: () => void
   submitLabel?: string
+  canConfigureImportWriteback?: boolean
 }
 
 export function TencentStorageForm({
@@ -34,6 +37,7 @@ export function TencentStorageForm({
   onBack,
   onSubmit,
   submitLabel,
+  canConfigureImportWriteback,
 }: TencentStorageFormProps) {
   const readonly = mode === "readonly"
 
@@ -51,12 +55,14 @@ export function TencentStorageForm({
     }
   }
 
+  const templateReady = draft.objectKeyStyle !== "custom" || Boolean(draft.objectKeyTemplate?.trim())
   const credentialsReady = mode === "edit" || (draft.secretId.trim().length > 0 && draft.secretKey.trim().length > 0)
   const canSubmit =
-    !readonly &&
+    !readonly && templateReady &&
     draft.name.trim().length > 0 &&
     draft.bucketName.trim().length > 0 &&
     draft.region.trim().length > 0 &&
+    (draft.downloadDomainType === "default" || parseDownloadDomain(draft.downloadDomain) !== null) &&
     credentialsReady
 
   const title = mode === "edit" ? `编辑 ${initialDraft?.name || "腾讯云 COS"}` : "添加 腾讯云 COS"
@@ -141,6 +147,33 @@ export function TencentStorageForm({
           />
         </FormRow>
 
+        <FormRow label="下载域名">
+          <Select value={draft.downloadDomainType} onValueChange={(value) => update("downloadDomainType", value as TencentStorageDraft["downloadDomainType"])} disabled={readonly}>
+            <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectItem value="default">COS 默认域名</SelectItem>
+              <SelectItem value="origin">源站自定义域名</SelectItem>
+              <SelectItem value="cdn">CDN 域名</SelectItem>
+            </SelectGroup></SelectContent>
+          </Select>
+        </FormRow>
+        {draft.downloadDomainType !== "default" && (
+          <FormRow label="域名地址" hint="填写已绑定的域名，不包含路径；省略协议时使用 HTTPS。">
+            <Input className="h-10 w-full" value={draft.downloadDomain} onChange={(event) => update("downloadDomain", event.target.value)} placeholder="https://files.example.com" disabled={readonly} />
+          </FormRow>
+        )}
+        {draft.downloadDomainType === "cdn" && (
+          <FormRow label="CDN 访问方式" hint={draft.downloadCdnAuth === "cos" ? "CDN 需透传全部查询参数、关闭缓存且不开启独立 URL 鉴权，以便 COS 校验每次请求的签名。" : "用于公开分发，链接不设有效期。私有桶需在 CDN 配置回源授权；文件名和预览响应头需由 CDN 转发。"}>
+            <Select value={draft.downloadCdnAuth} onValueChange={(value) => update("downloadCdnAuth", value as TencentStorageDraft["downloadCdnAuth"])} disabled={readonly}>
+              <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup>
+                <SelectItem value="cos">COS 签名透传</SelectItem>
+                <SelectItem value="public">公开访问</SelectItem>
+              </SelectGroup></SelectContent>
+            </Select>
+          </FormRow>
+        )}
+
         <FormRow
           label="访问凭证"
           hint={
@@ -177,7 +210,7 @@ export function TencentStorageForm({
           </div>
         </FormRow>
 
-        <MountOptions draft={draft} mode={mode} onChange={onChange} />
+        <MountOptions draft={draft} mode={mode} onChange={onChange} canConfigureImportWriteback={canConfigureImportWriteback} />
         <TransferOptions draft={draft} mode={mode} onChange={onChange} />
         <EncryptionOptions draft={draft} mode={mode} onChange={onChange} />
       </FormCard>

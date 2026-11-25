@@ -1,6 +1,7 @@
 import * as React from "react"
 import { IconDeviceFloppy, IconX } from "@tabler/icons-react"
 
+import { ApiError } from "@/api/client"
 import type { PreviewManifest } from "@/api/files"
 import {
   buildSharedCoverUrl,
@@ -14,7 +15,9 @@ import {
 } from "@/api/shared"
 import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "@/components/file-area/PreviewDialog"
+import { previewFailure } from "@/components/file-area/preview/errors"
 import { Button } from "@/components/ui/button"
+import type { AuthSession } from "@/lib/models"
 import { buildSharedPreviewManifest, sharedAudioExtensions, sharedExtensionOf } from "@/lib/shared-preview"
 
 type SharedPreviewItem = {
@@ -22,11 +25,12 @@ type SharedPreviewItem = {
   name: string
   type: "folder" | "file"
   size: number
+  preview_version?: string | null
 }
 
 type SharedPreviewSource =
-  | { type: "mounted"; mount: SharedMount }
-  | { type: "public"; shareId: string; accessToken?: string | null; ownerName: string }
+  | { type: "mounted"; mount: SharedMount; session: AuthSession | null }
+  | { type: "public"; shareId: string; accessToken?: string | null; ownerName: string; expiresAt?: string | null; maxDownloads?: number | null }
 
 type SharedFilePreviewModalProps<T extends SharedPreviewItem> = {
   source: SharedPreviewSource | null
@@ -57,88 +61,104 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
 }: SharedFilePreviewModalProps<T>) {
   const sourceType = source?.type ?? null
   const mount = source?.type === "mounted" ? source.mount : null
+  const mountId = mount?.id
+  const mountShareId = mount?.share_id
   const shareId = source?.type === "public" ? source.shareId : null
   const accessToken = source?.type === "public" ? source.accessToken : null
-  const previewKey = sourceType && item
-    ? sourceType === "mounted" && mount
-      ? `mounted:${mount.id}:${item.id}`
-      : `public:${shareId}:${item.id}:${accessToken ?? "public"}`
+  const mountedSession = source?.type === "mounted" ? source.session : null
+  const expiresAt = source?.type === "public" ? source.expiresAt : mount?.expires_at
+  const maxDownloads = source?.type === "public" ? source.maxDownloads : mount?.max_downloads
+  const mountAvailable = mount?.available
+  const mountAccess = mount?.access
+  const scope = React.useMemo(() => ({}), [accessToken, expiresAt, maxDownloads, mountAccess, mountAvailable, mountId, mountShareId, mountedSession, shareId, sourceType])
+  const nodeId = item?.type === "file" ? item.id : undefined
+  const nodeName = item?.name
+  const nodeSize = item?.size
+  const nodeVersion = item?.preview_version ?? undefined
+  const [refreshKey, setRefreshKey] = React.useState(0)
+  const previewKey = sourceType && nodeId !== undefined
+    ? JSON.stringify([nodeId, nodeVersion, nodeName, nodeSize, refreshKey])
     : null
   const ownerName = sourceType === "mounted"
     ? mount?.owner_username ?? "共享用户"
     : source?.type === "public" ? source.ownerName : "共享用户"
   const fallbackManifest = React.useMemo(() => {
-    if (!sourceType || !item || item.type !== "file") return null
-    if (sourceType === "mounted" && mount) {
+    if (!sourceType || nodeId === undefined || nodeName === undefined || nodeSize === undefined) return null
+    const node = { id: nodeId, name: nodeName, size: nodeSize }
+    if (sourceType === "mounted" && mountId !== undefined) {
       return buildSharedPreviewManifest({
-        node: item,
-        source: buildSharedMountPreviewUrl(mount.id, item.id),
-        version: `mounted-share-${mount.share_id}-${item.id}`,
+        node,
+        source: buildSharedMountPreviewUrl(mountId, nodeId),
+        version: `mounted-share-${mountShareId}-${nodeId}`,
       })
     }
     if (!shareId) return null
-    const extension = sharedExtensionOf(item.name)
+    const extension = sharedExtensionOf(nodeName)
     return buildSharedPreviewManifest({
-      node: item,
-      source: buildSharedPreviewUrl(shareId, accessToken, item.id),
-      version: `share-${shareId}-${item.id}`,
+      node,
+      source: buildSharedPreviewUrl(shareId, accessToken, nodeId),
+      version: `share-${shareId}-${nodeId}`,
       cover: sharedAudioExtensions.has(extension)
-        ? buildSharedCoverUrl(shareId, accessToken, item.id)
+        ? buildSharedCoverUrl(shareId, accessToken, nodeId)
         : undefined,
     })
-  }, [accessToken, item, mount, shareId, sourceType])
-  const [serverPreview, setServerPreview] = React.useState<{ key: string; manifest: PreviewManifest } | null>(null)
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = React.useState(0)
+  }, [accessToken, mountId, mountShareId, nodeId, nodeName, nodeSize, shareId, sourceType])
+  const selection = React.useMemo(() => ({}), [previewKey, scope])
+  const [preview, setPreview] = React.useState<{
+    scope: typeof scope
+    selection: object
+    key: string
+    manifest: PreviewManifest | null
+    error?: ReturnType<typeof previewFailure>
+  } | null>(null)
 
   React.useEffect(() => {
-    if (!sourceType || !item || item.type !== "file" || !previewKey) {
-      setServerPreview(null)
-      setLoading(false)
-      setError(null)
-      return
-    }
+    if (nodeId === undefined || !previewKey || !fallbackManifest) return
     const controller = new AbortController()
-    setLoading(!fallbackManifest)
-    setError(null)
-    const request = sourceType === "mounted" && mount
-      ? getSharedMountPreviewManifest(mount.id, item.id, controller.signal)
-      : getSharedPreviewManifest(shareId ?? "", accessToken, item.id, controller.signal)
+    const load = (signal?: AbortSignal) => mountId !== undefined
+      ? getSharedMountPreviewManifest(mountId, nodeId, signal)
+      : getSharedPreviewManifest(shareId ?? "", accessToken, nodeId, signal)
+    const request = load(controller.signal)
     void request
       .then((manifest) => {
         if (!controller.signal.aborted) {
-          setServerPreview({ key: previewKey, manifest })
-          setLoading(false)
+          setPreview({ scope, selection, key: previewKey, manifest })
         }
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
-        setLoading(false)
-        if (!fallbackManifest) {
-          setError(reason instanceof Error ? reason.message : "预览加载失败")
+        if (reason instanceof ApiError && reason.status < 500) {
+          setPreview({ scope, selection, key: previewKey, manifest: null, error: previewFailure(reason) })
+        } else {
+          setPreview({ scope, selection, key: previewKey, manifest: fallbackManifest })
         }
       })
     return () => controller.abort()
-  }, [accessToken, fallbackManifest, item, mount, previewKey, refreshKey, shareId, sourceType])
+  }, [
+    selection, accessToken, fallbackManifest, maxDownloads, mountAvailable, mountId, mountedSession,
+    nodeId, nodeVersion, previewKey, scope, shareId,
+  ])
 
   if (!source || !item || !fallbackManifest || !previewKey) return null
-  const manifest = serverPreview?.key === previewKey ? serverPreview.manifest : fallbackManifest
+  const current = preview?.selection === selection && preview.scope === scope && preview.key === previewKey ? preview : null
   const extension = sharedExtensionOf(item.name).toUpperCase() || "文件"
+  const retry = () => {
+    setRefreshKey((value) => value + 1)
+  }
 
   return (
     <PreviewDialog
       open
       name={item.name}
       titleIcon={<FileGlyph item={{ kind: item.type, name: item.name }} size={20} />}
-      manifest={manifest}
-      loading={loading}
-      error={error}
+      manifest={current?.manifest ?? null}
+      loading={!current}
+      error={current?.error?.message}
       inferredKind={fallbackManifest.kind}
       currentIndex={currentIndex}
       totalCount={totalCount}
       onClose={onClose}
-      onRetry={() => setRefreshKey((value) => value + 1)}
+      onRetry={current?.error?.retryable === false ? undefined : retry}
       onDownload={() => onDownload(item)}
       onPrev={onPrev}
       onNext={onNext}
@@ -147,7 +167,7 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
           <IconDeviceFloppy />
         </Button>
       ) : null}
-      details={(close) => (
+      details={(close, metadata) => (
         <div className="flex h-full min-h-0 flex-col">
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
             <h2 className="text-sm font-semibold">文件属性</h2>
@@ -174,6 +194,14 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
                 <dd className="text-foreground">{formatBytes(item.size)}</dd>
               </div>
             </div>
+            {current?.manifest?.kind === "image"
+              && typeof metadata?.width === "number" && typeof metadata.height === "number"
+              && metadata.width > 0 && metadata.height > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">图片尺寸</dt>
+                  <dd className="text-foreground">{metadata.width} × {metadata.height}</dd>
+                </div>
+              ) : null}
           </dl>
           {detailsFooter ? <div className="shrink-0 border-t border-border p-5">{detailsFooter}</div> : null}
         </div>

@@ -11,6 +11,7 @@ import type {
   TencentStorageDraft,
 } from "@/components/storage"
 import { remoteDriveCredentials } from "@/components/storage/remote/RemoteDriveForm"
+import { objectPathSettings } from "@/components/storage/object-path"
 import {
   buildLocalStoragePath,
   type BucketMount,
@@ -33,10 +34,14 @@ export function createEmptyTencentDraft(): TencentStorageDraft {
     prefix: "",
     mountMode: "managed",
     readOnly: false,
+    importDeleteSource: false,
     legacyPrefixedKeys: false,
     objectKeyStyle: "readable",
     accessPermission: "private",
     accessDomain: "",
+    downloadDomainType: "default",
+    downloadDomain: "",
+    downloadCdnAuth: "cos",
     secretId: "",
     secretKey: "",
     concurrency: 3,
@@ -49,6 +54,8 @@ export function createEmptyTencentDraft(): TencentStorageDraft {
 
 export function createEmptyAliyunDraft(): AliyunStorageDraft {
   return {
+    downloadDomainType: "default",
+    downloadDomain: "",
     name: "",
     bucketName: "",
     region: "cn-hangzhou",
@@ -56,6 +63,7 @@ export function createEmptyAliyunDraft(): AliyunStorageDraft {
     prefix: "",
     mountMode: "managed",
     readOnly: false,
+    importDeleteSource: false,
     legacyPrefixedKeys: false,
     objectKeyStyle: "readable",
     accessKeyId: "",
@@ -70,7 +78,7 @@ export function createEmptyAliyunDraft(): AliyunStorageDraft {
 }
 
 const remoteDriveDefaults = {
-  "139": { name: "139zhey", rootId: "/" },
+  "139": { name: "139 Cloud", rootId: "/" },
   "189": { name: "189 Cloud", rootId: "-11" },
   wo: { name: "Wo Cloud", rootId: "0" },
 } as const
@@ -263,6 +271,9 @@ export function buildTencentPolicyInput(draft: TencentStorageDraft): CreateStora
       storage_type: "tencent",
       bucket_name: draft.bucketName.trim(),
       endpoint: draft.accessDomain.trim(),
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
+      download_cdn_auth: draft.downloadCdnAuth,
       region: draft.region.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
@@ -296,6 +307,8 @@ export function buildAliyunPolicyInput(draft: AliyunStorageDraft): CreateStorage
     extra: {
       provider_label: "Aliyun OSS",
       storage_type: "aliyun",
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
       part_size_mb: parseSizeMb(draft.partSize, 25),
@@ -319,12 +332,15 @@ export function buildAliyunMountInput(draft: AliyunStorageDraft, fallbackSlug: s
     extra: {
       provider_label: "Aliyun OSS",
       storage_type: "aliyun",
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
-      object_key_style: draft.objectKeyStyle,
+
+      ...objectPathSettings(draft),
     },
   }
 }
@@ -345,13 +361,17 @@ export function buildTencentMountInput(draft: TencentStorageDraft, fallbackSlug:
       storage_type: "tencent",
       bucket_name: draft.bucketName.trim(),
       endpoint: draft.accessDomain.trim(),
+      download_domain_type: draft.downloadDomainType,
+      download_domain: draft.downloadDomain.trim(),
+      download_cdn_auth: draft.downloadCdnAuth,
       region: draft.region.trim(),
       concurrency: draft.concurrency,
       multipart_threshold_mb: parseSizeMb(draft.multipartThreshold, 25),
       part_size_mb: parseSizeMb(draft.partSize, 25),
       mount_mode: draft.mountMode,
       read_only: draft.readOnly,
-      object_key_style: draft.objectKeyStyle,
+
+      ...objectPathSettings(draft),
     },
   }
 }

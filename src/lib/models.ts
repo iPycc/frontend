@@ -4,8 +4,8 @@ export type ThemeMode = "light" | "dark" | "system"
 export type SortValue = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "size-desc"
 export type ViewMode = "grid" | "list" | "gallery"
 export type MediaType = "image" | "video" | "audio" | "document" | "archive" | "code" | "other"
-export type MountMode = "managed" | "mirror"
-export type MountSyncStatus = "never" | "idle" | "pending" | "running" | "completed" | "failed"
+import type { MountMode, MountSyncStatus } from "@/api/storage"
+export type { MountMode, MountSyncStatus } from "@/api/storage"
 
 export type StorageStrategyKey = "tencent" | "local" | "aliyun" | "139" | "189" | "wo"
 export type UserRole = "admin" | "user" | "guest"
@@ -139,7 +139,7 @@ export interface BucketMount {
   mountSlug?: string
   createdAt: string
   updatedAt?: string
-  corsStatus: "healthy" | "warning"
+  corsStatus: "healthy" | "warning" | "provider-managed" | "not-required"
   corsMessage: string
   advancedMode: boolean
   isLocal: boolean
@@ -193,19 +193,11 @@ export interface ShareRecord {
   itemCount?: number
 }
 
-export interface OfflineTask {
-  id: string
-  name: string
-  url: string
-  status: string
-  progress: number
-  updatedAt: string
-}
-
 export interface UploadQueueItem {
   id: string
   fileName: string
   relativePath?: string
+  targetDirectory?: string
   fileSize: number
   mountId: string
   parentId: string | null
@@ -219,12 +211,14 @@ export interface UploadQueueItem {
   partCount?: number
   speedText: string
   sessionId?: string
+  createKey?: string
   checksum?: string
   fileFingerprint?: string
   fileLastModified?: number
   requiresFileSelection?: boolean
   expiresAt?: string
   errorMessage?: string
+  errorRequestId?: string
   createdAt: string
 }
 
@@ -243,7 +237,6 @@ export interface AppSnapshot {
   activeBucketId: string
   nodes: FileNode[]
   shares: ShareRecord[]
-  offlineTasks: OfflineTask[]
   clipboard: ClipboardState | null
   fileContents: Record<string, string>
 }
@@ -285,7 +278,6 @@ export const defaultAppSnapshot: AppSnapshot = {
   activeBucketId: "",
   nodes: [],
   shares: [],
-  offlineTasks: [],
   clipboard: null,
   fileContents: {},
 }

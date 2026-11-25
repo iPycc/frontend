@@ -1,4 +1,5 @@
 import { requestJson } from "@/api/client"
+import { requestImageManifest, type ImageManifestRequests } from "@/api/file/image-manifest-cache"
 import type {
   OfficeCardPreviewData,
   ExplorerNode,
@@ -7,6 +8,7 @@ import type {
   PdfAnnotationDocument,
   PreviewManifest,
 } from "@/api/file/type"
+import type { AuthSession } from "@/lib/models"
 
 export function buildDownloadUrl(nodeId: number, relay = false) {
   return `/api/v1/explorer/download/${nodeId}${relay ? "?relay=true" : ""}`
@@ -67,76 +69,24 @@ export function buildArchiveEntryPreviewUrl(nodeId: number, path: string) {
   return `/api/v1/explorer/preview/${nodeId}/archive/entry?path=${encodeURIComponent(path)}`
 }
 
-const previewManifestCache = new Map<number, PreviewManifest>()
-
-export function peekPreviewManifest(nodeId: number) {
-  return previewManifestCache.get(nodeId) ?? null
+export function getPreviewManifest(nodeId: number, signal?: AbortSignal) {
+  return requestJson<PreviewManifest>(`/explorer/preview/${nodeId}/manifest`, { signal })
 }
 
-export async function getPreviewManifest(nodeId: number, signal?: AbortSignal) {
-  const manifest = await requestJson<PreviewManifest>(`/explorer/preview/${nodeId}/manifest`, { signal })
-  const cached = previewManifestCache.get(nodeId)
-  const merged = cached ? { ...manifest, metadata: { ...cached.metadata, ...manifest.metadata } } : manifest
-  previewManifestCache.set(nodeId, merged)
-  return merged
-}
+const imagePreviewRequests = new WeakMap<AuthSession, ImageManifestRequests>()
 
-export async function prefetchPreviewManifest(nodeId: number) {
-  const manifest = previewManifestCache.get(nodeId) ?? await getPreviewManifest(nodeId)
-  const hasDimensions = typeof manifest.metadata.width === "number" && typeof manifest.metadata.height === "number"
-  if (hasDimensions || (manifest.kind !== "image" && manifest.kind !== "video") || !manifest.assets.source?.url) {
-    return manifest
+export function getImagePreviewManifest(
+  nodeId: number,
+  updatedAt: string,
+  session: AuthSession,
+  refresh: boolean
+) {
+  let requests = imagePreviewRequests.get(session)
+  if (!requests) {
+    requests = new Map()
+    imagePreviewRequests.set(session, requests)
   }
-
-  const dimensions = await probeBrowserMediaDimensions(manifest.kind, manifest.assets.source.url)
-  if (!dimensions) return manifest
-  const enriched = { ...manifest, metadata: { ...manifest.metadata, ...dimensions } }
-  previewManifestCache.set(nodeId, enriched)
-  return enriched
-}
-
-function probeBrowserMediaDimensions(kind: "image" | "video", source: string) {
-  return new Promise<{ width: number; height: number } | null>((resolve) => {
-    let settled = false
-    const finish = (value: { width: number; height: number } | null) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeout)
-      resolve(value)
-    }
-    const timeout = window.setTimeout(() => finish(null), 4000)
-
-    if (kind === "image") {
-      const image = new Image()
-      image.onload = () => finish(image.naturalWidth && image.naturalHeight
-        ? { width: image.naturalWidth, height: image.naturalHeight }
-        : null)
-      image.onerror = () => finish(null)
-      image.src = source
-      return
-    }
-
-    const video = document.createElement("video")
-    const cleanup = () => {
-      video.onloadedmetadata = null
-      video.onerror = null
-      video.removeAttribute("src")
-      video.load()
-    }
-    video.preload = "metadata"
-    video.onloadedmetadata = () => {
-      const value = video.videoWidth && video.videoHeight
-        ? { width: video.videoWidth, height: video.videoHeight }
-        : null
-      cleanup()
-      finish(value)
-    }
-    video.onerror = () => {
-      cleanup()
-      finish(null)
-    }
-    video.src = source
-  })
+  return requestImageManifest(requests, `${nodeId}:${updatedAt}`, () => getPreviewManifest(nodeId, AbortSignal.timeout(30_000)), { refresh })
 }
 
 export function preparePreview(nodeId: number) {

@@ -33,6 +33,7 @@ interface MoveRootOption {
 
 interface MoveDialogProps {
   open: boolean
+  busy?: boolean
   folders: MoveFolderOption[]
   items?: FileNode[]
   root?: { id: string; name: string }
@@ -54,6 +55,7 @@ const FLAT_ROOT_ID = "__move-dialog-root__"
 
 export function MoveDialog({
   open,
+  busy = false,
   folders,
   items = [],
   root,
@@ -80,6 +82,7 @@ export function MoveDialog({
     hasHierarchy ? value || defaultRootId : FLAT_ROOT_ID
   )
   const [loadingFolderId, setLoadingFolderId] = React.useState<string | null>(null)
+  const breadcrumbRef = React.useRef<HTMLDivElement>(null)
   const disabledIds = React.useMemo(() => new Set(disabledFolderIds), [disabledFolderIds])
 
   const allFolders = React.useMemo(() => {
@@ -145,6 +148,18 @@ export function MoveDialog({
     return chain
   }, [currentFolderId, folderById, hasHierarchy])
 
+  const breadcrumbSignature = breadcrumb.map((folder) => folder.id).join("/")
+  React.useLayoutEffect(() => {
+    const container = breadcrumbRef.current
+    if (!container) return
+    const alignRight = () => {
+      container.scrollLeft = container.scrollWidth
+    }
+    alignRight()
+    const frame = window.requestAnimationFrame(alignRight)
+    return () => window.cancelAnimationFrame(frame)
+  }, [breadcrumbSignature, open])
+
   const treeRows = React.useMemo(() => {
     if (!hasHierarchy || !activeRoot) return []
     const result: Array<{ folder: MoveFolderOption; depth: number }> = []
@@ -165,7 +180,7 @@ export function MoveDialog({
   }, [activeRoot, allFolders, hasHierarchy])
 
   const browseFolder = async (folderId: string) => {
-    if (disabledIds.has(folderId)) return
+    if (busy || disabledIds.has(folderId)) return
     if (!hasHierarchy) {
       onValueChange(folderId)
       return
@@ -216,7 +231,7 @@ export function MoveDialog({
                         type="button"
                         variant={activeRoot.id === hierarchyRoot.id ? "secondary" : "ghost"}
                         className="h-auto w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-left"
-                        disabled={disabledIds.has(hierarchyRoot.id)}
+                        disabled={busy || disabledIds.has(hierarchyRoot.id)}
                         onClick={() => void browseFolder(hierarchyRoot.id)}
                       >
                         <span className="shrink-0">
@@ -242,7 +257,7 @@ export function MoveDialog({
                   variant={currentFolderId === activeRoot.id ? "secondary" : "ghost"}
                   size="sm"
                   className="mb-1 w-full justify-start"
-                  disabled={disabledIds.has(activeRoot.id)}
+                  disabled={busy || disabledIds.has(activeRoot.id)}
                   onClick={() => void browseFolder(activeRoot.id)}
                 >
                   <Home data-icon="inline-start" />
@@ -256,7 +271,7 @@ export function MoveDialog({
                     size="sm"
                     className="mb-1 w-full justify-start"
                     style={{ paddingLeft: `${Math.min(depth, 5) * 0.75 + 0.5}rem` }}
-                    disabled={disabledIds.has(folder.id)}
+                    disabled={busy || disabledIds.has(folder.id)}
                     onClick={() => void browseFolder(folder.id)}
                   >
                     <FileGlyph item={{ kind: "folder", name: folder.name }} />
@@ -282,7 +297,7 @@ export function MoveDialog({
                     ))}
                   </select>
                 ) : null}
-                <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                <div ref={breadcrumbRef} className="custom-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap">
                   {breadcrumb.map((folder, index) => (
                     <React.Fragment key={folder.id}>
                       {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
@@ -291,7 +306,7 @@ export function MoveDialog({
                         variant={index === breadcrumb.length - 1 ? "secondary" : "ghost"}
                         size="sm"
                         className="shrink-0"
-                        disabled={disabledIds.has(folder.id)}
+                        disabled={busy || disabledIds.has(folder.id)}
                         onClick={() => void browseFolder(folder.id)}
                       >
                         {index === 0 ? <Home data-icon="inline-start" /> : null}
@@ -372,7 +387,7 @@ export function MoveDialog({
           </p>
           <div className="flex shrink-0 gap-2">
             <Button type="button" variant="outline" onClick={onCancel}>取消</Button>
-            <Button type="button" disabled={!value || disabledIds.has(value)} onClick={() => onSubmit(value)}>
+            <Button type="button" disabled={busy || !value || disabledIds.has(value)} onClick={() => onSubmit(value)}>
               <FolderInput data-icon="inline-start" />
               {submitLabel}
             </Button>

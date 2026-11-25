@@ -1,5 +1,5 @@
 import * as React from "react"
-import { IconArrowLeft } from "@tabler/icons-react"
+import { IconArrowLeft, IconChevronDown } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -80,6 +80,30 @@ export function FormRow({
       <div className="mt-1 sm:mt-0">{children}</div>
     </div>
   )
+}
+
+export function UploadPartSettings({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="group border-b border-border/40 last:border-0">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-md py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        分片上传
+        <IconChevronDown aria-hidden="true" size={16} className="text-muted-foreground group-open:rotate-180" />
+      </summary>
+      <div className="pb-1">{children}</div>
+    </details>
+  )
+}
+
+export function objectStorageImportHint({
+  bucketName,
+  name,
+  prefix,
+}: { bucketName: string; name: string; prefix: string }) {
+  const bucket = bucketName.trim() ? `「${bucketName.trim()}」` : "所选存储桶"
+  const normalizedPrefix = prefix.trim().replace(/^\/+|\/+$/g, "")
+  const source = normalizedPrefix ? `${bucket}的「${normalizedPrefix}/」` : `${bucket}根目录`
+  const target = name.trim() ? `「${name.trim()}」根目录` : "新挂载的根目录"
+  return `从${source}导入到 Cloudrave 的${target}。`
 }
 
 export function PathValidator({
