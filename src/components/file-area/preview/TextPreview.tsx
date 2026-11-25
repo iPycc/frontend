@@ -6,7 +6,6 @@ import type { PreviewManifest } from "@/api/files"
 import { saveTextPreview } from "@/api/files"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { previewSourceUrls, requestPreviewAsset } from "@/lib/preview-assets"
 import { MarkdownPreview, type MarkdownPreviewHandle } from "./MarkdownPreview"
 import { AdaptiveCodeEditor, type AdaptiveCodeEditorHandle, type SourceLineRange } from "./AdaptiveCodeEditor"
@@ -34,7 +33,6 @@ function hasExtendedMarkdownSyntax(content: string) {
 }
 
 export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
-  const isMobile = useIsMobile()
   const isMarkdown = ["md", "markdown"].includes(manifest.name.split(".").pop()?.toLowerCase() ?? "")
   const [content, setContent] = React.useState("")
   const [view, setView] = React.useState<"visual" | "source" | "split">(isMarkdown ? "visual" : "source")
@@ -110,7 +108,6 @@ export function TextPreview({ manifest }: { manifest: PreviewManifest }) {
 
   if (loading) return <PreviewSkeleton kind="text" />
   if (error) return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-destructive">{error}</div>
-  if (isMarkdown && isMobile) return <MarkdownPreview content={content} />
 
   const language = inferLanguage(manifest.name)
   return (

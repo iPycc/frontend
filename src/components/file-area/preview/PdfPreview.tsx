@@ -413,12 +413,6 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
         const firstViewport = firstPage.getViewport({ scale: 1, rotation: 0 })
         if (!cancelled) {
           setDefaultPageSize({ width: firstViewport.width, height: firstViewport.height })
-          const containerWidth = viewportHostRef.current?.clientWidth ?? window.innerWidth
-          if (containerWidth < 768) {
-            const horizontalPadding = containerWidth < 640 ? 24 : 48
-            const available = Math.max(containerWidth - horizontalPadding, 180)
-            setScale(Math.min(Math.max(available / firstViewport.width, 0.25), 1))
-          }
           setDocument(pdf)
         }
       })
@@ -606,12 +600,21 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
     setAnnotationDirty(true)
   }, [])
 
+  React.useLayoutEffect(() => {
+    const host = viewportHostRef.current
+    if (!document || !host) return
+    const padding = getComputedStyle(host)
+    const available = host.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
+    setScale(Math.min(Math.max(available / defaultPageSize.width, 0.25), 1))
+  }, [document, defaultPageSize.width])
+
   const fitWidth = React.useCallback(async () => {
     if (!document || !viewportHostRef.current) return
     const page = await document.getPage(pageNumber)
     const viewport = page.getViewport({ scale: 1, rotation })
     const containerWidth = viewportHostRef.current.clientWidth
-    const horizontalPadding = containerWidth < 640 ? 24 : 48
+    const style = getComputedStyle(viewportHostRef.current)
+    const horizontalPadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
     const available = Math.max(containerWidth - horizontalPadding, 180)
     setScale(Math.min(Math.max(available / viewport.width, 0.25), 3))
   }, [document, pageNumber, rotation])
@@ -638,7 +641,7 @@ export function PdfPreview({ manifest }: { manifest: PreviewManifest }) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-muted/40">
       <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-border bg-background">
-        <div className="flex min-h-12 w-max min-w-full flex-nowrap items-center gap-1.5 px-3 py-1.5 sm:flex-wrap sm:py-2">
+        <div className="flex min-h-12 w-max min-w-full flex-nowrap items-center gap-1.5 px-3 py-1.5 sm:w-full sm:flex-wrap sm:py-2">
           <div className="flex shrink-0 items-center gap-1.5">
             <Input.Search value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void findText() }} placeholder="在 PDF 中查找" className="h-8 w-36 text-xs sm:w-48" />
             <Button variant="ghost" size="sm" className="shrink-0" onClick={() => void findText()} disabled={searching || !query.trim()}>

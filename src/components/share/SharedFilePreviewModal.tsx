@@ -2,7 +2,6 @@ import * as React from "react"
 import { IconDeviceFloppy, IconX } from "@tabler/icons-react"
 
 import { ApiError } from "@/api/client"
-import { requestImageManifest, type ImageManifestRequests } from "@/api/file/image-manifest-cache"
 import type { PreviewManifest } from "@/api/files"
 import {
   buildSharedCoverUrl,
@@ -18,7 +17,6 @@ import { FileGlyph } from "@/components/file-area/FileGlyph"
 import { PreviewDialog, previewIconButtonClass } from "@/components/file-area/PreviewDialog"
 import { previewFailure } from "@/components/file-area/preview/errors"
 import { Button } from "@/components/ui/button"
-import { parseDateTime } from "@/lib/datetime"
 import type { AuthSession } from "@/lib/models"
 import { buildSharedPreviewManifest, sharedAudioExtensions, sharedExtensionOf } from "@/lib/shared-preview"
 
@@ -72,18 +70,11 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
   const maxDownloads = source?.type === "public" ? source.maxDownloads : mount?.max_downloads
   const mountAvailable = mount?.available
   const mountAccess = mount?.access
-  const scope = React.useMemo<{ requests: ImageManifestRequests; validUntil: number }>(() => ({
-    requests: new Map(),
-    validUntil: expiresAt ? parseDateTime(expiresAt)?.getTime() ?? 0 : Infinity,
-  }), [
-    accessToken, expiresAt, maxDownloads, mountAccess, mountAvailable, mountId, mountShareId,
-    mountedSession, shareId, sourceType,
-  ])
+  const scope = React.useMemo(() => ({}), [accessToken, expiresAt, maxDownloads, mountAccess, mountAvailable, mountId, mountShareId, mountedSession, shareId, sourceType])
   const nodeId = item?.type === "file" ? item.id : undefined
   const nodeName = item?.name
   const nodeSize = item?.size
   const nodeVersion = item?.preview_version ?? undefined
-  const cacheKey = nodeId !== undefined && nodeVersion ? `${nodeId}:${nodeVersion}` : null
   const [refreshKey, setRefreshKey] = React.useState(0)
   const previewKey = sourceType && nodeId !== undefined
     ? JSON.stringify([nodeId, nodeVersion, nodeName, nodeSize, refreshKey])
@@ -112,8 +103,10 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
         : undefined,
     })
   }, [accessToken, mountId, mountShareId, nodeId, nodeName, nodeSize, shareId, sourceType])
+  const selection = React.useMemo(() => ({}), [previewKey, scope])
   const [preview, setPreview] = React.useState<{
     scope: typeof scope
+    selection: object
     key: string
     manifest: PreviewManifest | null
     error?: ReturnType<typeof previewFailure>
@@ -125,38 +118,31 @@ export function SharedFilePreviewModal<T extends SharedPreviewItem>({
     const load = (signal?: AbortSignal) => mountId !== undefined
       ? getSharedMountPreviewManifest(mountId, nodeId, signal)
       : getSharedPreviewManifest(shareId ?? "", accessToken, nodeId, signal)
-    const canReuse = cacheKey && fallbackManifest.kind === "image" && maxDownloads == null
-      && (mountId === undefined || (mountAvailable && mountedSession))
-      && scope.validUntil > Date.now()
-    // A versioned request can be reused after a flip. Cleanup detaches only the current render.
-    const request = canReuse
-      ? requestImageManifest(scope.requests, cacheKey, () => load(), { version: nodeVersion, validUntil: scope.validUntil })
-      : load(controller.signal)
+    const request = load(controller.signal)
     void request
       .then((manifest) => {
         if (!controller.signal.aborted) {
-          setPreview({ scope, key: previewKey, manifest })
+          setPreview({ scope, selection, key: previewKey, manifest })
         }
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
         if (reason instanceof ApiError && reason.status < 500) {
-          setPreview({ scope, key: previewKey, manifest: null, error: previewFailure(reason) })
+          setPreview({ scope, selection, key: previewKey, manifest: null, error: previewFailure(reason) })
         } else {
-          setPreview({ scope, key: previewKey, manifest: fallbackManifest })
+          setPreview({ scope, selection, key: previewKey, manifest: fallbackManifest })
         }
       })
     return () => controller.abort()
   }, [
-    accessToken, cacheKey, fallbackManifest, maxDownloads, mountAvailable, mountId, mountedSession,
+    selection, accessToken, fallbackManifest, maxDownloads, mountAvailable, mountId, mountedSession,
     nodeId, nodeVersion, previewKey, scope, shareId,
   ])
 
   if (!source || !item || !fallbackManifest || !previewKey) return null
-  const current = preview?.scope === scope && preview.key === previewKey ? preview : null
+  const current = preview?.selection === selection && preview.scope === scope && preview.key === previewKey ? preview : null
   const extension = sharedExtensionOf(item.name).toUpperCase() || "文件"
   const retry = () => {
-    if (cacheKey) scope.requests.delete(cacheKey)
     setRefreshKey((value) => value + 1)
   }
 

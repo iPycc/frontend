@@ -69,20 +69,8 @@ export function buildArchiveEntryPreviewUrl(nodeId: number, path: string) {
   return `/api/v1/explorer/preview/${nodeId}/archive/entry?path=${encodeURIComponent(path)}`
 }
 
-const previewManifestCache = new Map<number, PreviewManifest>()
-
-export function peekPreviewManifest(nodeId: number) {
-  return previewManifestCache.get(nodeId) ?? null
-}
-
-export async function getPreviewManifest(nodeId: number, signal?: AbortSignal) {
-  const manifest = await requestJson<PreviewManifest>(`/explorer/preview/${nodeId}/manifest`, { signal })
-  previewManifestCache.set(nodeId, manifest)
-  return manifest
-}
-
-export async function prefetchPreviewManifest(nodeId: number) {
-  return getPreviewManifest(nodeId)
+export function getPreviewManifest(nodeId: number, signal?: AbortSignal) {
+  return requestJson<PreviewManifest>(`/explorer/preview/${nodeId}/manifest`, { signal })
 }
 
 const imagePreviewRequests = new WeakMap<AuthSession, ImageManifestRequests>()
@@ -98,7 +86,7 @@ export function getImagePreviewManifest(
     requests = new Map()
     imagePreviewRequests.set(session, requests)
   }
-  return requestImageManifest(requests, `${nodeId}:${updatedAt}`, () => getPreviewManifest(nodeId), { refresh })
+  return requestImageManifest(requests, `${nodeId}:${updatedAt}`, () => getPreviewManifest(nodeId, AbortSignal.timeout(30_000)), { refresh })
 }
 
 export function preparePreview(nodeId: number) {
